@@ -107,16 +107,60 @@ class SqliteSpiffyRPGDB(dbi.DB):
 
         return cursor.fetchall()
 
-    def get_class_abilities(self, class_id, player_level):
+    def get_class_ability(self, class_id, player_level):
         db = self._get_db()
         cursor = db.cursor()
 
         cursor.execute("""SELECT name
                           FROM spiffyrpg_class_abilities
                           WHERE character_class_id = ?
-                          AND min_level <= ?""", (class_id, player_level))
+                          AND min_level <= ?
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (class_id, player_level))
 
-        return cursor.fetchall()
+        ability = cursor.fetchone()
+
+        if ability is not None:
+            return ability["name"]
+    
+    def get_finishing_move_by_class_id(self, class_id, player_level):
+        db = self._get_db()
+        cursor = db.cursor()
+
+        cursor.execute("""SELECT name
+                          FROM spiffyrpg_class_finishing_moves
+                          WHERE character_class_id = ?
+                          AND min_level <= ?
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (class_id, player_level))
+
+        move = cursor.fetchone()
+
+        if move is not None:
+            return move["name"]
+
+    def add_battle(self, battle):
+        db = self._get_db()
+        cursor = db.cursor()
+
+        params = (battle["attacker_player_id"], 
+                  battle["target_player_id"],
+                  battle["winner_player_id"],
+                  battle["loser_player_id"],
+                  time.time())
+
+        cursor.execute("""INSERT INTO spiffyrpg_battles(
+                       attacker_player_id,
+                       target_player_id,
+                       winner_player_id,
+                       loser_player_id,
+                       created_at)
+                       VALUES(?, ?, ?, ?, ?)""", 
+                       params)
+
+        db.commit()
+
+        return cursor.lastrowid
 
 SpiffyRPGDB = plugins.DB("SpiffyRPG", {"sqlite3": SqliteSpiffyRPGDB})
 
@@ -233,7 +277,12 @@ class Announcer:
         target_title = ircutils.bold(target["title"])
         red_hp = ircutils.mircColor(battle["target_hp"], fg="red")
         green_xp = ircutils.mircColor(experience, fg="green")
-        defeat_words = ("defeating", "slaying", "felling")
+        defeat_words = killing_blows =  ["abolishing", "annihilating", "butchering", 
+        "creaming", "defeating", "destroying", "devastating", "disfiguring", "dismantling", 
+        "embarrassing", "exterminating", "felling", "goofing up", "making a mess of", 
+        "nullifying", "putting the kibosh on", "quashing", "quelling", "raining destruction on", 
+        "ravaging", "ruining", "shattering", "shattering", "slaying", "snuffing out", "stamping out", 
+        "wrecking"]
         defeat_word = random.choice(defeat_words)
         params = (target_title, red_hp, attacker_title, green_xp, defeat_word, target_title)
         announcement_msg = "%s's HP was reduced to %s. %s earns %s XP for %s %s" % params
@@ -258,7 +307,7 @@ class Announcer:
         attack_word = "hits"
 
         if attack_info["is_critical_strike"]:
-            attack_word = ircutils.mircColor("critically strikes", fg="red")
+            attack_word = ircutils.mircColor("critically strikes", fg="pink", bg="yellow")
 
         if battle["attacker_hp"] <= danger_low_hp_threshold:
             attacker_hp = ircutils.mircColor(battle["attacker_hp"], fg="red")
@@ -270,12 +319,18 @@ class Announcer:
 
         red_damage = ircutils.mircColor(attack_info["attack_damage"], fg="red")
 
-        attack_verb = ircutils.bold(attack_info["attack_verb"])
+        if attack_info["is_killing_blow"]:
+            attack_verb = ircutils.bold(ircutils.mircColor(attack_info["attack_verb"], fg="red"))
+        else:
+            attack_verb = ircutils.bold(attack_info["attack_verb"])
+
+        damage_type = attack_info["damage_type"]
+        bonus_damage = ircutils.mircColor(attack_info["bonus_damage"], fg="green")
 
         params = (bold_attacker_title, attack_verb, attack_word,
-                  bold_target_title, red_damage)
+                  bold_target_title, red_damage, damage_type, bonus_damage)
 
-        announcement_msg = "%s's %s %s %s for %s damage" % params
+        announcement_msg = "%s's %s %s %s for %s %s (%s bonus damage)" % params
 
         self._send_channel_notice(irc, announcement_msg)
 
@@ -298,15 +353,32 @@ class Player:
         return self.items
 
     def get_chance_to_hit(self, player):
-        rand_chance = random.randrange(0, 80)
-        agility = player["stats"]["agility"]
+        rand_chance = random.randrange(1, 80)
 
-        log.info("%s has %s random chance +%s AGI" % (player["title"], rand_chance, agility))
-
-        return rand_chance + agility
+        return rand_chance
 
     def is_hit(self, chance_to_hit):
         return chance_to_hit < 80
+
+class PlayerClass:
+    """
+    Represents different propertes of each class
+    """
+    OPEN_SOURCE_CONTRIBUTOR = 1
+    INTERNET_TOUGH_GUY = 2
+    BLACK_HAT = 3
+
+    def is_vulnerable_to_magic(self, class_id):
+        return class_id in (self.INTERNET_TOUGH_GUY, self.BLACK_HAT)
+
+    def is_vulnerable_to_physical(self, class_id):
+        return class_id in (self.OPEN_SOURCE_CONTRIBUTOR,)
+
+    def get_damage_type(self, class_id):
+        if class_id in (self.INTERNET_TOUGH_GUY, self.BLACK_HAT):
+            return "Physical"
+        else:
+            return "Magic"
 
 class SpiffyRPG(callbacks.Plugin):
     """A gluten-free IRC RPG"""
@@ -320,6 +392,7 @@ class SpiffyRPG(callbacks.Plugin):
 
         self.announcer = Announcer()
         self.player = Player()
+        self.player_class = PlayerClass()
         self.db = SpiffyRPGDB()
 
         self.character_classes = self.db.get_character_classes()
@@ -346,11 +419,15 @@ class SpiffyRPG(callbacks.Plugin):
         return nick in irc.state.channels[GAME_CHANNEL].users
 
     def _get_player_experience_for_next_level(self, level):
+        xp = 0
         levels = self._get_experience_levels()
 
         for xp_level, req_xp in levels:
             if xp_level == (level+1):
-                return req_xp
+                xp = req_xp
+                break
+
+        return xp
 
     def _get_experience_levels(self):
         return [
@@ -380,49 +457,10 @@ class SpiffyRPG(callbacks.Plugin):
         return int(5 * target_player_level)
 
     def _get_hp_by_player(self, player):
-        stats = self._get_stats_by_class_name(player["class_name"])
         player_level = self._get_player_level_by_total_experience(player["experience_gained"])
-        hp = player_level * (stats["strength"] + stats["endurance"])
-        params = (player_level, stats["strength"], stats["endurance"])
+        hp = player_level * 20
 
-        log.info("SpiffyRPG: level %s player has %s STR, %s END" % params)
-
-        return hp 
-
-    def _get_stats_by_class_name(self, class_name):
-        normalized_class_name = class_name.lower()
-
-        stats = {
-            "attention whore": {
-                "strength": 3,
-                "perception": 5,
-                "endurance": 4,
-                "charisma": 10,
-                "intelligence": 6,
-                "agility": 3,
-                "luck": 4
-            },
-            "internet tough guy": {
-                "strength": 10,
-                "perception": 5,
-                "endurance": 9,
-                "charisma": 3,
-                "intelligence": 1,
-                "agility": 8,
-                "luck": 2
-            },
-            "open source contributor": {
-                "strength": 5,
-                "perception": 8,
-                "endurance": 7,
-                "charisma": 2,
-                "intelligence": 10,
-                "agility": 3,
-                "luck": 5
-            }
-        }
-
-        return stats[normalized_class_name]
+        return hp
 
     def _get_player_title(self, player):
         return player["character_name"]
@@ -431,21 +469,42 @@ class SpiffyRPG(callbacks.Plugin):
         # TODO get player items and determine formula based
         # on which items a player has. If a player has no items
         # then this is a melee attack based on strength
-        attacker_stats = self._get_stats_by_class_name(attacker["class_name"])
-        damage = (attacker_stats["strength"] * attacker["level"]) * 3
+        damage = random.randrange(1, 5) * attacker["level"]
+        vulnerability_damage = damage * 1.2
+        target_class_id = target["character_class_id"]
+        bonus_damage = 0
 
-        is_critical_strike = random.randrange(0, 100) < self._get_critical_strike_chance()
+        # Magic
+        if self.player_class.is_vulnerable_to_magic(target_class_id):
+            bonus_damage += vulnerability_damage
+
+        # Physical
+        if self.player_class.is_vulnerable_to_physical(target_class_id):
+            bonus_damage += vulnerability_damage
+
+        bonus_damage = int(bonus_damage)
+        damage += bonus_damage
+
+        # Critical strike
+        is_critical_strike = random.randrange(0, 100) < self._get_critical_strike_chance(attacker)
 
         if is_critical_strike:
             damage *= 2
 
         return {
             "is_critical_strike": is_critical_strike,
-            "attack_damage": damage
+            "attack_damage": int(damage),
+            "bonus_damage": bonus_damage,
+            "damage_type": self.player_class.get_damage_type(attacker["character_class_id"])
         }
 
-    def _get_critical_strike_chance(self):
-        return 5
+    def _get_critical_strike_chance(self, class_id):
+        OPEN_SOURCE_CONTRIBUTOR = 3
+
+        if class_id == OPEN_SOURCE_CONTRIBUTOR:
+            return 25
+        else:
+            return 5
 
     def _on_battle_concluded(self, winner, loser):
         pass
@@ -542,14 +601,20 @@ class SpiffyRPG(callbacks.Plugin):
         2. attacker is alive and target is dead
         """
         if attacker_is_alive() and target_is_alive():
-            attacker["stats"] = self._get_stats_by_class_name(attacker["class_name"])
             chance_to_hit = self.player.get_chance_to_hit(attacker)
             is_hit = self.player.is_hit(chance_to_hit)
             attack_verb = self._get_attack_verb_by_player(attacker)
+            is_killing_blow = False
 
             if is_hit:
                 attack_damage_info = self._get_attack_damage(attacker, target)
-                #damage_type = self._get_damage_type_by_class_name(attacker.class_name)
+
+                target_hp_if_hit = self.battle["target_hp"] - attack_damage_info["attack_damage"]
+                is_killing_blow = target_hp_if_hit <= 0
+
+                if is_killing_blow:
+                    attack_verb = self._get_finishing_move_by_class_id(attacker["character_class_id"],
+                                                                       attacker["level"])
 
                 attack_info = {
                     "attacker_title": attacker["title"],
@@ -557,7 +622,10 @@ class SpiffyRPG(callbacks.Plugin):
                     "attack_damage": attack_damage_info["attack_damage"],
                     "battle": self.battle,
                     "is_critical_strike": attack_damage_info["is_critical_strike"],
-                    "attack_verb": attack_verb
+                    "attack_verb": attack_verb,
+                    "damage_type": attack_damage_info["damage_type"],
+                    "bonus_damage": attack_damage_info["bonus_damage"],
+                    "is_killing_blow": is_killing_blow
                 }
 
                 """ Announce the attack, if successful """
@@ -569,7 +637,6 @@ class SpiffyRPG(callbacks.Plugin):
                 """ It is possible for a single attack to win """
                 if attacker_is_alive() and target_is_alive():
                     """ Now the target attempts to respond to the attacker """
-                    target["stats"] = self._get_stats_by_class_name(target["class_name"])
                     chance_to_hit = self.player.get_chance_to_hit(target)
                     is_hit = self.player.is_hit(chance_to_hit)
 
@@ -600,14 +667,12 @@ class SpiffyRPG(callbacks.Plugin):
             self._target_wins(irc, target, attacker, False)
 
     def _get_attack_verb_by_player(self, attacker):
-        abilities = self.db.get_class_abilities(attacker["character_class_id"],
-                                                attacker["level"])
-        just_names = []
+        return self.db.get_class_ability(attacker["character_class_id"],
+                                         attacker["level"])
 
-        for a in abilities:
-            just_names.append(a["name"])
 
-        return random.choice(just_names)
+    def _get_finishing_move_by_class_id(self, class_id, player_level):
+        return self.db.get_finishing_move_by_class_id(class_id, player_level)
 
     def _get_character_class_list(self):
         class_list = []
