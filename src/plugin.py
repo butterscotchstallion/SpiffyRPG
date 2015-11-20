@@ -171,6 +171,23 @@ class Announcer:
     def announce(irc, message):
         self._send_channel_notice(irc, message)
 
+    def player_suicide(self, irc, player):
+        """
+        """
+        euphemisms = ["bought the farm", "bit the big one", 
+        "reached their expiration date", "did themselves in", 
+        "commits seppuku", "told u they were hardcore", 
+        "used a permanent solution to a temporary problem",
+        "dug their own grave", "sleeps with the fishes now",
+        "joins the mathletes", "took their own life", "gave up the ghost"]
+
+        death = random.choice(euphemisms)
+        title = ircutils.bold(player["title"])
+
+        announcement_msg = "%s %s" % (title, death)
+
+        self._send_channel_notice(irc, announcement_msg)
+
     def player_exhausted(self, irc, player):
         bold_title = ircutils.bold(player["title"])
         announcement_msg = "%s collapses from exhaustion" % bold_title
@@ -692,6 +709,7 @@ class SpiffyRPG(callbacks.Plugin):
         Battles another user: !sbattle <nick>
         """
         attacker_user_id = self._get_user_id(irc, msg.prefix)
+        is_target_same_as_attacker = msg.nick == target_nick
 
         # Get attacker user id
         if not attacker_user_id:
@@ -728,8 +746,6 @@ class SpiffyRPG(callbacks.Plugin):
             irc.error("That user doesn't seem to be registered. Use !sjoin")
             return
 
-        log.info("SpiffyRPG: %s vs %s" % (attacker, target))
-
         # Add levels
         attacker["level"] = self._get_player_level_by_total_experience(attacker["experience_gained"])
         target["level"] = self._get_player_level_by_total_experience(target["experience_gained"])
@@ -749,7 +765,6 @@ class SpiffyRPG(callbacks.Plugin):
         if self.battle_in_progress:
             self.announcer.battle_in_progress(irc, self.battle)
         else:
-            self.battle_in_progress = True
             self.battle["attacker"] = attacker
             self.battle["target"] = target
             
@@ -757,8 +772,33 @@ class SpiffyRPG(callbacks.Plugin):
             self.battle["attacker_hp"] = self._get_hp_by_player(attacker)
             self.battle["target_hp"] = self._get_hp_by_player(target)
 
-            # Initiate attack!
-            self._attack_target_player(irc, attacker, target)
+            """
+            #1 - If the attacker is trying to fight themselves, let's do
+            something interesting!
+            """
+            if is_target_same_as_attacker:
+                attack_damage_info = self._get_attack_damage(attacker, target)
+
+                attack_info = {
+                    "attacker_title": attacker["title"],
+                    "target_title": target["title"],
+                    "attack_damage": self.battle["attacker_hp"],
+                    "battle": self.battle,
+                    "is_critical_strike": True,
+                    "attack_verb": self.db.get_finishing_move_by_class_id(attacker["character_class_id"],
+                                                                          attacker["level"]),
+                    "damage_type": attack_damage_info["damage_type"],
+                    "bonus_damage": attack_damage_info["bonus_damage"],
+                    "is_killing_blow": True
+                }
+
+                self.announcer.player_attack(irc, attack_info)
+                self.announcer.player_suicide(irc, attacker)
+            else:
+                self.battle_in_progress = True
+
+                # Initiate attack!
+                self._attack_target_player(irc, attacker, target)
 
     sbattle = wrap(sbattle, ["user", "text"])
 
