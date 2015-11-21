@@ -795,7 +795,7 @@ class SpiffyRPG(callbacks.Plugin):
             target_nick = msg.nick
 
         attacker_user_id = self._get_user_id(irc, msg.prefix)
-        is_target_same_as_attacker = msg.nick == target_nick
+        is_target_same_as_attacker = msg.nick.lower() == target_nick.lower()
 
         # Get attacker user id
         if not attacker_user_id:
