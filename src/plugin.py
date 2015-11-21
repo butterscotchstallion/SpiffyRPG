@@ -156,6 +156,19 @@ class SqliteSpiffyRPGDB(dbi.DB):
         if move is not None:
             return move["name"]
 
+    def get_battle_event(self):
+        cursor.execute("""SELECT name,
+                          description
+                          FROM spiffyrpg_battle_events
+                          WHERE 1=1
+                          ORDER BY RANDOM()
+                          LIMIT 1""")
+
+        event = cursor.fetchone()
+
+        if event is not None:
+            return dict(event)
+
     def add_battle(self, battle):
         db = self._get_db()
         cursor = db.cursor()
@@ -224,7 +237,7 @@ class Announcer:
         red_hp = ircutils.mircColor(formatted_hp, fg="red")
         params = (title, red_hp, title, death)
 
-        announcement_msg = "%s's HP was reduced to %s. %s %s" % params
+        announcement_msg = "%s's HP was reduced to -%s. %s %s" % params
 
         self._send_channel_notice(irc, announcement_msg)
 
@@ -339,7 +352,7 @@ class Announcer:
 
         if battle["is_monster_battle"]:
             green_bonus_xp = ircutils.mircColor(int(experience / 2), fg="green")
-            bonus_xp = " (+%s bonus xp for monster battle)" % green_bonus_xp
+            bonus_xp = " (%s bonus xp for monster battle)" % green_bonus_xp
 
         defeat_words = killing_blows =  ["abolishing", "annihilating", "butchering", 
         "creaming", "defeating", "destroying", "devastating", "disfiguring", "dismantling", 
@@ -699,6 +712,18 @@ class SpiffyRPG(callbacks.Plugin):
             self.battle_in_progress = False
             return
 
+        chance_for_battle_event = 50
+        battle_event_activated = random.randrange(1, 100) < chance_for_battle_event
+
+        if battle_event_activated:
+            event = self.db.get_battle_event()
+            damage = 0
+            heal = 0
+
+            #if event["percent_damage_of_target_hp"] > 0:
+            #    damage = 
+            #elif event["percent_heal_of_target_hp"] > 0
+
         """
         Two possibilities here: 
         1. attacker and target are alive
@@ -993,6 +1018,12 @@ class SpiffyRPG(callbacks.Plugin):
                     irc.reply("Please choose one of the following classes: %s" % classes)
 
     sjoin = wrap(sjoin, ["user", "text"])
+
+    def doPart(self, irc, msg):
+        self.announcer.player_suicide(irc, {
+            "hp": random.randrange(500, 10000),
+            "title": msg.nick
+        })
 
 Class = SpiffyRPG
 
