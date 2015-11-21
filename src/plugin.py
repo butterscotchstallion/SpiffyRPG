@@ -17,6 +17,7 @@ import supybot.dbi as dbi
 import random
 import re
 import time
+from datetime import datetime
 
 try:
     from supybot.i18n import PluginInternationalization
@@ -107,6 +108,81 @@ class SqliteSpiffyRPGDB(dbi.DB):
 
         return cursor.fetchall()
 
+    def remove_expired_effects(self):
+        db = self._get_db()
+        cursor = db.cursor()
+        now = time.time()
+
+        cursor.execute("""DELETE FROM spiffyrpg_player_effects
+                          WHERE 1=1
+                          AND expires_at < ?""", (now,))
+
+        db.commit()
+
+    def get_effect_by_name(self, effect_name):
+        db = self._get_db()
+        cursor = db.cursor()
+        wildcard_effect = "%s%%" % effect_name
+
+        cursor.execute("""SELECT e.id,
+                          e.name,
+                          e.description,
+                          e.operator,
+                          e.hp_percent_adjustment,
+                          e.critical_strike_chance_adjustment,
+                          e.damage_percent_adjustment,
+                          e.chance_to_hit_adjustment
+                          FROM spiffyrpg_effects e
+                          WHERE 1=1
+                          AND name LIKE ?""", (wildcard_effect,))
+
+        effect = cursor.fetchone()
+
+        if effect is not None:
+            return effect
+
+    def add_effect_battle_fatigue(self, player_id, duration=300):
+        battle_fatigue = 2
+        
+        self.add_player_effect(player_id, battle_fatigue, duration)
+
+    def add_player_effect(self, player_id, effect_id, duration):
+        db = self._get_db()
+        cursor = db.cursor()
+        now = time.time()
+
+        duration = now + duration
+        params = (effect_id, player_id, duration)
+
+        cursor.execute("""INSERT INTO spiffyrpg_player_effects(
+                          effect_id,
+                          player_id,
+                          expires_at,
+                          created_at)
+                          VALUES(?, ?, ?, ?)""", params)
+
+    def get_player_effects(self, player_id):
+        db = self._get_db()
+        cursor = db.cursor()
+        now = time.time()
+        cursor.execute("""SELECT e.id,
+                          e.name,
+                          e.description,
+                          e.operator,
+                          e.hp_percent_adjustment,
+                          e.critical_strike_chance_adjustment,
+                          e.damage_percent_adjustment,
+                          e.chance_to_hit_adjustment,
+                          p.expires_at
+                          FROM spiffyrpg_effects e
+                          JOIN spiffyrpg_player_effects p ON p.effect_id = e.id
+                          WHERE 1=1
+                          AND p.expires_at > ?
+                          AND p.player_id = ?
+                          ORDER BY name""", (now, player_id,))
+
+        return cursor.fetchall()
+
     def get_class_ability(self, class_id, player_level):
         db = self._get_db()
         cursor = db.cursor()
@@ -123,6 +199,42 @@ class SqliteSpiffyRPGDB(dbi.DB):
         if ability is not None:
             return ability["name"]
     
+    def get_win_dialogue(self, character_class_id):
+        db = self._get_db()
+        cursor = db.cursor()
+
+        # character_class_id = ?
+        cursor.execute("""SELECT dialogue
+                          FROM spiffyrpg_character_dialogue
+                          WHERE 1=1
+                          AND character_class_id = ?
+                          AND dialogue_type = 'win'
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (character_class_id,))
+
+        intro = cursor.fetchone()
+
+        if intro is not None:
+            return dict(intro)["dialogue"]
+
+    def get_player_intro(self, character_class_id):
+        db = self._get_db()
+        cursor = db.cursor()
+
+        # character_class_id = ?
+        cursor.execute("""SELECT dialogue
+                          FROM spiffyrpg_character_dialogue
+                          WHERE 1=1
+                          AND character_class_id = ?
+                          AND dialogue_type = 'intro'
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (character_class_id,))
+
+        intro = cursor.fetchone()
+
+        if intro is not None:
+            return dict(intro)["dialogue"]
+
     def get_monster_by_class_id(self, class_id):
         db = self._get_db()
         cursor = db.cursor()
@@ -203,8 +315,38 @@ class Announcer:
     """
     player_announcements = {}
 
-    def announce(irc, message):
+    def announce(self, irc, message):
         self._send_channel_notice(irc, message)
+
+    def _get_effect_text(self, input):
+        return ircutils.mircColor(input, fg="light blue")
+
+    def effect_applied_to_player(self, irc, player, effect, duration):
+        """
+        %s is now affected by %s (%m)
+        """
+        bold_title = ircutils.bold(player["title"])
+        blue_name = self._get_effect_text(effect["name"])
+        blue_desc = self._get_effect_text(effect["description"])
+        minutes = int(duration / 60)
+
+        effect_name_with_desc = "%s - %s" % (blue_name, blue_desc)
+
+        announcement_msg = "% is now affected by %s (%sm)" % \
+        (bold_title, effect_name_with_desc, minutes)
+
+        self.announce(irc, announcement_msg)
+
+    def player_dialogue(self, irc, player, dialogue):
+        """
+        %s: %s
+        """
+        bold_title = ircutils.bold(player["title"])
+        orange_dialogue = ircutils.mircColor(dialogue, fg="orange")
+        params = (bold_title, orange_dialogue)
+        announcement_msg = "%s: %s" % params
+
+        self.announce(irc, announcement_msg)
 
     def player_joined(self, irc, player):
         #if player["title"] not in self.player_announcements:
@@ -304,6 +446,23 @@ class Announcer:
         announcement_msg = "%s is a level %s %s with %s HP. " % params
         announcement_msg += "%s XP to level %s" % \
         (xp_combo, bold_next_level)
+
+        # Effects!
+        if len(player["effects"]):
+            log.info("SpiffyRPG: effects: %s" % player["effects"])
+
+            effects = []
+
+            for effect in player["effects"]:
+                duration = int((time.time() - effect["expires_at"]) / 60)
+                bold_effect_name = ircutils.bold(effect["name"])
+                bold_duration = ircutils.bold(duration)
+                
+                effects.append("%s (%s minutes)" % (bold_effect_name, bold_duration))
+
+            effects_str = ", ".join(effects)
+
+            announcement_msg += ". %s is affected by %s" % (bold_title, effects_str)
 
         self._send_channel_notice(irc, announcement_msg)
 
@@ -646,14 +805,15 @@ class SpiffyRPG(callbacks.Plugin):
             (victorious_battle_experience, attacker["id"]))
             self.db.add_player_experience(attacker["id"], victorious_battle_experience)
 
-        log.info("SpiffyRPG: attacker wins; exhausted is %s", is_target_exhausted)
-
         if is_target_exhausted:
             self.announcer.attacker_victory_target_exhausted(irc, attacker, target, \
             victorious_battle_experience)
         else:
             self.announcer.player_victory(irc, attacker, target, self.battle, \
             victorious_battle_experience)
+
+        win_message = self.db.get_win_dialogue(attacker["character_class_id"])
+        self.announcer.player_dialogue(irc, attacker, win_message)
 
         current_level = self._get_player_level_by_total_experience(attacker["experience_gained"])
         attacker["level"] = current_level
@@ -686,13 +846,15 @@ class SpiffyRPG(callbacks.Plugin):
             self.announcer.player_victory(irc, target, attacker, self.battle, \
             victorious_battle_experience)
 
+        """ Win dialogue """
+        win_message = self.db.get_win_dialogue(target["character_class_id"])
+        self.announcer.player_dialogue(irc, target, win_message)
+
         """ Monsters do not level...yet """
         if "id" in target:
             log.info("SpiffyRPG: adding %s xp to id %s" % \
             (victorious_battle_experience, target["id"]))
             self.db.add_player_experience(target["id"], victorious_battle_experience)
-
-        log.info("SpiffyRPG: target = %s" % target)
 
         current_level = self._get_player_level_by_total_experience(target["experience_gained"])
         target["level"] = current_level
@@ -700,6 +862,8 @@ class SpiffyRPG(callbacks.Plugin):
         if current_level > self.battle["target_level_before_battle"]:
             target["title"] = self._get_player_title(target)
             self.announcer.player_gained_level(irc, target)
+
+        
 
     def _attack_target_player(self, irc, attacker, target):
         """
@@ -930,6 +1094,9 @@ class SpiffyRPG(callbacks.Plugin):
             irc.error("That user doesn't seem to be registered. Use !sjoin")
             return
 
+        # Remove expired effect each battle
+        self.db.remove_expired_effects()
+
         # Add levels
         attacker["level"] = self._get_player_level_by_total_experience(attacker["experience_gained"])
         target["level"] = self._get_player_level_by_total_experience(target["experience_gained"])
@@ -981,6 +1148,13 @@ class SpiffyRPG(callbacks.Plugin):
             else:
                 self.battle_in_progress = True
 
+                """
+                When a player starts a battle the bot announces
+                a random intro based on the attacker class
+                """
+                intro = self.db.get_player_intro(attacker["character_class_id"])
+                self.announcer.player_dialogue(irc, attacker, intro)
+
                 # Initiate attack!
                 self._attack_target_player(irc, attacker, target)
 
@@ -1008,6 +1182,7 @@ class SpiffyRPG(callbacks.Plugin):
             player["xp_for_this_level"] = \
             self._get_player_experience_for_next_level(player["level"])
             player["title"] = self._get_player_title(player)
+            player["effects"] = self.db.get_player_effects(player["id"])
 
             if player is not None:
                 self.announcer.player_info(irc, player)
@@ -1018,7 +1193,33 @@ class SpiffyRPG(callbacks.Plugin):
 
     sinfo = wrap(sinfo, [optional("text")])
 
-    #sbattle = wrap(sbattle, ["user", optional("text")])
+    def seffect(self, irc, msg, args, user, effect):
+        """
+        Applies an affect to target user
+        """
+        user_id = self._get_user_id(irc, msg.prefix)
+
+        # user id should always be valid due to wrapper
+        player = self.db.get_player_by_user_id(user_id)
+
+        if player is None:
+            irc.error("You don't seem to be registered. Please use !sjoin")          
+            return
+
+        effect = self.db.get_effect_by_name(effect)
+
+        if effect is not None:
+            five_minutes = 300
+            two_minutes = 120
+            duration = time.time() + five_minutes
+
+            self.db.add_effect_battle_fatigue(player, duration)
+            self.announcer.effect_applied_to_player(irc, player, effect, duration)
+        else:
+            irc.error("I couldn't find an effect with that name")
+
+    seffect = wrap(seffect, ["user", "text"])
+
     def sjoin(self, irc, msg, args, user, character_class):
         """
         Joins the game: !sjoin <character class>
