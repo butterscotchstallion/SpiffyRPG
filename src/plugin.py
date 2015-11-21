@@ -157,6 +157,9 @@ class SqliteSpiffyRPGDB(dbi.DB):
             return move["name"]
 
     def get_battle_event(self):
+        db = self._get_db()
+        cursor = db.cursor()
+
         cursor.execute("""SELECT name,
                           description
                           FROM spiffyrpg_battle_events
@@ -198,8 +201,27 @@ class Announcer:
     """
     Handles announcing events and other things
     """
+    player_announcements = {}
+
     def announce(irc, message):
         self._send_channel_notice(irc, message)
+
+    def player_joined(self, irc, player):
+        #if player["title"] not in self.player_announcements:
+        #    self.player_announcements
+        verbs = ("stepped up to the plate", "entered the arena", 
+        "emerges from the shadows", "connected", "logged in",
+        "barged in", "slipped in unnoticed", "snuck in", 
+        "entered the realm")
+        verb = random.choice(verbs)
+        bold_title = ircutils.bold(player["title"])
+        bold_level = ircutils.bold(player["level"])
+        bold_class = ircutils.bold(player["class_name"])
+
+        params = (bold_title, bold_level, bold_class, verb)
+        announcement_msg = "%s the level %s %s has %s" % params
+
+        self._send_channel_notice(irc, announcement_msg)
 
     def monster_summoned(self, irc, attacker, monster):
         bold_attacker_title = ircutils.bold(attacker["title"])
@@ -352,7 +374,7 @@ class Announcer:
 
         if battle["is_monster_battle"]:
             green_bonus_xp = ircutils.mircColor(int(experience / 2), fg="green")
-            bonus_xp = " (%s bonus xp for monster battle)" % green_bonus_xp
+            bonus_xp = " (%s monster bonus)" % green_bonus_xp
 
         defeat_words = killing_blows =  ["abolishing", "annihilating", "butchering", 
         "creaming", "defeating", "destroying", "devastating", "disfiguring", "dismantling", 
@@ -432,6 +454,9 @@ class Player:
     Represents a player in SpiffyRPG and manages
     state information about the player
     """
+    def is_player(self, irc, msg):
+        pass
+
     def get_items(self):
         return self.items
 
@@ -712,13 +737,13 @@ class SpiffyRPG(callbacks.Plugin):
             self.battle_in_progress = False
             return
 
-        chance_for_battle_event = 50
-        battle_event_activated = random.randrange(1, 100) < chance_for_battle_event
+        #chance_for_battle_event = 50
+        #battle_event_activated = random.randrange(1, 100) < chance_for_battle_event
 
-        if battle_event_activated:
-            event = self.db.get_battle_event()
-            damage = 0
-            heal = 0
+        #if battle_event_activated:
+        #    event = self.db.get_battle_event()
+        #    damage = 0
+        #    heal = 0
 
             #if event["percent_damage_of_target_hp"] > 0:
             #    damage = 
@@ -815,6 +840,14 @@ class SpiffyRPG(callbacks.Plugin):
         for c in self.character_classes:
             if c["name"].lower() == class_name.lower():
                 return c["id"]
+
+    def _is_player(self, irc, msg):
+        """
+        1. Try to get Limnoria user id
+        2. Check if nick is in channel
+        3. Try to find player with that user id
+        """
+
 
     def ssummon(self, irc,msg, args, user):
         """
@@ -1024,6 +1057,23 @@ class SpiffyRPG(callbacks.Plugin):
             "hp": random.randrange(500, 10000),
             "title": msg.nick
         })
+
+    def doJoin(self, irc, msg):
+        """
+        Announces players joining
+        """
+        user_id = self._get_user_id(irc, msg.prefix)
+
+        if user_id:
+            player = self.db.get_player_by_user_id(user_id)
+
+            if player:
+                irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
+
+                player["level"] = self._get_player_level_by_total_experience(player["experience_gained"])
+                player["title"] = self._get_player_title(player)
+
+                self.announcer.player_joined(irc, player)
 
 Class = SpiffyRPG
 
