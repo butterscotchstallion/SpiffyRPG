@@ -330,6 +330,12 @@ class Announcer:
         target_title = ircutils.bold(target["title"])
         red_hp = ircutils.mircColor(battle["target_hp"], fg="red")
         green_xp = ircutils.mircColor(experience, fg="green")
+        bonus_xp = ""
+
+        if battle["is_monster_battle"]:
+            green_bonus_xp = ircutils.mircColor(int(experience / 2), fg="green")
+            bonus_xp = " (+%s bonus xp for monster battle)" % green_bonus_xp
+
         defeat_words = killing_blows =  ["abolishing", "annihilating", "butchering", 
         "creaming", "defeating", "destroying", "devastating", "disfiguring", "dismantling", 
         "embarrassing", "exterminating", "felling", "goofing up", "making a mess of", 
@@ -337,8 +343,9 @@ class Announcer:
         "ravaging", "ruining", "shattering", "shattering", "slaying", "snuffing out", "stamping out", 
         "wrecking"]
         defeat_word = random.choice(defeat_words)
-        params = (target_title, red_hp, attacker_title, green_xp, defeat_word, target_title)
-        announcement_msg = "%s's HP was reduced to %s. %s earns %s XP for %s %s" % params
+        params = (target_title, red_hp, attacker_title, green_xp, 
+        bonus_xp, defeat_word, target_title)
+        announcement_msg = "%s's HP was reduced to %s. %s earns %s XP%s for %s %s" % params
 
         self._send_channel_notice(irc, announcement_msg)
 
@@ -441,7 +448,8 @@ class SpiffyRPG(callbacks.Plugin):
         "attacker_miss_count": 0,
         "target_miss_count": 0,
         "target_hp": 0,
-        "attacker_hp": 0
+        "attacker_hp": 0,
+        "is_monster_battle": False
     }
 
     def __init__(self, irc):
@@ -574,8 +582,11 @@ class SpiffyRPG(callbacks.Plugin):
         victorious_battle_experience = self._get_experience_for_battle(target["level"])
         attacker["experience_gained"] += victorious_battle_experience
 
-        if not self.battle["is_monster_battle"]:
+        if "id" in attacker:
             self.db.add_player_experience(attacker["id"], victorious_battle_experience)
+
+        if self.battle["is_monster_battle"]:
+            victorious_battle_experience *= 2
 
         log.info("SpiffyRPG: attacker wins; exhausted is %s", is_target_exhausted)
 
@@ -603,6 +614,10 @@ class SpiffyRPG(callbacks.Plugin):
 
         """ Add XP """
         victorious_battle_experience = self._get_experience_for_battle(target["level"])
+
+        if self.battle["is_monster_battle"]:
+            victorious_battle_experience *= 2
+
         target["experience_gained"] += victorious_battle_experience
 
         # Special message when we are victorious over someone who is
@@ -615,7 +630,7 @@ class SpiffyRPG(callbacks.Plugin):
             victorious_battle_experience)
 
         """ Monsters do not level...yet """
-        if not self.battle["is_monster_battle"]:
+        if "id" in target:
             self.db.add_player_experience(target["id"], victorious_battle_experience)
 
             current_level = self._get_player_level_by_total_experience(target["experience_gained"])
