@@ -1043,6 +1043,7 @@ class SpiffyRPG(callbacks.Plugin):
 
                         self.db.register_new_player(user_id, char_name, class_id)
                         self.announcer.new_player(irc, char_name, character_class)
+                        irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
                     else:
                         log.error("SpiffyRPG: error determining class id from '%s'" % character_class)
 
