@@ -502,14 +502,14 @@ class SpiffyRPG(callbacks.Plugin):
         ]
 
     def _get_player_level_by_total_experience(self, total_experience):
-        player_level = None
+        player_level = 1
         levels = self._get_experience_levels()
  
         for level, experience_needed in levels:
             if total_experience > experience_needed:
                 player_level = level
 
-        if player_level is None:
+        if total_experience > levels[-1][1]:
             player_level = levels[-1][0]
 
         return player_level
