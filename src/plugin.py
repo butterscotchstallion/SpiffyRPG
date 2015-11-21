@@ -123,6 +123,22 @@ class SqliteSpiffyRPGDB(dbi.DB):
         if ability is not None:
             return ability["name"]
     
+    def get_monster_by_class_id(self, class_id):
+        db = self._get_db()
+        cursor = db.cursor()
+
+        cursor.execute("""SELECT name AS character_name,
+                          description
+                          FROM spiffyrpg_monsters
+                          WHERE character_class_id = ?
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (class_id,))
+
+        monster = cursor.fetchone()
+
+        if monster is not None:
+            return dict(monster)
+
     def get_finishing_move_by_class_id(self, class_id, player_level):
         db = self._get_db()
         cursor = db.cursor()
@@ -170,6 +186,26 @@ class Announcer:
     """
     def announce(irc, message):
         self._send_channel_notice(irc, message)
+
+    def monster_summoned(self, irc, attacker, monster):
+        bold_attacker_title = ircutils.bold(attacker["title"])
+        bold_monster_title = ircutils.bold(monster["title"])
+        bold_monster_level = ircutils.bold(monster["level"])
+
+        params = (bold_attacker_title, bold_monster_level, bold_monster_title)
+        announcement_msg = "%s summons a level %s %s!" % params
+
+        self._send_channel_notice(irc, announcement_msg)
+
+        self.monster_intro(irc, monster)
+
+    def monster_intro(self, irc, monster):
+        bold_monster_intro = ircutils.bold(monster["description"])
+        bold_title = ircutils.bold(monster["title"])
+        params = (bold_title, bold_monster_intro)
+        announcement_msg = "%s: %s" % params
+
+        self._send_channel_notice(irc, announcement_msg)
 
     def player_suicide(self, irc, player):
         """
@@ -401,7 +437,12 @@ class SpiffyRPG(callbacks.Plugin):
     """A gluten-free IRC RPG"""
     threaded = True
     battle_in_progress = False
-    battle = {}
+    battle = {
+        "attacker_miss_count": 0,
+        "target_miss_count": 0,
+        "target_hp": 0,
+        "attacker_hp": 0
+    }
 
     def __init__(self, irc):
         self.__parent= super(SpiffyRPG, self)
@@ -461,12 +502,15 @@ class SpiffyRPG(callbacks.Plugin):
         ]
 
     def _get_player_level_by_total_experience(self, total_experience):
-        player_level = 1
+        player_level = None
         levels = self._get_experience_levels()
  
         for level, experience_needed in levels:
             if total_experience > experience_needed:
                 player_level = level
+
+        if player_level is None:
+            player_level = levels[-1][0]
 
         return player_level
 
@@ -530,7 +574,8 @@ class SpiffyRPG(callbacks.Plugin):
         victorious_battle_experience = self._get_experience_for_battle(target["level"])
         attacker["experience_gained"] += victorious_battle_experience
 
-        self.db.add_player_experience(attacker["id"], victorious_battle_experience)
+        if not self.battle["is_monster_battle"]:
+            self.db.add_player_experience(attacker["id"], victorious_battle_experience)
 
         log.info("SpiffyRPG: attacker wins; exhausted is %s", is_target_exhausted)
 
@@ -541,22 +586,24 @@ class SpiffyRPG(callbacks.Plugin):
             self.announcer.player_victory(irc, attacker, target, self.battle, \
             victorious_battle_experience)
 
-        current_level = self._get_player_level_by_total_experience(attacker["experience_gained"])
-        attacker["level"] = current_level
+        if not self.battle["is_monster_battle"]:
+            current_level = self._get_player_level_by_total_experience(attacker["experience_gained"])
+            attacker["level"] = current_level
 
-        if current_level > self.battle["attacker_level_before_battle"]:
-            attacker["title"] = self._get_player_title(attacker)
-            self.announcer.player_gained_level(irc, attacker)
+            if current_level > self.battle["attacker_level_before_battle"]:
+                attacker["title"] = self._get_player_title(attacker)
+                self.announcer.player_gained_level(irc, attacker)
 
         self.battle_in_progress = False
 
     def _target_wins(self, irc, attacker, target, is_attacker_exhausted):
+        self.battle_in_progress = False
+
+        #log.info("SpiffyRPG: target wins; exhausted is %s", is_attacker_exhausted)
+
+        """ Add XP """
         victorious_battle_experience = self._get_experience_for_battle(target["level"])
         target["experience_gained"] += victorious_battle_experience
-
-        self.db.add_player_experience(target["id"], victorious_battle_experience)
-
-        log.info("SpiffyRPG: target wins; exhausted is %s", is_attacker_exhausted)
 
         # Special message when we are victorious over someone who is
         # exhausted
@@ -567,14 +614,16 @@ class SpiffyRPG(callbacks.Plugin):
             self.announcer.player_victory(irc, target, attacker, self.battle, \
             victorious_battle_experience)
 
-        current_level = self._get_player_level_by_total_experience(target["experience_gained"])
-        target["level"] = current_level
+        """ Monsters do not level...yet """
+        if not self.battle["is_monster_battle"]:
+            self.db.add_player_experience(target["id"], victorious_battle_experience)
 
-        if current_level > self.battle["target_level_before_battle"]:
-            target["title"] = self._get_player_title(target)
-            self.announcer.player_gained_level(irc, target)
+            current_level = self._get_player_level_by_total_experience(target["experience_gained"])
+            target["level"] = current_level
 
-        self.battle_in_progress = False
+            if current_level > self.battle["target_level_before_battle"]:
+                target["title"] = self._get_player_title(target)
+                self.announcer.player_gained_level(irc, target)
 
     def _attack_target_player(self, irc, attacker, target):
         """
@@ -704,10 +753,47 @@ class SpiffyRPG(callbacks.Plugin):
             if c["name"].lower() == class_name.lower():
                 return c["id"]
 
+    def ssummon(self, irc,msg, args, user):
+        """
+        Summons a random monster your level with a random
+        class
+        """
+        attacker_user_id = self._get_user_id(irc, msg.prefix)
+
+        # user id should always be valid due to wrapper
+        attacker = self.db.get_player_by_user_id(attacker_user_id)
+
+        if attacker is None:
+            irc.error("You don't seem to be registered. Please use !sjoin")          
+            return
+
+        attacker_xp = attacker["experience_gained"]
+        attacker_class_id = attacker["character_class_id"]
+        attacker["title"] = self._get_player_title(attacker)
+        attacker["level"] = self._get_player_level_by_total_experience(attacker_xp)
+
+        monster = self.db.get_monster_by_class_id(attacker_class_id)
+        monster["level"] = self._get_player_level_by_total_experience(attacker_xp)
+        monster["experience_gained"] = attacker_xp
+        monster["title"] = self._get_player_title(monster)
+        monster["character_class_id"] = attacker_class_id
+
+        self.battle["attacker_hp"] = self._get_hp_by_player(attacker)
+        self.battle["target_hp"] = self._get_hp_by_player(monster)
+        self.battle["is_monster_battle"] = True
+
+        self.announcer.monster_summoned(irc, attacker, monster)
+        self._attack_target_player(irc, attacker, monster)
+
+    ssummon = wrap(ssummon, ["user"])
+
     def sbattle(self, irc, msg, args, user, target_nick):
         """
         Battles another user: !sbattle <nick>
         """
+        if not target_nick:
+            target_nick = msg.nick
+
         attacker_user_id = self._get_user_id(irc, msg.prefix)
         is_target_same_as_attacker = msg.nick == target_nick
 
@@ -754,9 +840,6 @@ class SpiffyRPG(callbacks.Plugin):
         attacker["title"] = self._get_player_title(attacker)
         target["title"] = self._get_player_title(target)
 
-        self.battle["attacker_miss_count"] = 0
-        self.battle["target_miss_count"] = 0
-
         # attacker attacks
         # determine if they hit
         # get attack damage based on modifiers
@@ -800,12 +883,15 @@ class SpiffyRPG(callbacks.Plugin):
                 # Initiate attack!
                 self._attack_target_player(irc, attacker, target)
 
-    sbattle = wrap(sbattle, ["user", "text"])
+    sbattle = wrap(sbattle, ["user", optional("text")])
 
     def sinfo(self, irc, msg, args, target_nick):
         """
         Shows information about a player
         """
+        if not target_nick:
+            target_nick = msg.nick
+
         if not self._is_nick_in_channel(irc, target_nick):
             irc.error("I don't see that nick here")
 
@@ -829,8 +915,9 @@ class SpiffyRPG(callbacks.Plugin):
         else:
             irc.error("I could not find anything on that user.")
 
-    sinfo = wrap(sinfo, ["text"])
+    sinfo = wrap(sinfo, [optional("text")])
 
+    #sbattle = wrap(sbattle, ["user", optional("text")])
     def sjoin(self, irc, msg, args, user, character_class):
         """
         Joins the game: !sjoin <character class>
