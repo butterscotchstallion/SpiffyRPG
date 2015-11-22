@@ -86,6 +86,24 @@ class SqliteSpiffyRPGDB(dbi.DB):
         if player is not None:
             return dict(player)
 
+    def get_top_players_by_xp(self):
+        db = self._get_db()
+        cursor = db.cursor()
+
+        cursor.execute("""SELECT p.id,
+                          p.character_class_id,
+                          p.character_name,
+                          p.created_at,
+                          p.user_id,
+                          p.experience_gained,
+                          c.name AS class_name
+                          FROM spiffyrpg_players p
+                          JOIN spiffyrpg_character_classes c ON c.id = p.character_class_id
+                          ORDER BY p.experience_gained DESC
+                          LIMIT 3""")
+
+        return cursor.fetchall()
+
     def add_player_experience(self, player_id, experience_gained):
         db = self._get_db()
         cursor = db.cursor()
@@ -343,6 +361,10 @@ class Announcer:
 
         return role_colors[role_id]
 
+    def _get_player_role(self, player):
+        return ircutils.bold(ircutils.mircColor(player["class_name"], \
+            self._get_role_color(player["character_class_id"])))
+
     def _get_player_title(self, player):
         role_colors = {
             1: "light grey",
@@ -353,6 +375,13 @@ class Announcer:
         role_color = role_colors[player["character_class_id"]]
 
         return ircutils.bold(ircutils.mircColor(player["title"], fg=role_color))
+
+    def top_players(self, irc, top_players):
+        """
+
+        """
+        for player in top_players:
+            self.player_info(irc, player)
 
     def player_role_change(self, irc, player, role_name, role_id):
         """
@@ -477,8 +506,9 @@ class Announcer:
         """
         %s is a level %s %s. %s XP remains until %s
         """
-        bold_title = ircutils.bold(player["title"])
-        bold_class = ircutils.bold(player["class_name"])
+        bold_title = self._get_player_title(player)
+        bold_class = self._get_player_role(player)
+
         # + 1 xp because you don't level until you breach the limit
         formatted_xp = "{:,}".format(int(player["xp_for_this_level"])+1)
         bold_xp_needed_this_level = ircutils.bold(formatted_xp)
@@ -1222,15 +1252,32 @@ class SpiffyRPG(callbacks.Plugin):
 
     sbattle = wrap(sbattle, ["user", optional("text")])
 
-    """
     def srank(self, irc, msg, args):
-        top_chars = self.db.get_top_players_by_xp()
+        """
+        Shows top 3 players by experience gained
+        """
+        tmp_players = self.db.get_top_players_by_xp()
+        top_players = []
 
-        self.announcer.top_players(irc, top_chars)
+        if len(tmp_players) > 0:
+            for p in tmp_players:
+                player = dict(p)
+                xp = player["experience_gained"]
+                player["hp"] = self._get_hp_by_player(player)            
+                player["level"] = self._get_player_level_by_total_experience(xp)
+                player["xp_for_this_level"] = \
+                self._get_player_experience_for_next_level(player["level"])
+                player["title"] = self._get_player_title(player)
+                player["effects"] = self.db.get_player_effects(player["id"])
+
+                top_players.append(player)
+
+            self.announcer.top_players(irc, top_players)
+        else:
+            irc.error("There are no players yet!")
 
     srank = wrap(srank)
-    """
-
+    
     def srole(self, irc, msg, args, user, role):
         """
         Changes your role to something else
