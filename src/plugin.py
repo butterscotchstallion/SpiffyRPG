@@ -1431,13 +1431,16 @@ class SpiffyRPG(callbacks.Plugin):
         if user_id:
             player = self.db.get_player_by_user_id(user_id)
 
-            if player:
-                irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
-
-                player["level"] = self._get_player_level_by_total_experience(player["experience_gained"])
+            if player is not None:
+                xp = player["experience_gained"]
+                player["hp"] = self._get_hp_by_player(player)            
+                player["level"] = self._get_player_level_by_total_experience(xp)
+                player["xp_for_this_level"] = \
+                self._get_player_experience_for_next_level(player["level"])
                 player["title"] = self._get_player_title(player)
+                player["effects"] = self.db.get_player_effects(player["id"])
 
-                self.announcer.player_joined(irc, player)
+                self.announcer.player_info(irc, player)
 
 Class = SpiffyRPG
 
