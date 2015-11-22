@@ -48,7 +48,7 @@ class SqliteSpiffyRPGDB(dbi.DB):
         db = sqlite3.connect(filename, check_same_thread=False)
         db.row_factory = sqlite3.Row
 
-        log.debug("DB: connecting to %s" % filename)
+        #log.debug("DB: connecting to %s" % filename)
 
         return db
 
@@ -99,6 +99,19 @@ class SqliteSpiffyRPGDB(dbi.DB):
 
         db.commit()
 
+    def update_player_role(self, player_id, character_class_id):
+        db = self._get_db()
+        cursor = db.cursor()
+
+        params = (character_class_id, player_id)
+
+        cursor.execute("""UPDATE spiffyrpg_players
+                          SET character_class_id = ?
+                          WHERE id = ?""", 
+                       params)
+
+        db.commit()
+
     def get_character_classes(self):
         db = self._get_db()
         cursor = db.cursor()
@@ -111,7 +124,7 @@ class SqliteSpiffyRPGDB(dbi.DB):
     def remove_expired_effects(self):
         db = self._get_db()
         cursor = db.cursor()
-        now = time.time()
+        now = datetime.now()
 
         cursor.execute("""DELETE FROM spiffyrpg_player_effects
                           WHERE 1=1
@@ -151,8 +164,8 @@ class SqliteSpiffyRPGDB(dbi.DB):
         cursor = db.cursor()
         now = time.time()
 
-        duration = now + duration
-        params = (effect_id, player_id, duration)
+        expires_at = now + duration
+        params = (effect_id, player_id, expires_at, now)
 
         cursor.execute("""INSERT INTO spiffyrpg_player_effects(
                           effect_id,
@@ -321,6 +334,39 @@ class Announcer:
     def _get_effect_text(self, input):
         return ircutils.mircColor(input, fg="light blue")
 
+    def _get_role_color(self, role_id):
+        role_colors = {
+            1: "light grey",
+            2: "teal",
+            3: "yellow"
+        }
+
+        return role_colors[role_id]
+
+    def _get_player_title(self, player):
+        role_colors = {
+            1: "light grey",
+            2: "teal",
+            3: "yellow"
+        }
+
+        role_color = role_colors[player["character_class_id"]]
+
+        return ircutils.bold(ircutils.mircColor(player["title"], fg=role_color))
+
+    def player_role_change(self, irc, player, role_name, role_id):
+        """
+        %s is now a level %s %s!
+        """
+        player_title = self._get_player_title(player)
+        params = (player_title, player["level"])
+        msg = "%s is now a level %s" % params
+        colored_msg = ircutils.mircColor(msg, fg="brown")
+        colored_role = ircutils.mircColor(role_name, self._get_role_color(role_id))
+        announcement_msg = "%s %s!" % (colored_msg, colored_role)
+
+        self.announce(irc, announcement_msg)
+
     def effect_applied_to_player(self, irc, player, effect, duration):
         """
         %s is now affected by %s (%m)
@@ -332,7 +378,7 @@ class Announcer:
 
         effect_name_with_desc = "%s - %s" % (blue_name, blue_desc)
 
-        announcement_msg = "% is now affected by %s (%sm)" % \
+        announcement_msg = "%s is now affected by %s (%sm)" % \
         (bold_title, effect_name_with_desc, minutes)
 
         self.announce(irc, announcement_msg)
@@ -342,6 +388,7 @@ class Announcer:
         %s: %s
         """
         bold_title = ircutils.bold(player["title"])
+
         orange_dialogue = ircutils.mircColor(dialogue, fg="orange")
         params = (bold_title, orange_dialogue)
         announcement_msg = "%s: %s" % params
@@ -559,10 +606,10 @@ class Announcer:
         }
         """
         battle = attack_info["battle"]
-        bold_attacker_title = ircutils.bold(attack_info["attacker_title"])
-        bold_target_title = ircutils.bold(attack_info["target_title"])
+        attacker_title = self._get_player_title(attack_info["attacker"])
+        target_title = self._get_player_title(attack_info["target"])
         attacker_hp = ircutils.mircColor(battle["attacker_hp"], fg="green")
-        danger_low_hp_threshold = 5
+        danger_low_hp_threshold = 50
         attack_word = "hits"
 
         # player is suiciding
@@ -591,8 +638,8 @@ class Announcer:
         damage_type = attack_info["damage_type"]
         bonus_damage = ircutils.mircColor(attack_info["bonus_damage"], fg="green")
 
-        params = (bold_attacker_title, attack_verb, attack_word,
-                  bold_target_title, red_damage, damage_type, bonus_damage)
+        params = (attacker_title, attack_verb, attack_word,
+                  target_title, red_damage, damage_type, bonus_damage)
 
         announcement_msg = "%s's %s %s %s for %s %s (%s bonus damage)" % params
 
@@ -718,7 +765,12 @@ class SpiffyRPG(callbacks.Plugin):
             (12, 8000),
             (13, 9500),
             (14, 10500),
-            (15, 12000)
+            (15, 12000),
+            (16, 15000),
+            (17, 18000),
+            (18, 21000),
+            (19, 23000),
+            (20, 16000)
         ]
 
     def _get_player_level_by_total_experience(self, total_experience):
@@ -863,8 +915,6 @@ class SpiffyRPG(callbacks.Plugin):
             target["title"] = self._get_player_title(target)
             self.announcer.player_gained_level(irc, target)
 
-        
-
     def _attack_target_player(self, irc, attacker, target):
         """
         Performs an attack or announces a death where applicable
@@ -888,6 +938,7 @@ class SpiffyRPG(callbacks.Plugin):
         params = (attacker["title"], self.battle["attacker_miss_count"],
         target["title"], self.battle["target_miss_count"])
 
+        """
         log.info("SpiffyRPG: %s has missed %s times and %s has missed %s times" % params)
 
         if attacker_is_exhausted(max_miss_count):
@@ -900,18 +951,19 @@ class SpiffyRPG(callbacks.Plugin):
         if attacker_is_exhausted(max_miss_count) or target_is_exhausted(max_miss_count):
             self.battle_in_progress = False
             return
+        
+        chance_for_battle_event = 50
+        battle_event_activated = random.randrange(1, 100) < chance_for_battle_event
 
-        #chance_for_battle_event = 50
-        #battle_event_activated = random.randrange(1, 100) < chance_for_battle_event
+        if battle_event_activated:
+            event = self.db.get_battle_event()
+            damage = 0
+            heal = 0
 
-        #if battle_event_activated:
-        #    event = self.db.get_battle_event()
-        #    damage = 0
-        #    heal = 0
-
-            #if event["percent_damage_of_target_hp"] > 0:
-            #    damage = 
-            #elif event["percent_heal_of_target_hp"] > 0
+            if event["percent_damage_of_target_hp"] > 0:
+                damage = 
+            elif event["percent_heal_of_target_hp"] > 0
+        """
 
         """
         Two possibilities here: 
@@ -943,14 +995,24 @@ class SpiffyRPG(callbacks.Plugin):
                     "attack_verb": attack_verb,
                     "damage_type": attack_damage_info["damage_type"],
                     "bonus_damage": attack_damage_info["bonus_damage"],
-                    "is_killing_blow": is_killing_blow
+                    "is_killing_blow": is_killing_blow,
+                    "attacker_class_id": attacker["character_class_id"],
+                    "target_class_id": target["character_class_id"],
+                    "attacker": attacker,
+                    "target": target
                 }
 
                 """ Announce the attack, if successful """
                 self.announcer.player_attack(irc, attack_info)
 
+                log.debug("SpiffyRPG: %s has %s HP." % (target["title"],
+                                                        self.battle["target_hp"]))
+
                 # Subtract attack damage from target hp
                 self.battle["target_hp"] -= attack_damage_info["attack_damage"]
+
+                log.debug("SpiffyRPG: %s attacked for %s and now has %s HP",
+                target["title"], attack_damage_info["attack_damage"], self.battle["target_hp"])
 
                 """ It is possible for a single attack to win """
                 if attacker_is_alive() and target_is_alive():
@@ -1095,7 +1157,7 @@ class SpiffyRPG(callbacks.Plugin):
             return
 
         # Remove expired effect each battle
-        self.db.remove_expired_effects()
+        #self.db.remove_expired_effects()
 
         # Add levels
         attacker["level"] = self._get_player_level_by_total_experience(attacker["experience_gained"])
@@ -1160,6 +1222,43 @@ class SpiffyRPG(callbacks.Plugin):
 
     sbattle = wrap(sbattle, ["user", optional("text")])
 
+    """
+    def srank(self, irc, msg, args):
+        top_chars = self.db.get_top_players_by_xp()
+
+        self.announcer.top_players(irc, top_chars)
+
+    srank = wrap(srank)
+    """
+
+    def srole(self, irc, msg, args, user, role):
+        """
+        Changes your role to something else
+        """
+        user_id = self._get_user_id(irc, msg.prefix)
+        
+        if user_id is not None:
+            player = self.db.get_player_by_user_id(user_id)
+
+            log.info("SpiffyRPG: %s changing to %s" % (player, role))
+
+            if player is not None:
+                class_id = self._get_character_class_id_by_name(role)
+
+                if class_id is not None:
+                    self.db.update_player_role(player["id"], class_id)
+                    player["title"] = self._get_player_title(player)
+                    player["level"] = self._get_player_level_by_total_experience(player["experience_gained"])
+                    self.announcer.player_role_change(irc, player, role, class_id)
+                else:
+                    classes = self._get_character_class_list()
+
+                    irc.error("Please choose one of the following roles: %s" % classes)
+            else:
+                irc.error("You ain't no playa! Step off, homie.")
+
+    srole = wrap(srole, ["user", "text"])
+
     def sinfo(self, irc, msg, args, target_nick):
         """
         Shows information about a player
@@ -1213,7 +1312,8 @@ class SpiffyRPG(callbacks.Plugin):
             two_minutes = 120
             duration = time.time() + five_minutes
 
-            self.db.add_effect_battle_fatigue(player, duration)
+            player["title"] = self._get_player_title(player)
+            self.db.add_effect_battle_fatigue(player["id"], duration)
             self.announcer.effect_applied_to_player(irc, player, effect, duration)
         else:
             irc.error("I couldn't find an effect with that name")
