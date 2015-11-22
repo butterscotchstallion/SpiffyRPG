@@ -401,7 +401,7 @@ class Announcer:
         red_hp = ircutils.mircColor(formatted_hp, fg="red")
         params = (title, red_hp, title, death)
 
-        announcement_msg = "%s's HP was reduced to -%s. %s %s" % params
+        announcement_msg = "%s's HP was reduced to %s. %s %s" % params
 
         self._send_channel_notice(irc, announcement_msg)
 
@@ -1256,8 +1256,20 @@ class SpiffyRPG(callbacks.Plugin):
 
     def doPart(self, irc, msg):
         self.announcer.player_suicide(irc, {
-            "hp": random.randrange(500, 10000),
+            "hp": random.randrange(500, 10000) * -1,
             "title": msg.nick
+        })
+
+    def doKick(self, irc, msg):
+        if len(msg.args) == 3:
+            (channel, target, kickmsg) = msg.args
+        else:
+            (channel, target) = msg.args
+            kickmsg = ""
+
+        self.announcer.player_suicide(irc, {
+            "hp": random.randrange(500, 10000) * -1,
+            "title": target
         })
 
     def doJoin(self, irc, msg):
