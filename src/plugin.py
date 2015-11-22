@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 ###
 # Copyright (c) 2015, butterscotchstallion
 # All rights reserved.
@@ -475,9 +476,10 @@ class Announcer:
         title = ircutils.bold(player["title"])
         formatted_hp = "{:,}".format(player["hp"])
         red_hp = ircutils.mircColor(formatted_hp, fg="red")
-        params = (title, red_hp, title, death)
+        pink_heart = ircutils.mircColor(u"♥", fg="pink")
+        params = (title, pink_heart, red_hp, title, death)
 
-        announcement_msg = "%s's HP was reduced to %s. %s %s" % params
+        announcement_msg = "%s %s %s. %s %s" % params
 
         self._send_channel_notice(irc, announcement_msg)
 
@@ -610,7 +612,7 @@ class Announcer:
 
         if battle["is_monster_battle"]:
             green_bonus_xp = ircutils.mircColor(int(experience / 2), fg="green")
-            bonus_xp = " (%s monster bonus)" % green_bonus_xp
+            bonus_xp = " (%s bonus)" % green_bonus_xp
 
         defeat_words = killing_blows =  ["abolishing", "annihilating", "butchering", 
         "creaming", "defeating", "destroying", "devastating", "disfiguring", "dismantling", 
@@ -618,10 +620,11 @@ class Announcer:
         "nullifying", "putting the kibosh on", "quashing", "quelling", "raining destruction on", 
         "ravaging", "ruining", "shattering", "shattering", "slaying", "snuffing out", "stamping out", 
         "wrecking"]
-        defeat_word = random.choice(defeat_words)
-        params = (target_title, red_hp, attacker_title, green_xp, 
+        defeat_word = ircutils.mircColor(random.choice(defeat_words), fg="red")
+        pink_heart = ircutils.mircColor(u"♥", fg="pink")
+        params = (target_title, pink_heart, red_hp, attacker_title, green_xp, 
         bonus_xp, defeat_word, target_title)
-        announcement_msg = "%s's HP was reduced to %s. %s earns %s XP%s for %s %s" % params
+        announcement_msg = "%s %s %s. %s +%sXP%s for %s %s" % params
 
         self._send_channel_notice(irc, announcement_msg)
 
@@ -663,7 +666,7 @@ class Announcer:
         if attack_info["is_killing_blow"]:
             attack_verb = ircutils.bold(ircutils.mircColor(attack_info["attack_verb"], fg="red"))
         else:
-            attack_verb = ircutils.bold(attack_info["attack_verb"])
+            attack_verb = ircutils.bold(ircutils.mircColor(attack_info["attack_verb"], fg="light green"))
 
         damage_type = attack_info["damage_type"]
         bonus_damage = ircutils.mircColor(attack_info["bonus_damage"], fg="green")
@@ -671,7 +674,7 @@ class Announcer:
         params = (attacker_title, attack_verb, attack_word,
                   target_title, red_damage, damage_type, bonus_damage)
 
-        announcement_msg = "%s's %s %s %s for %s %s (%s bonus damage)" % params
+        announcement_msg = "%s's %s %s %s: %s %s (%s bonus)" % params
 
         self._send_channel_notice(irc, announcement_msg)
 
