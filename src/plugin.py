@@ -506,12 +506,12 @@ class Announcer:
         self._send_channel_notice(irc, announcement_msg)
 
     def monster_summoned(self, irc, attacker, monster):
-        bold_attacker_title = ircutils.bold(attacker["title"])
         bold_monster_title = ircutils.bold(monster["title"])
         bold_monster_level = ircutils.bold(monster["level"])
 
-        params = (bold_attacker_title, bold_monster_level, bold_monster_title)
-        announcement_msg = "%s summons a level %s %s!" % params
+        params = (bold_monster_level, bold_monster_title)
+        msg = "A level %s %s appears!" % params
+        announcement_msg = ircutils.mircColor(msg, fg="light blue")
 
         self._send_channel_notice(irc, announcement_msg)
 
@@ -690,10 +690,14 @@ class Announcer:
         green_xp = ircutils.mircColor(experience, fg="green")
         bonus_xp = ""
         internet_points = ircutils.mircColor("Internet Points", fg="purple")
+        pink_heart = ircutils.mircColor(u"♥", fg="pink")
 
         if battle["is_monster_battle"]:
             green_bonus_xp = ircutils.mircColor(int(experience / 2), fg="green")
             bonus_xp = " (%s bonus)" % green_bonus_xp
+
+        winner_hp = "%s %s" % (battle["attacker_hp"], pink_heart)
+        loser_hp = "%s %s" % (red_hp, pink_heart)
 
         defeat_words = killing_blows =  ["abolishing", "annihilating", "butchering", 
         "creaming", "defeating", "destroying", "devastating", "disfiguring", "dismantling", 
@@ -702,10 +706,12 @@ class Announcer:
         "ravaging", "ruining", "shattering", "shattering", "slaying", "snuffing out", "stamping out", 
         "wrecking"]
         defeat_word = ircutils.mircColor(random.choice(defeat_words), fg="red")
-        pink_heart = ircutils.mircColor(u"♥", fg="pink")
-        params = (target_title, red_hp, pink_heart, attacker_title, green_xp, 
+        
+        params = (target_title, loser_hp, attacker_title, winner_hp, green_xp, 
         bonus_xp, internet_points, defeat_word, target_title)
-        announcement_msg = "%s %s %s %s +%s%s %s for %s %s" % params
+
+        # loser -20 ♥ winner 200 ♥ 100 (50 bonus) Internet Points for wrecking theraspberry
+        announcement_msg = "%s %s %s %s %s%s %s for %s %s" % params
 
         self._send_channel_notice(irc, announcement_msg)
 
@@ -1233,7 +1239,7 @@ class SpiffyRPG(callbacks.Plugin):
         attacker["level"] = self._get_player_level_by_total_experience(attacker_xp)
 
         monster = self.db.get_monster_by_class_id(attacker_class_id)
-        monster["level"] = self._get_player_level_by_total_experience(attacker_xp)
+        monster["level"] = attacker["level"] + random.randrange(1, 5)
         monster["experience_gained"] = attacker_xp
         monster["title"] = self._get_player_title(monster)
         monster["character_class_id"] = attacker_class_id
@@ -1244,8 +1250,6 @@ class SpiffyRPG(callbacks.Plugin):
         self.battle["is_monster_battle"] = True
 
         intro = self.db.get_monster_intro(monster["id"])
-
-        log.info("SpiffyRPG: %s" % intro)
 
         self.announcer.monster_summoned(irc, attacker, monster)
 
