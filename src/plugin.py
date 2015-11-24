@@ -15,6 +15,7 @@ import supybot.log as log
 import supybot.ircdb as ircdb
 import supybot.conf as conf
 import supybot.dbi as dbi
+import supybot.schedule as schedule
 import random
 import re
 import time
@@ -147,7 +148,8 @@ class SqliteSpiffyRPGDB(dbi.DB):
 
         cursor.execute("""DELETE FROM spiffyrpg_player_effects
                           WHERE 1=1
-                          AND expires_at < ?""", (now,))
+                          AND expires_at < ?
+                          AND is_persistent = 0""", (now,))
 
         db.commit()
 
@@ -178,18 +180,27 @@ class SqliteSpiffyRPGDB(dbi.DB):
         
         self.add_player_effect(player_id, battle_fatigue, duration)
 
-    def add_player_effect(self, player_id, effect_id, duration):
+    def add_effect_realm_king(self, player_id):
+        log.info("SpiffyRPG: player %s -> Realm King" % player_id)
+        realm_king = 3
+        duration = 0
+        is_persistent = 1
+
+        self.add_player_effect(player_id, realm_king, duration, is_persistent)
+
+    def add_player_effect(self, player_id, effect_id, duration=300, is_persistent=0):
         db = self._get_db()
         cursor = db.cursor()
         now = time.time()
 
         expires_at = now + duration
-        params = (effect_id, player_id, expires_at, now)
+        params = (effect_id, player_id, expires_at, is_persistent, now)
 
         cursor.execute("""INSERT INTO spiffyrpg_player_effects(
                           effect_id,
                           player_id,
                           expires_at,
+                          is_persistent,
                           created_at)
                           VALUES(?, ?, ?, ?)""", params)
 
@@ -265,6 +276,29 @@ class SqliteSpiffyRPGDB(dbi.DB):
         if win is not None:
             return dict(win)["dialogue"]
 
+    def get_realm_king_player_id(self):
+        db = self._get_db()
+        cursor = db.cursor()
+
+        cursor.execute("""SELECT p.id
+                          FROM spiffyrpg_players p
+                          ORDER BY experience_gained DESC
+                          LIMIT 1""")
+
+        realm_king = cursor.fetchone()
+
+        if realm_king is not None:
+            return dict(realm_king)["id"]
+
+    def remove_realm_king_effect(self):
+        log.info("SpiffyRPG: removing realm kings")
+
+        db = self._get_db()
+        cursor = db.cursor()
+
+        cursor.execute("""DELETE FROM spiffyrpg_player_effects
+                          WHERE id = 3""", params)
+
     def get_player_intro(self, character_class_id):
         db = self._get_db()
         cursor = db.cursor()
@@ -317,21 +351,6 @@ class SqliteSpiffyRPGDB(dbi.DB):
 
         if monster is not None:
             return dict(monster)
-
-    def get_attack_verb_by_monster_id(self, monster_id):
-        db = self._get_db()
-        cursor = db.cursor()
-
-        cursor.execute("""SELECT name
-                          FROM spiffyrpg_monster_abilities
-                          WHERE monster_id = ?
-                          ORDER BY RANDOM()
-                          LIMIT 1""", (monster_id,))
-
-        ability = cursor.fetchone()
-
-        if ability is not None:
-            return ability["name"]
 
     def get_finishing_move_by_monster_id(self, monster_id):
         db = self._get_db()
@@ -409,10 +428,17 @@ class Announcer:
     """
     Handles announcing events and other things
     """
-    player_announcements = {}
+    def __init__(self, **kwargs):
+        self._irc = kwargs["irc"]
 
-    def announce(self, irc, message):
-        self._send_channel_notice(irc, message)
+    def announce(self, message):
+        self._send_channel_notice(message)
+
+    def _b(self, input):
+        return ircutils.bold(input)
+
+    def _c(self, input, text_color):
+        return ircutils.mircColor(input, fg=text_color)
 
     def _get_effect_text(self, input):
         return ircutils.mircColor(input, fg="light blue")
@@ -427,8 +453,8 @@ class Announcer:
         return role_colors[role_id]
 
     def _get_player_role(self, player):
-        return ircutils.bold(ircutils.mircColor(player["class_name"], \
-            self._get_role_color(player["character_class_id"])))
+        return ircutils.bold(ircutils.mircColor(player.class_name, \
+            self._get_role_color(player.class_id)))
 
     def _get_player_title(self, player):
         role_colors = {
@@ -437,31 +463,41 @@ class Announcer:
             3: "yellow"
         }
 
-        role_color = role_colors[player["character_class_id"]]
+        role_color = role_colors[player.class_id]
 
-        return ircutils.bold(ircutils.mircColor(player["title"], fg=role_color))
+        return ircutils.bold(ircutils.mircColor(player.title, fg=role_color))
 
-    def top_players(self, irc, top_players):
+    def new_realm_king(self, player):
         """
-
+        %s the level %s %s is the new Realm King!
         """
+        title = self._get_player_title(player)
+        level = ircutils.bold(player["level"])
+        player_class = self._get_player_role(player)
+        params = (title, level, player_class)
+
+        announcement_msg = "%s the level %s %s is the new Realm King!" % params
+
+        self.announce(announcement_msg)
+
+    def top_players(self, top_players, levels):
         for player in top_players:
-            self.player_info(irc, player)
+            self.player_info(player, levels)
 
-    def player_role_change(self, irc, player, role_name, role_id):
+    def player_role_change(self, player, role_name, role_id):
         """
         %s is now a level %s %s!
         """
         player_title = self._get_player_title(player)
-        params = (player_title, player["level"])
+        params = (player_title, player.get_level())
         msg = "%s is now a level %s" % params
         colored_msg = ircutils.mircColor(msg, fg="brown")
         colored_role = ircutils.mircColor(role_name, self._get_role_color(role_id))
         announcement_msg = "%s %s!" % (colored_msg, colored_role)
 
-        self.announce(irc, announcement_msg)
+        self.announce(announcement_msg)
 
-    def effect_applied_to_player(self, irc, player, effect, duration):
+    def effect_applied_to_player(self, player, effect, duration):
         """
         %s is now affected by %s (%m)
         """
@@ -475,105 +511,57 @@ class Announcer:
         announcement_msg = "%s is now affected by %s (%sm)" % \
         (bold_title, effect_name_with_desc, minutes)
 
-        self.announce(irc, announcement_msg)
+        self.announce(announcement_msg)
 
-    def player_dialogue(self, irc, player, dialogue):
+    def player_dialogue(self, player, dialogue, destination):
         """
         %s: %s
         """
-        bold_title = ircutils.bold(player["title"])
+        bold_title = self._get_player_title(player)
         orange_dialogue = ircutils.mircColor(dialogue, fg="orange")
         params = (bold_title, orange_dialogue)
         announcement_msg = "%s: %s" % params
 
-        self.announce(irc, announcement_msg)
+        self._irc.queueMsg(ircmsgs.notice(destination, announcement_msg))
 
-    def player_joined(self, irc, player):
-        #if player["title"] not in self.player_announcements:
-        #    self.player_announcements
-        verbs = ("stepped up to the plate", "entered the arena", 
-        "emerges from the shadows", "connected", "logged in",
-        "barged in", "slipped in unnoticed", "snuck in", 
-        "entered the realm")
-        verb = random.choice(verbs)
-        bold_title = ircutils.bold(player["title"])
-        bold_level = ircutils.bold(player["level"])
-        bold_class = ircutils.bold(player["class_name"])
-
-        params = (bold_title, bold_level, bold_class, verb)
-        announcement_msg = "%s the level %s %s has %s" % params
-
-        self._send_channel_notice(irc, announcement_msg)
-
-    def monster_summoned(self, irc, attacker, monster):
-        bold_monster_title = ircutils.bold(monster["title"])
-        bold_monster_level = ircutils.bold(monster["level"])
+    def monster_summoned(self, attacker, monster):
+        bold_monster_title = ircutils.bold(monster.title)
+        bold_monster_level = ircutils.bold(monster.level)
 
         params = (bold_monster_level, bold_monster_title)
         msg = "A level %s %s appears!" % params
         announcement_msg = ircutils.mircColor(msg, fg="light blue")
 
-        self._send_channel_notice(irc, announcement_msg)
+        self._send_channel_notice(announcement_msg)
 
-    def monster_intro(self, irc, monster, intro):
+    def monster_intro(self, monster, intro):
         colored_intro = ircutils.mircColor(intro, fg="orange")
-        bold_title = ircutils.bold(monster["title"])
+        bold_title = ircutils.bold(monster.title)
         params = (bold_title, colored_intro)
         announcement_msg = "%s: %s" % params
 
-        self._send_channel_notice(irc, announcement_msg)
+        self._send_channel_notice(announcement_msg)
 
-    def player_suicide(self, irc, player):
+    def player_died(self, player):
         """
+        %s 
         """
-        euphemisms = ["bought the farm", "bit the big one", 
-        "reached their expiration date", "did themselves in", 
-        "commits seppuku", "told u they were hardcore", 
-        "used a permanent solution to a temporary problem",
-        "dug their own grave", "sleeps with the fishes now",
-        "joins the mathletes", "took their own life", "gave up the ghost"]
+        pass
 
-        death = random.choice(euphemisms)
-        title = ircutils.bold(player["title"])
-        formatted_hp = "{:,}".format(player["hp"])
-        red_hp = ircutils.mircColor(formatted_hp, fg="red")
-        pink_heart = ircutils.mircColor(u"♥", fg="pink")
-        params = (title, red_hp, pink_heart, title, death)
-
-        announcement_msg = "%s %s %s %s %s" % params
-
-        self._send_channel_notice(irc, announcement_msg)
-
-    def player_exhausted(self, irc, player):
-        bold_title = ircutils.bold(player["title"])
-        announcement_msg = "%s's HP was reduced to %s and collapses from exhaustion" % bold_title
-
-        self._send_channel_notice(irc, announcement_msg)
-
-    def attack_miss(self, irc, attacker, target, attack_verb):
-        """
-        %'s attackverb missed %s!
-        """
-        bold_attacker = ircutils.bold(attacker["title"])
-        bold_verb = ircutils.bold(attack_verb)
-        bold_missed = ircutils.bold("missed")
-        bold_target = ircutils.bold(target["title"])
-
-        params = (bold_attacker, bold_verb, bold_missed, bold_target)
-
-        announcement_msg = "%s's %s %s %s!" % params
-
-        self._send_channel_notice(irc, announcement_msg)
-
-    def player_info(self, irc, player):
+    def player_info(self, player, levels):
         """
         %s is a level %s %s. %s XP remains until %s
         """
         bold_title = self._get_player_title(player)
         bold_class = self._get_player_role(player)
 
-        player_xp = player["experience_gained"]
-        xp_req_for_this_level = player["xp_for_this_level"]+1
+        player_xp = player.experience
+
+        if player_xp > 0:
+            xp_req_for_this_level = player.get_xp_required_for_next_level() + 1
+        else:
+            xp_req_for_this_level = levels[-1][1]
+
         percent_xp = round(((float(player_xp) / float(xp_req_for_this_level)) * 100), 1)
 
         if percent_xp < 20:
@@ -583,19 +571,19 @@ class Announcer:
         elif percent_xp > 75:
             xp_color = "green"
 
-        colored_xp = ircutils.mircColor(percent_xp, xp_color)
+        colored_xp = self._c(percent_xp, xp_color)
 
         # + 1 xp because you don't level until you breach the limit
         formatted_xp = "{:,}".format(xp_req_for_this_level)
-        bold_xp_needed_this_level = ircutils.bold(formatted_xp)
-        bold_next_level = ircutils.bold(player["level"] + 1)
-        bold_hp = ircutils.bold(player["hp"])
-        pink_heart = ircutils.mircColor(u"♥", fg="pink")
-        bold_level = ircutils.bold(player["level"])
+        bold_xp_needed_this_level = self._b(formatted_xp)
+        bold_next_level = self._b(player.get_level() + 1)
+        bold_hp = self._b(player.hp)
+        pink_heart = self._c(u"♥", "pink")
+        bold_level = self._b(player.get_level())
         
         # xp gained
         formatted_xp_gained = "{:,}".format(player_xp)
-        bold_cur_xp = ircutils.bold(formatted_xp_gained)
+        bold_cur_xp = self._b(formatted_xp_gained)
         
         # X/X (x%)
         xp_combo = "/".join([bold_cur_xp, bold_xp_needed_this_level])
@@ -607,12 +595,12 @@ class Announcer:
         (xp_combo, bold_next_level)
 
         # Effects!
-        if len(player["effects"]):
-            log.info("SpiffyRPG: effects: %s" % player["effects"])
+        if len(player.effects):
+            log.info("SpiffyRPG: effects: %s" % player.effects)
 
             effects = []
 
-            for effect in player["effects"]:
+            for effect in player.effects:
                 duration = int((time.time() - effect["expires_at"]) / 60)
                 bold_effect_name = ircutils.bold(effect["name"])
                 bold_duration = ircutils.bold(duration)
@@ -623,27 +611,28 @@ class Announcer:
 
             announcement_msg += ". %s is affected by %s" % (bold_title, effects_str)
 
-        self._send_channel_notice(irc, announcement_msg)
+        self._irc.reply(announcement_msg)
+        #self._send_channel_notice(announcement_msg)
 
-    def player_gained_level(self, irc, player):
+    def player_gained_level(self, player):
         """
         Player_1 has gained level X! 
         """
-        params = (ircutils.bold(player["title"]), ircutils.bold(player["level"]))
+        params = (self._get_player_title(player.title), self._b(player.level))
 
         announcement_msg = "%s ascends to level %s!" % params
 
-        self._send_channel_notice(irc, announcement_msg)
+        self._send_channel_notice(announcement_msg)
 
-    def new_player(self, irc, char_name, char_class):
+    def new_player(self, char_name, char_class):
         """
         Player_1, the IRC Troll has joined the game!
         """
-        params = (ircutils.bold(char_name), ircutils.bold(char_class))
+        params = (self._b(char_name), self._b(char_class))
 
         announcement_msg = "%s the %s joined the game!" % params
 
-        self._send_channel_notice(irc, announcement_msg)
+        self._send_channel_notice(announcement_msg)
 
     def battle_in_progress(self, irc, battle):
         """
@@ -654,7 +643,7 @@ class Announcer:
 
         announcement_msg = "Battle in progress: %s vs %s!" % params
 
-        self._send_channel_notice(irc, announcement_msg)
+        self._send_channel_notice(announcement_msg)
 
     def battle_started(self, irc, attacker, target):
         """
@@ -663,136 +652,597 @@ class Announcer:
         announcement_msg = "Battle started! %s vs %s" % \
         (ircutils.bold(attacker["title"]), ircutils.bold(target["title"]))
 
-        self._send_channel_notice(irc, announcement_msg)
+        self._send_channel_notice(announcement_msg)
 
-    def attacker_victory_target_exhausted(self, irc, attacker, target, battle, xp):
-        """
-        %s earned %s experience because %s decided to take a nap
-        """
-        attacker_title = ircutils.bold(attacker["title"])
-        target_title = ircutils.bold(target["title"])
-        green_xp = ircutils.mircColor(xp, fg="green")
-        params = (attacker_title, green_xp, target_title)
+    def title_shuffle(self, title):
+        return "%s%s%s" % \
+        (title[0], "".join(title[1:-1]).shuffle(), title[-1])
 
-        announcement_msg = "%s earned %s experience because %s decided to take a nap" % params
-
-        self._send_channel_notice(irc, announcement_msg)
-
-    def player_victory(self, irc, attacker, target, battle, experience):
+    def player_victory(self, **kwargs):
         """
-        Player is victorious
-        - Show win/loss ratio
-        - Streak
+        $1 reduced to -22 ♥; $2` survived with 60 ♥. $2 gains +15 Internet Points
         """
-        attacker_title = ircutils.bold(attacker["title"])
-        target_title = ircutils.bold(target["title"])
-        red_hp = ircutils.mircColor(battle["target_hp"], fg="red")
-        green_xp = ircutils.mircColor(experience, fg="green")
+        player_1 = kwargs["player_1"]
+        player_2 = kwargs["player_2"]
+        attack = kwargs["attack"]
+
+        green_xp = self._c("{:,}".format(kwargs["xp_gained"]), "green")
         bonus_xp = ""
-        internet_points = ircutils.mircColor("Internet Points", fg="purple")
-        pink_heart = ircutils.mircColor(u"♥", fg="pink")
+        internet_points = self._c("Internet Points", "purple")
+        pink_heart = self._c(u"♥", "pink")
 
-        if battle["is_monster_battle"]:
-            green_bonus_xp = ircutils.mircColor(int(experience / 2), fg="green")
-            bonus_xp = " (%s bonus)" % green_bonus_xp
+        #player_1.title = self.title_shuffle(player_1.title)
+        #player_2.title = self.title_shuffle(player_2.title)
 
-        winner_hp = "%s %s" % (battle["attacker_hp"], pink_heart)
-        loser_hp = "%s %s" % (red_hp, pink_heart)
+        player_1_title = self._get_player_title(player_1)
+        player_2_title = self._get_player_title(player_2)
+        attack_name = self._c(attack["name"], "light green")
+        player_2_hp = self._c(player_2.hp, "red")
+        player_1_hp = self._c(player_1.hp, "green")
 
-        defeat_words = killing_blows =  ["abolishing", "annihilating", "butchering", 
-        "creaming", "defeating", "destroying", "devastating", "disfiguring", "dismantling", 
-        "embarrassing", "exterminating", "felling", "goofing up", "making a mess of", 
-        "nullifying", "putting the kibosh on", "quashing", "quelling", "raining destruction on", 
-        "ravaging", "ruining", "shattering", "shattering", "slaying", "snuffing out", "stamping out", 
-        "wrecking"]
-        defeat_word = ircutils.mircColor(random.choice(defeat_words), fg="red")
-        
-        params = (target_title, loser_hp, attacker_title, winner_hp, green_xp, 
-        bonus_xp, internet_points, defeat_word, target_title)
+        params = (player_1_title, attack_name, player_2_title, 
+        pink_heart, player_2_hp, player_1_title, player_1_hp, pink_heart, green_xp, internet_points)
 
-        # loser -20 ♥ winner 200 ♥ 100 (50 bonus) Internet Points for wrecking theraspberry
-        announcement_msg = "%s %s %s %s %s%s %s for %s %s" % params
+        announcement_msg = "%s's %s reduced %s's %s to %s. %s survived with %s %s and gained %s %s" % params
 
-        self._send_channel_notice(irc, announcement_msg)
+        self._send_channel_notice(announcement_msg)
 
-    def player_attack(self, irc, attack_info):
-        """
-        attack_info = {
-            "attacker_title": attacker_title,
-            "target_title": target_title,
-            "attack_damage": attack_damage,
-            "damage_type": damage_type,
-            "battle": battle
-        }
-        """
-        battle = attack_info["battle"]
-        attacker_title = self._get_player_title(attack_info["attacker"])
-        target_title = self._get_player_title(attack_info["target"])
-        attacker_hp = ircutils.mircColor(battle["attacker_hp"], fg="green")
-        danger_low_hp_threshold = 50
+    def last_player_standing(self, player):
+        pass
+
+    def player_attack(self, **kwargs):
+        danger_low_hp_threshold = 20
         attack_word = "hits"
+        player_1 = kwargs["player_1"]
+        player_2 = kwargs["player_2"]
+        attack = kwargs["attack"]
 
-        # player is suiciding
-        if attack_info["attacker_title"] == attack_info["target_title"]:
-            bold_target_title = ircutils.mircColor("themself", fg="orange")
+        if attack["is_critical_strike"]:
+            attack_word = ircutils.mircColor("critically strikes", fg="red", bg="black")
 
-        if attack_info["is_critical_strike"]:
-            attack_word = ircutils.mircColor("critically strikes", fg="pink", bg="yellow")
-
-        if battle["attacker_hp"] <= danger_low_hp_threshold:
-            attacker_hp = ircutils.mircColor(battle["attacker_hp"], fg="red")
-
-        target_hp = ircutils.mircColor(battle["target_hp"], fg="green")
-
-        if battle["target_hp"] <= danger_low_hp_threshold:
-            target_hp = ircutils.mircColor(battle["target_hp"], fg="red")
-
-        formatted_damage = "{:,}".format(attack_info["attack_damage"])
-        red_damage = ircutils.mircColor(formatted_damage, fg="red")
-
-        if attack_info["is_killing_blow"]:
-            attack_verb = ircutils.bold(ircutils.mircColor(attack_info["attack_verb"], fg="red"))
+        # Check player_1 hp for danger
+        if player_1.hp <= danger_low_hp_threshold:
+            player_1_hp = self._c(player_1.hp, "red")
         else:
-            attack_verb = ircutils.bold(ircutils.mircColor(attack_info["attack_verb"], fg="light green"))
+            player_1_hp = self._c(player_1.hp, "green")
 
-        damage_type = attack_info["damage_type"]
-        bonus_damage = ircutils.mircColor(attack_info["bonus_damage"], fg="green")
+        # Check player_2's hp for danger
+        if player_2.hp <= danger_low_hp_threshold:
+            player_2_hp = self._c(player_2.hp, "red")
+        else:
+            player_2_hp = self._c(player_2.hp, "green")
+        
+        """ Formatted attack damage """
+        formatted_damage = "{:,}".format(attack["damage"])
+        red_damage = self._c(formatted_damage, "red")
 
-        params = (attacker_title, attack_verb, attack_word,
-                  target_title, red_damage, damage_type, bonus_damage)
+        """ Color attack names by whether it's a killing blow """
+        if attack["is_killing_blow"]:
+            attack_verb = self._b(self._c(attack["name"], "red"))
+            you_die = self._b(self._c("You die.", "red"))
+        else:
+            attack_verb = self._b(self._c(attack["name"], "light green"))
+            you_die = ""
 
-        announcement_msg = "%s's %s %s %s: %s %s (%s bonus)" % params
+        damage_type = attack["damage_type"]
+        player_title = self._get_player_title(player_1)
+        
+        params = (player_title, attack_verb, attack_word, red_damage, 
+        damage_type, you_die)
 
-        self._send_channel_notice(irc, announcement_msg)
+        announcement_msg = "%s's %s %s you for %s %s. %s" % params
 
-    def _send_channel_notice(self, irc, message):
+        self._send_player_notice(player_2.nick, announcement_msg)
+
+    def _send_player_notice(self, nick, msg):
+        self._irc.queueMsg(ircmsgs.notice(nick, msg))
+
+    def _send_channel_notice(self, message):
         """
         All event communication should be sent as a channel notice
         """
-        irc.queueMsg(ircmsgs.notice(GAME_CHANNEL, message))
+        self._irc.queueMsg(ircmsgs.notice(GAME_CHANNEL, message))
 
 class Battle:
-    def __init__(db):
-        self.db = db
+    party = []
+    last_attacker_player_id = None
+
+    def __init__(self, **kwargs):
+        self.party = []
+        self.db = kwargs["db"]
+        self.announcer = kwargs["announcer"]
+        self.player_level = PlayerLevel()
+
+    def start(self):
+        attacker, opponent = self._get_vs()
+
+        log.info("SpiffyRPG: battle started: %s vs %s" % (attacker.title, opponent.title))
+
+        """ Once an attacker is chosen, show them intro dialogue 
+        self.announcer.player_dialogue(attacker, 
+                                       attacker.get_intro_dialogue(),
+                                       GAME_CHANNEL)
+                                       #opponent.nick)
+        """
+
+        """ Now start round robin """
+        self.round_robin(attacker=attacker, opponent=opponent)
+
+    def round_robin(self, **kwargs):
+        attacker = kwargs["attacker"]
+        opponent = kwargs["opponent"]
+
+        party_member_count = len(self.party)
+
+        if party_member_count >= 2:
+            attack = attacker.get_attack()
+
+            """ Check if this is a killing blow """
+            attack["is_killing_blow"] = (opponent.hp - attack["damage"]) <= 0
+
+            opponent.apply_damage(attack["damage"])
+
+            """ Send attack info privately """
+            self.announcer.player_attack(player_1=attacker, 
+                                         player_2=opponent,
+                                         attack=attack,
+                                         destination=opponent.nick)
+
+            """ If this attack was a killing blow, announce death """
+            if attack["is_killing_blow"]:
+                log.info("SpiffyRPG: %s struck killing blow on %s" % \
+                  (attacker.title, opponent.title))
+
+            """ After each attack, remove anyone that is dead """
+            self.party = self._remove_dead_party_members()
+
+            """ Go 'round another time """
+            if len(self.party) > 0:
+              vs = self._get_vs()
+
+              if vs is not None:
+                self.round_robin(attacker=opponent, opponent=attacker)
+              else:
+                last_player_standing = self.party[0]
+                log.info("SpiffyRPG: %s WINS: %s" % \
+                (last_player_standing.title, last_player_standing.hp))
+                log.info("SpiffyRPG: attacker=%s and target=%s" % (attacker.title, opponent.title))
+
+                self._on_battle_completed(player_1=attacker,
+                                          player_2=opponent,
+                                          attack=attack)
+
+        elif party_member_count == 1:
+          log.info("SpiffyRPG: one party member left: %s" % self.party[0].title)
+          log.info("SpiffyRPG: attacker=%s and target=%s" % (attacker.title, opponent.title))
+
+          self._on_battle_completed(player_1=attacker,
+                                    player_2=opponent,
+                                    attack=attack)
+
+    def _get_xp_for_battle(self, **kwargs):
+      return int(5 * kwargs["target_player_level"])
+
+    def _on_battle_completed(self, **kwargs):      
+      log.info("SpiffyRPG: battle concluded")
+
+      attacker = kwargs["player_1"]
+      opponent = kwargs["player_2"]
+      attack = kwargs["attack"]
+
+      xp = self._get_xp_for_battle(target_player_level=opponent.level)
+
+      self.announcer.player_victory(player_1=attacker, 
+                                    player_2=opponent,
+                                    attack=attack,
+                                    xp_gained=xp)
+
+      """ Win dialogue is sent to channel """
+      self.announcer.player_dialogue(attacker,
+                                     attacker.get_win_dialogue(),
+                                     GAME_CHANNEL)
+
+      attacker.add_experience(xp)
+
+      attacker.experience += xp
+
+      level_after_adding_xp = self.player_level.get_level_by_xp(attacker.experience)
+
+      if level_after_adding_xp > attacker.level:
+        log.info("SpiffyRPG: %s is now level %s!" % (attacker.title, level_after_adding_xp))
+        self.announcer.player_gained_level(attacker)
+
+    def _get_vs(self):
+      attacker = self._get_party_member(exclude_player_id=self.last_attacker_player_id)
+
+      if attacker is not None:
+        opponent = self._get_party_member(exclude_player_id=attacker.id)
+        
+        self.last_attacker_player_id = attacker.id
+
+        return (attacker, opponent)
+
+    def _remove_dead_party_members(self):
+        alive = []
+
+        for p in self.party:
+            if p.hp > 0:
+              alive.append(p)
+
+        return alive
+
+    def add_party_member(self, player):
+        if player not in self.party:
+            log.info("SpiffyRPG: adding %s to party" % player.title)
+
+            self.party.append(player)
+
+    def _get_party_member(self, **kwargs):
+      for p in self.party:
+          live_player = p.hp > 0
+
+          if live_player and p.id != kwargs["exclude_player_id"]:
+            return p
+
+class Monster:
+    """
+    A monster!
+    """
+    def __init__(self, **kwargs):
+        self._db = db
+        self.level = level
+        self.hp = level * 20
+        self.critical_strike_chance = random.randrange(5, 25)
+        random_monster = self._spawn(level=level)
+
+        self.title = random_monster["name"]
+        self.id = random_monster["id"]
+
+    def _spawn(self, **kwargs):
+        cursor.execute("""SELECT id, name
+                          FROM spiffyrpg_monsters
+                          WHERE 1=1
+                          ORDER BY RANDOM()
+                          LIMIT 1""")
+
+        monster = cursor.fetchone()
+
+        if monster is not None:
+            return dict(monster)
+
+    def get_attack(self):
+        cursor = self._db.cursor()
+
+        cursor.execute("""SELECT name
+                          FROM spiffyrpg_monster_abilities
+                          WHERE monster_id = ?
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (self.id))
+
+        ability = cursor.fetchone()
+
+        if ability is not None:
+            a = dict(ability)
+
+            a["damage"] = self._get_attack_damage()
+            a["is_critical_strike"] = self.is_critical_strike()
+            a["damage_type"] = random.choice(["Physical", "Magic"])
+
+            return a
+
+    def _get_attack_damage(self, **kwargs):
+        return random.randrange(1, 5) * self.level
+
+    def get_finishing_move(self):
+        cursor = self._db.cursor()
+        cursor.execute("""SELECT name
+                          FROM spiffyrpg_monster_finishing_moves
+                          WHERE monster_id = ?
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (monster_id,))
+
+        move = cursor.fetchone()
+
+        if move is not None:
+            return move["name"]
+
+    def get_win_dialogue(self):
+        cursor = self._db.cursor()
+
+        cursor.execute("""SELECT dialogue
+                          FROM spiffyrpg_monster_dialogue
+                          WHERE 1=1
+                          AND dialogue_type = 'win'
+                          ORDER BY RANDOM()
+                          LIMIT 1""")
+
+        dialogue = cursor.fetchone()
+
+        if dialogue is not None:
+            return dialogue["dialogue"]
+
+    def get_intro_dialogue(self):
+        cursor = self._db.cursor()
+
+        cursor.execute("""SELECT dialogue
+                          FROM spiffyrpg_monster_dialogue
+                          WHERE 1=1
+                          AND dialogue_type = 'intro'
+                          ORDER BY RANDOM()
+                          LIMIT 1""")
+
+        dialogue = cursor.fetchone()
+
+        if dialogue is not None:
+            return dialogue["dialogue"]
+
+    def is_critical_strike(self):
+        return random.randrange(0, 100) < self.critical_strike_chance
+
+    def get_title(self):
+        self.monster["character_name"]
+
+    def apply_damage(self, hp):
+        self.hp -= hp
+
+        log.info("SpiffyRPG: %s -%s damage, now at %s" % (self.title, hp, self.hp))
+
+    def is_killing_blow(self, **kwargs):
+        hp = self.hp
+        return (hp - damage) > 0
+
+    def is_alive(self):
+        return self.hp > 0
 
 class Player:
     """
     Represents a player in SpiffyRPG and manages
     state information about the player
     """
-    def is_player(self, irc, msg):
-        pass
+    def __init__(self, **kwargs):
+        self._announcer = kwargs["announcer"]
+        self._db = kwargs["db"]
+        self.player_level = PlayerLevel()
+        self.player_class = PlayerClass()
+        self.nick = kwargs["nick"]
+        self.id = kwargs["player"]["id"]
+        self.class_name = kwargs["player"]["class_name"]
+        self.name = kwargs["player"]["character_name"]
+
+        self.class_id = kwargs["player"]["character_class_id"]
+        xp = kwargs["player"]["experience_gained"]
+        self.experience = xp
+        self.level = self.get_level()
+        self.hp = self._get_hp()
+        self.title = kwargs["player"]["character_name"]
+        self.is_vulnerable_to_magic = self.player_class.is_vulnerable_to_magic(self.class_id)
+        self.is_vulnerable_to_physical = self.player_class.is_vulnerable_to_physical(self.class_id)
+        self.effects = self.get_effects()
+
+    def get_xp_required_for_next_level(self):
+        return self.player_level.get_xp_for_next_level(self.experience)
+
+    def get_level(self):
+        return self.player_level.get_level_by_xp(self.experience)
+
+    def get_title(self):
+        return self.name
+
+    def apply_damage(self, damage):
+        is_vulnerable_to_magic = self.player_class.is_vulnerable_to_magic(self.class_id)
+        is_vulnerable_to_physical = self.player_class.is_vulnerable_to_physical(self.class_id)
+        
+        if is_vulnerable_to_physical or is_vulnerable_to_magic:
+            damage *= 1.2
+
+        self.hp -= damage
+
+        log.info("SpiffyRPG: %s - %s = %s" % (self.title, damage, self.hp))
 
     def get_items(self):
         return self.items
 
-    def get_chance_to_hit(self, player):
-        rand_chance = random.randrange(1, 80)
+    def add_experience(self, experience):
+        log.info("Player %s adding %s xp" % (self.title, experience))
 
-        return rand_chance
+        cursor = self._db.cursor()
+        params = (experience, self.id)
 
-    def is_hit(self, chance_to_hit):
-        return chance_to_hit < 80
+        cursor.execute("""UPDATE spiffyrpg_players
+                          SET experience_gained = experience_gained + ?
+                          WHERE id = ?""", 
+                       params)
+
+        self._db.commit()
+        cursor.close()
+
+    def get_effects(self):
+        cursor = self._db.cursor()
+        now = time.time()
+
+        cursor.execute("""SELECT e.id,
+                          e.name,
+                          e.description,
+                          e.operator,
+                          e.hp_percent_adjustment,
+                          e.critical_strike_chance_adjustment,
+                          e.damage_percent_adjustment,
+                          e.chance_to_hit_adjustment,
+                          p.expires_at
+                          FROM spiffyrpg_effects e
+                          JOIN spiffyrpg_player_effects p ON p.effect_id = e.id
+                          WHERE 1=1
+                          AND p.expires_at > ?
+                          AND p.player_id = ?
+                          ORDER BY name""", (now, self.id,))
+
+        effects = cursor.fetchall()
+
+        cursor.close()
+
+        if effects:
+          return effects
+        else:
+          return []
+
+    def get_attack(self):
+        cursor = self._db.cursor()
+
+        cursor.execute("""SELECT name
+                          FROM spiffyrpg_class_abilities
+                          WHERE character_class_id = ?
+                          AND min_level <= ?
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (self.class_id, self.level))
+
+        ability = cursor.fetchone()
+        cursor.close()
+
+        if ability is not None:
+            a = dict(ability)
+
+            a["damage"] = self._get_attack_damage()
+            a["is_critical_strike"] = self.is_critical_strike()
+            a["damage_type"] = self._get_damage_type()
+
+            return a
+    
+    def _get_damage_type(self):
+        internet_tough_guy = 2
+        black_hat = 3
+
+        if self.class_id in (2, 3):
+          return "Physical"
+        else:
+          return "Magic"
+
+    def _get_attack_damage(self, **kwargs):
+        return random.randrange(1, 5) * self.level
+
+    def get_finishing_move(self):
+        cursor = self._db.cursor()
+
+        cursor.execute("""SELECT name
+                          FROM spiffyrpg_class_finishing_moves
+                          WHERE character_class_id = ?
+                          AND min_level <= ?
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (self.character_class_id, self.level))
+
+        move = cursor.fetchone()
+        cursor.close()
+
+        if move is not None:
+            return move["name"]
+
+    def get_intro_dialogue(self):
+        cursor = self._db.cursor()
+
+        cursor.execute("""SELECT dialogue
+                          FROM spiffyrpg_character_dialogue
+                          WHERE 1=1
+                          AND character_class_id = ?
+                          AND dialogue_type = 'intro'
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (self.class_id,))
+
+        intro = cursor.fetchone()
+        cursor.close()
+
+        if intro is not None:
+            return dict(intro)["dialogue"]
+
+    def get_win_dialogue(self):
+        cursor = self._db.cursor()
+
+        cursor.execute("""SELECT dialogue
+                          FROM spiffyrpg_character_dialogue
+                          WHERE 1=1
+                          AND character_class_id = ?
+                          AND dialogue_type = 'win'
+                          ORDER BY RANDOM()
+                          LIMIT 1""", (self.class_id,))
+
+        intro = cursor.fetchone()
+        cursor.close()
+
+        if intro is not None:
+            return dict(intro)["dialogue"]
+
+    def _get_hp(self):
+        return self.level * 20
+
+    def _get_critical_strike_chance(self):
+        OPEN_SOURCE_CONTRIBUTOR = 3
+
+        if self.class_id == OPEN_SOURCE_CONTRIBUTOR:
+            return 25
+        else:
+            return 5
+
+    def is_critical_strike(self):
+        return random.randrange(0, 100) < self._get_critical_strike_chance()
+
+class PlayerLevel:
+    """
+    Functionality related to player levels, total levels, etc
+    """
+    def get_level_by_xp(self, total_experience):
+        player_level = 1
+        levels = self.get_levels()
+ 
+        for level, experience_needed in levels:
+            if total_experience > experience_needed:
+                player_level = level
+
+        if total_experience > levels[-1][1]:
+            player_level = levels[-1][0]
+
+        return player_level
+
+    def get_xp_for_next_level(self, level):
+        xp = 0
+        levels = self.get_levels()
+
+        for xp_level, req_xp in levels:
+            if xp_level == (level+1):
+                xp = req_xp
+                break
+
+        return xp
+
+    def get_levels(self):
+        return [
+            (1, 0),
+            (2, 100),
+            (3, 200),
+            (4, 300),
+            (5, 400),
+            (6, 1000),
+            (7, 1500),
+            (8, 2500),
+            (9, 3500),
+            (10, 5000),
+            (11, 6500),
+            (12, 8000),
+            (13, 9500),
+            (14, 10500),
+            (15, 12000),
+            (16, 15000),
+            (17, 18000),
+            (18, 21000),
+            (19, 24000),
+            (20, 27000),
+            (21, 30000),
+            (22, 33000),
+            (24, 36000),
+            (25, 39000),
+            (26, 42000),
+            (27, 45000),
+            (28, 48000),
+            (29, 51000),
+            (30, 54000)
+        ]
 
 class PlayerClass:
     """
@@ -803,13 +1253,13 @@ class PlayerClass:
     BLACK_HAT = 3
 
     def is_vulnerable_to_magic(self, class_id):
-        return class_id in (self.INTERNET_TOUGH_GUY, self.BLACK_HAT)
+        return class_id in (2, 3)
 
     def is_vulnerable_to_physical(self, class_id):
-        return class_id in (self.OPEN_SOURCE_CONTRIBUTOR,)
+        return class_id == 1
 
     def get_damage_type(self, class_id):
-        if class_id in (self.INTERNET_TOUGH_GUY, self.BLACK_HAT):
+        if class_id in (2, 3):
             return "Physical"
         else:
             return "Magic"
@@ -818,21 +1268,15 @@ class SpiffyRPG(callbacks.Plugin):
     """A gluten-free IRC RPG"""
     threaded = True
     battle_in_progress = False
-    battle = {
-        "attacker_miss_count": 0,
-        "target_miss_count": 0,
-        "target_hp": 0,
-        "attacker_hp": 0,
-        "is_monster_battle": False
-    }
-
+    realm_king_player_id = None
+    
     def __init__(self, irc):
-        self.__parent= super(SpiffyRPG, self)
+        self.__parent = super(SpiffyRPG, self)
         self.__parent.__init__(irc)
 
-        self.announcer = Announcer()
-        self.player = Player()
+        self.announcer = Announcer(irc=irc)
         self.player_class = PlayerClass()
+        self.player_level = PlayerLevel()
         self.db = SpiffyRPGDB()
 
         self.character_classes = self.db.get_character_classes()
@@ -858,346 +1302,6 @@ class SpiffyRPG(callbacks.Plugin):
     def _is_nick_in_channel(self, irc, nick):
         return nick in irc.state.channels[GAME_CHANNEL].users
 
-    def _get_player_experience_for_next_level(self, level):
-        xp = 0
-        levels = self._get_experience_levels()
-
-        for xp_level, req_xp in levels:
-            if xp_level == (level+1):
-                xp = req_xp
-                break
-
-        return xp
-
-    def _get_experience_levels(self):
-        return [
-            (1, 0),
-            (2, 100),
-            (3, 200),
-            (4, 300),
-            (5, 400),
-            (6, 1000),
-            (7, 1500),
-            (8, 2500),
-            (9, 3500),
-            (10, 5000),
-            (11, 6500),
-            (12, 8000),
-            (13, 9500),
-            (14, 10500),
-            (15, 12000),
-            (16, 15000),
-            (17, 18000),
-            (18, 21000),
-            (19, 23000),
-            (20, 16000)
-        ]
-
-    def _get_player_level_by_total_experience(self, total_experience):
-        player_level = 1
-        levels = self._get_experience_levels()
- 
-        for level, experience_needed in levels:
-            if total_experience > experience_needed:
-                player_level = level
-
-        if total_experience > levels[-1][1]:
-            player_level = levels[-1][0]
-
-        return player_level
-
-    def _get_experience_for_battle(self, target_player_level):
-        return int(5 * target_player_level)
-
-    def _get_hp_by_player(self, player):
-        player_level = self._get_player_level_by_total_experience(player["experience_gained"])
-        hp = player_level * 20
-
-        return hp
-
-    def _get_player_title(self, player):
-        return player["character_name"]
-
-    def _get_attack_damage(self, attacker, target):
-        # TODO get player items and determine formula based
-        # on which items a player has. If a player has no items
-        # then this is a melee attack based on strength
-        damage = random.randrange(1, 5) * attacker["level"]
-        vulnerability_damage = damage * 1.2
-        target_class_id = target["character_class_id"]
-        bonus_damage = 0
-
-        # Magic
-        if self.player_class.is_vulnerable_to_magic(target_class_id):
-            bonus_damage += vulnerability_damage
-
-        # Physical
-        if self.player_class.is_vulnerable_to_physical(target_class_id):
-            bonus_damage += vulnerability_damage
-
-        bonus_damage = int(bonus_damage)
-        damage += bonus_damage
-
-        # Critical strike
-        is_critical_strike = random.randrange(0, 100) < self._get_critical_strike_chance(attacker)
-
-        if is_critical_strike:
-            damage *= 2
-
-        return {
-            "is_critical_strike": is_critical_strike,
-            "attack_damage": int(damage),
-            "bonus_damage": bonus_damage,
-            "damage_type": self.player_class.get_damage_type(attacker["character_class_id"])
-        }
-
-    def _get_critical_strike_chance(self, class_id):
-        OPEN_SOURCE_CONTRIBUTOR = 3
-
-        if class_id == OPEN_SOURCE_CONTRIBUTOR:
-            return 25
-        else:
-            return 5
-
-    def _on_battle_concluded(self, winner, loser):
-        pass
-
-    def _attacker_wins(self, irc, attacker, target, is_target_exhausted):
-        victorious_battle_experience = self._get_experience_for_battle(target["level"])
-        
-        log.info("SpiffyRPG: attacker = %s" % attacker)
-
-        if self.battle["is_monster_battle"]:
-            victorious_battle_experience = victorious_battle_experience * 2
-
-        attacker["experience_gained"] += victorious_battle_experience
-
-        if "id" in attacker:
-            log.info("SpiffyRPG: adding %s xp to id %s" % \
-            (victorious_battle_experience, attacker["id"]))
-            self.db.add_player_experience(attacker["id"], victorious_battle_experience)
-
-        if is_target_exhausted:
-            self.announcer.attacker_victory_target_exhausted(irc, attacker, target, \
-            victorious_battle_experience)
-        else:
-            self.announcer.player_victory(irc, attacker, target, self.battle, \
-            victorious_battle_experience)
-
-        is_monster = "is_monster" in attacker and attacker["is_monster"]
-
-        if is_monster:
-            win_message = self.db.get_monster_win_dialogue(attacker["id"])
-        else:
-            win_message = self.db.get_win_dialogue(attacker["character_class_id"])
-
-        self.announcer.player_dialogue(irc, attacker, win_message)
-
-        if not is_monster:
-            current_level = self._get_player_level_by_total_experience(attacker["experience_gained"])
-            attacker["level"] = current_level
-
-            if current_level > self.battle["attacker_level_before_battle"]:
-                attacker["title"] = self._get_player_title(attacker)
-                self.announcer.player_gained_level(irc, attacker)
-
-        self.battle_in_progress = False
-
-    def _target_wins(self, irc, attacker, target, is_attacker_exhausted):
-        """ Add XP """
-        victorious_battle_experience = self._get_experience_for_battle(target["level"])
-
-        if self.battle["is_monster_battle"]:
-            victorious_battle_experience *= 2
-
-        target["experience_gained"] += victorious_battle_experience
-
-        # Special message when we are victorious over someone who is
-        # exhausted
-        if is_attacker_exhausted:
-            self.announcer.attacker_victory_target_exhausted(irc, target, attacker, self.battle, \
-            victorious_battle_experience)
-        else:
-            self.announcer.player_victory(irc, target, attacker, self.battle, \
-            victorious_battle_experience)
-
-        """ Win dialogue """
-        is_monster = "is_monster" in attacker and attacker["is_monster"]
-
-        if is_monster:
-            win_message = self.db.get_monster_win_dialogue(attacker["id"])
-        else:
-            win_message = self.db.get_win_dialogue(target["character_class_id"])
-
-        self.announcer.player_dialogue(irc, target, win_message)
-
-        """ Monsters do not level...yet """
-        if not is_monster:
-            log.info("SpiffyRPG: adding %s xp to id %s" % \
-            (victorious_battle_experience, target["id"]))
-            self.db.add_player_experience(target["id"], victorious_battle_experience)
-
-            current_level = self._get_player_level_by_total_experience(target["experience_gained"])
-            target["level"] = current_level
-
-            if current_level > self.battle["target_level_before_battle"]:
-                target["title"] = self._get_player_title(target)
-                self.announcer.player_gained_level(irc, target)
-
-        self.battle_in_progress = False
-
-    def _attack_target_player(self, irc, attacker, target):
-        """
-        Performs an attack or announces a death where applicable
-        """
-        max_miss_count = 3
-        self.battle["attacker_level_before_battle"] = attacker["level"]
-        self.battle["target_level_before_battle"] = target["level"]
-
-        def target_is_alive():
-            return self.battle["target_hp"] > 0
-
-        def attacker_is_alive():
-            return self.battle["attacker_hp"] > 0
-
-        def attacker_is_exhausted(max_miss_count):
-            return self.battle["attacker_miss_count"] >= max_miss_count
-
-        def target_is_exhausted(max_miss_count):
-            return self.battle["target_miss_count"] >= max_miss_count
-
-        params = (attacker["title"], self.battle["attacker_miss_count"],
-        target["title"], self.battle["target_miss_count"])
-
-        """
-        log.info("SpiffyRPG: %s has missed %s times and %s has missed %s times" % params)
-
-        if attacker_is_exhausted(max_miss_count):
-            self.announcer.player_exhausted(irc, attacker)
-            self._target_wins(irc, target, attacker, True)
-        elif target_is_exhausted(max_miss_count):
-            self.announcer.player_exhausted(irc, target)
-            self._attacker_wins(irc, attacker, target, True)
-
-        if attacker_is_exhausted(max_miss_count) or target_is_exhausted(max_miss_count):
-            self.battle_in_progress = False
-            return
-        
-        chance_for_battle_event = 50
-        battle_event_activated = random.randrange(1, 100) < chance_for_battle_event
-
-        if battle_event_activated:
-            event = self.db.get_battle_event()
-            damage = 0
-            heal = 0
-
-            if event["percent_damage_of_target_hp"] > 0:
-                damage = 
-            elif event["percent_heal_of_target_hp"] > 0
-        """
-
-        """
-        Two possibilities here: 
-        1. attacker and target are alive
-        2. attacker is alive and target is dead
-        """
-        if attacker_is_alive() and target_is_alive():
-            chance_to_hit = self.player.get_chance_to_hit(attacker)
-            is_hit = self.player.is_hit(chance_to_hit)            
-            is_killing_blow = False
-            
-            if "is_monster" in attacker and attacker["is_monster"]:
-                attack_verb = self.db.get_attack_verb_by_monster_id(attacker["id"])
-            else:
-                attack_verb = self._get_attack_verb_by_player(attacker)
-
-            if is_hit:
-                attack_damage_info = self._get_attack_damage(attacker, target)
-
-                target_hp_if_hit = self.battle["target_hp"] - attack_damage_info["attack_damage"]
-                is_killing_blow = target_hp_if_hit <= 0
-
-                if is_killing_blow:
-                    if "is_monster" in attacker and attacker["is_monster"]:
-                        attack_verb = \
-                        self.db.get_finishing_move_by_monster_id(attacker["id"])
-                    else:
-                        attack_verb = \
-                        self._get_finishing_move_by_class_id(attacker["character_class_id"],
-                                                                       attacker["level"])
-
-                attack_info = {
-                    "attacker_title": attacker["title"],
-                    "target_title": target["title"],
-                    "attack_damage": attack_damage_info["attack_damage"],
-                    "battle": self.battle,
-                    "is_critical_strike": attack_damage_info["is_critical_strike"],
-                    "attack_verb": attack_verb,
-                    "damage_type": attack_damage_info["damage_type"],
-                    "bonus_damage": attack_damage_info["bonus_damage"],
-                    "is_killing_blow": is_killing_blow,
-                    "attacker_class_id": attacker["character_class_id"],
-                    "target_class_id": target["character_class_id"],
-                    "attacker": attacker,
-                    "target": target
-                }
-
-                """ Announce the attack, if successful """
-                self.announcer.player_attack(irc, attack_info)
-
-                log.debug("SpiffyRPG: %s has %s HP." % (target["title"],
-                                                        self.battle["target_hp"]))
-
-                # Subtract attack damage from target hp
-                self.battle["target_hp"] -= attack_damage_info["attack_damage"]
-
-                log.debug("SpiffyRPG: %s attacked for %s and now has %s HP",
-                target["title"], attack_damage_info["attack_damage"], self.battle["target_hp"])
-
-                """ It is possible for a single attack to win """
-                if attacker_is_alive() and target_is_alive():
-                    """ Now the target attempts to respond to the attacker """
-                    chance_to_hit = self.player.get_chance_to_hit(target)
-                    is_hit = self.player.is_hit(chance_to_hit)
-
-                    """ Target is attempting to respond to attack """
-                    if is_hit:
-                        self._attack_target_player(irc, target, attacker)
-                    else:
-                        """ Target missed! """
-                        self.battle["target_miss_count"] += 1
-
-                        if "is_monster" in target and target["is_monster"]:
-                            attack_verb = self.db.get_attack_verb_by_monster_id(target["id"])
-                        else:
-                            attack_verb = self._get_attack_verb_by_player(target)
-
-                        self.announcer.attack_miss(irc, attacker, target, attack_verb)
-
-                        """ Attacker responds """
-                        self._attack_target_player(irc, attacker, target)
-
-                elif attacker_is_alive() and not target_is_alive():
-                    self._attacker_wins(irc, attacker, target, False)
-                elif not attacker_is_alive() and target_is_alive():
-                    self._target_wins(irc, target, attacker, False)
-            else:
-                self.battle["attacker_miss_count"] += 1
-                self.announcer.attack_miss(irc, attacker, target, attack_verb)
-                self._attack_target_player(irc, target, attacker)
-
-        elif attacker_is_alive() and not target_is_alive():
-            self._attacker_wins(irc, attacker, target, False)
-        elif not attacker_is_alive() and target_is_alive():
-            self._target_wins(irc, target, attacker, False)
-
-    def _get_attack_verb_by_player(self, attacker):
-        return self.db.get_class_ability(attacker["character_class_id"],
-                                         attacker["level"])
-
-    def _get_finishing_move_by_class_id(self, class_id, player_level):
-        return self.db.get_finishing_move_by_class_id(class_id, player_level)
-
     def _get_character_class_list(self):
         class_list = []
 
@@ -1211,19 +1315,16 @@ class SpiffyRPG(callbacks.Plugin):
             if c["name"].lower() == class_name.lower():
                 return c["id"]
 
-    def _is_player(self, irc, msg):
-        """
-        1. Try to get Limnoria user id
-        2. Check if nick is in channel
-        3. Try to find player with that user id
-        """
-        pass
-
     def ssummon(self, irc, msg, args, user):
         """
         Summons a random monster your level with a random
         class
         """
+        irc.error("There is now a chance for monsters to be summoned randomly! Keep your eyes open for unusual activity.")
+        return
+
+        log.info("SpiffyRPG: starting battle: in progress is %s" % in_progress)
+
         attacker_user_id = self._get_user_id(irc, msg.prefix)
 
         # user id should always be valid due to wrapper
@@ -1232,6 +1333,8 @@ class SpiffyRPG(callbacks.Plugin):
         if attacker is None:
             irc.error("You don't seem to be registered. Please use !sjoin")          
             return
+
+        self.battle_in_progress = True
 
         attacker_xp = attacker["experience_gained"]
         attacker_class_id = attacker["character_class_id"]
@@ -1263,13 +1366,21 @@ class SpiffyRPG(callbacks.Plugin):
         """
         Battles another user: !sbattle <nick>
         """
+        is_channel = irc.isChannel(msg.args[0])
+
+        if is_channel:
+          irc.error("Start battles in PM: /msg %s b %s" % (irc.nick, target_nick))
+          return
+
         if not target_nick:
             target_nick = msg.nick
 
-        self.battle["is_monster_battle"] = False
-
         attacker_user_id = self._get_user_id(irc, msg.prefix)
         is_target_same_as_attacker = msg.nick.lower() == target_nick.lower()
+
+        if is_target_same_as_attacker:
+            irc.reply("You attempt to attack yourself, but fail because you love yourself too much.")
+            return
 
         # Get attacker user id
         if not attacker_user_id:
@@ -1303,74 +1414,22 @@ class SpiffyRPG(callbacks.Plugin):
 
         if target is None:
             log.error("Couldn't find target by user id %s" % target_user_id)
-            irc.error("That user doesn't seem to be registered. Use !sjoin")
+            irc.error("That user has not yet joined the realm.")
             return
+ 
+        db = self.db._get_db()
 
-        # Remove expired effect each battle
-        #self.db.remove_expired_effects()
+        player_1 = Player(player=attacker, db=db, announcer=self.announcer,
+                          nick=msg.nick)
 
-        # Add levels
-        attacker["level"] = self._get_player_level_by_total_experience(attacker["experience_gained"])
-        target["level"] = self._get_player_level_by_total_experience(target["experience_gained"])
+        player_2 = Player(player=target, db=db, announcer=self.announcer,
+                          nick=target_nick)
 
-        # Titles
-        attacker["title"] = self._get_player_title(attacker)
-        target["title"] = self._get_player_title(target)
+        battle = Battle(db=db, announcer=self.announcer)
 
-        # attacker attacks
-        # determine if they hit
-        # get attack damage based on modifiers
-        # subtract hp from loser
-        # then repeat with target attacking
-        if self.battle_in_progress:
-            self.announcer.battle_in_progress(irc, self.battle)
-        else:
-            self.battle["attacker"] = attacker
-            self.battle["target"] = target
-            
-            # Update battle info
-            self.battle["attacker_hp"] = self._get_hp_by_player(attacker)
-            self.battle["target_hp"] = self._get_hp_by_player(target)
-
-            """
-            #1 - If the attacker is trying to fight themselves, let's do
-            something interesting!
-            """
-            if is_target_same_as_attacker:
-                attack_damage_info = self._get_attack_damage(attacker, target)
-                self_attack_damage = int((self.battle["attacker_hp"] * 3) * \
-                random.randrange(1, 500))                
-                attacker["hp"] = self.battle["attacker_hp"] - self_attack_damage
-
-                attack_info = {
-                    "attacker_title": attacker["title"],
-                    "target_title": target["title"],
-                    "attack_damage": self_attack_damage,
-                    "battle": self.battle,
-                    "is_critical_strike": True,
-                    "attack_verb": self.db.get_finishing_move_by_class_id(attacker["character_class_id"],
-                                                                          attacker["level"]),
-                    "damage_type": attack_damage_info["damage_type"],
-                    "bonus_damage": attack_damage_info["bonus_damage"],
-                    "is_killing_blow": True,
-                    "attacker": attacker,
-                    "target": target
-                }
-
-                self.announcer.player_attack(irc, attack_info)
-                self.announcer.player_suicide(irc, attacker)
-            else:
-                self.battle_in_progress = True
-
-                """
-                When a player starts a battle the bot announces
-                a random intro based on the attacker class
-                """
-                intro = self.db.get_player_intro(attacker["character_class_id"])
-                self.announcer.player_dialogue(irc, attacker, intro)
-
-                # Initiate attack!
-                self._attack_target_player(irc, attacker, target)
+        battle.add_party_member(player_1)
+        battle.add_party_member(player_2)
+        battle.start()
 
     sbattle = wrap(sbattle, ["user", optional("text")])
 
@@ -1380,21 +1439,19 @@ class SpiffyRPG(callbacks.Plugin):
         """
         tmp_players = self.db.get_top_players_by_xp()
         top_players = []
+        db = self.db._get_db()
 
         if len(tmp_players) > 0:
             for p in tmp_players:
-                player = dict(p)
-                xp = player["experience_gained"]
-                player["hp"] = self._get_hp_by_player(player)            
-                player["level"] = self._get_player_level_by_total_experience(xp)
-                player["xp_for_this_level"] = \
-                self._get_player_experience_for_next_level(player["level"])
-                player["title"] = self._get_player_title(player)
-                player["effects"] = self.db.get_player_effects(player["id"])
+                d_p = dict(p)
+                
+                player = Player(player=d_p, db=db, announcer=self.announcer,
+                                nick=msg.nick)
 
                 top_players.append(player)
 
-            self.announcer.top_players(irc, top_players)
+            levels = self.player_level.get_levels()
+            self.announcer.top_players(top_players, levels)
         else:
             irc.error("There are no players yet!")
 
@@ -1407,18 +1464,19 @@ class SpiffyRPG(callbacks.Plugin):
         user_id = self._get_user_id(irc, msg.prefix)
         
         if user_id is not None:
-            player = self.db.get_player_by_user_id(user_id)
+            p = self.db.get_player_by_user_id(user_id)
 
-            log.info("SpiffyRPG: %s changing to %s" % (player, role))
+            log.info("SpiffyRPG: %s changing to %s" % (p, role))
 
-            if player is not None:
+            if p is not None:
+                player = Player(player=p, db=self.db._get_db(), announcer=self.announcer,
+                nick=msg.nick)
                 class_id = self._get_character_class_id_by_name(role)
 
                 if class_id is not None:
-                    self.db.update_player_role(player["id"], class_id)
-                    player["title"] = self._get_player_title(player)
-                    player["level"] = self._get_player_level_by_total_experience(player["experience_gained"])
-                    self.announcer.player_role_change(irc, player, role, class_id)
+                    self.db.update_player_role(player.id, class_id)
+                    
+                    self.announcer.player_role_change(player, role, class_id)
                 else:
                     classes = self._get_character_class_list()
 
@@ -1437,6 +1495,7 @@ class SpiffyRPG(callbacks.Plugin):
 
         if not self._is_nick_in_channel(irc, target_nick):
             irc.error("I don't see that nick here")
+            return
 
         info_target = msg.nick
         target_hostmask = irc.state.nickToHostmask(target_nick)
@@ -1444,16 +1503,14 @@ class SpiffyRPG(callbacks.Plugin):
         
         if user_id is not None:
             player = self.db.get_player_by_user_id(user_id)
-            xp = player["experience_gained"]
-            player["hp"] = self._get_hp_by_player(player)            
-            player["level"] = self._get_player_level_by_total_experience(xp)
-            player["xp_for_this_level"] = \
-            self._get_player_experience_for_next_level(player["level"])
-            player["title"] = self._get_player_title(player)
-            player["effects"] = self.db.get_player_effects(player["id"])
+            db = self.db._get_db()
+
+            player = Player(player=player, db=db, announcer=self.announcer,
+                            nick=msg.nick)
+            levels = self.player_level.get_levels()
 
             if player is not None:
-                self.announcer.player_info(irc, player)
+                self.announcer.player_info(player, levels)
             else:
                 irc.error("That user has not joined the game :(")
         else:
@@ -1524,22 +1581,10 @@ class SpiffyRPG(callbacks.Plugin):
     sjoin = wrap(sjoin, ["user", "text"])
 
     def doPart(self, irc, msg):
-        self.announcer.player_suicide(irc, {
-            "hp": random.randrange(500, 10000) * -1,
-            "title": msg.nick
-        })
+      pass
 
     def doKick(self, irc, msg):
-        if len(msg.args) == 3:
-            (channel, target, kickmsg) = msg.args
-        else:
-            (channel, target) = msg.args
-            kickmsg = ""
-
-        self.announcer.player_suicide(irc, {
-            "hp": random.randrange(500, 10000) * -1,
-            "title": target
-        })
+      pass
 
     def doJoin(self, irc, msg):
         """
@@ -1551,15 +1596,13 @@ class SpiffyRPG(callbacks.Plugin):
             player = self.db.get_player_by_user_id(user_id)
 
             if player is not None:
-                xp = player["experience_gained"]
-                player["hp"] = self._get_hp_by_player(player)            
-                player["level"] = self._get_player_level_by_total_experience(xp)
-                player["xp_for_this_level"] = \
-                self._get_player_experience_for_next_level(player["level"])
-                player["title"] = self._get_player_title(player)
-                player["effects"] = self.db.get_player_effects(player["id"])
+                player = Player(player=player, db=self.db._get_db(),
+                announcer=self.announcer, nick=msg.nick)
 
-                self.announcer.player_info(irc, player)
+                levels = self.player_level.get_levels()
+
+                self.announcer.player_info(player, levels)
+                irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
 
 Class = SpiffyRPG
 
