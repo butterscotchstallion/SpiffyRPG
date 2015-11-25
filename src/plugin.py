@@ -505,6 +505,48 @@ class SpiffyAnnouncer:
     def _get_dungeon_title(self, dungeon):
         return self._c(dungeon.name, "light green")
 
+    def _get_duration(self, seconds):
+        m, s = divmod(seconds, 60)
+        h, m = divmod(m, 60)
+        existed_timestamp = "%02d:%02d" % (m, s)
+ 
+        if h > 0:
+            existed_timestamp = "%d:%s" % (h, existed)
+
+        return existed_timestamp
+
+    def dungeon_map(self, **kwargs):
+        dungeon = kwargs["dungeon"]
+        seconds = int(time.time() - dungeon.created_at)
+        duration = self._b(self._get_duration(seconds))
+        dungeon_title = self._get_dungeon_title(dungeon)
+        units = dungeon.get_units()
+        unit_count = len(units)
+        bold_unit_count = self._b(unit_count)
+
+        announcement_msg = "You are in %s. This dungeon has existed for %s." % \
+        (dungeon_title, duration)
+
+        announcement_msg += " %s has %s monsters lurking about" % \
+        (dungeon_title, bold_unit_count)
+
+        self.announce(announcement_msg)
+
+    def dungeon_cleared(self, **kwargs):
+        dungeon = kwargs["dungeon"]
+        player = kwargs["player"]
+        xp = kwargs["xp"]
+
+        player_title = self._get_player_title(player)
+        formatted_xp = self._b(self._c("{:,}".format(xp), "green"))
+        internet_points = self._c("Internet Points", "purple")
+        dungeon_name = self._get_dungeon_title(dungeon)
+        params = (player_title, formatted_xp, internet_points, dungeon_name)
+
+        announcement_msg = "%s gains %s %s for clearing %s" % params
+
+        self.announce(announcement_msg)
+
     def dungeon_look(self, **kwargs):
         dungeon = kwargs["dungeon"]
         player = kwargs["player"]
@@ -572,10 +614,11 @@ class SpiffyAnnouncer:
         %s is now initializing with %s units!
         """
         name = self._b(dungeon.name)
-        num_units = self._b(dungeon.monster_quantity)
+        unit_count = len(dungeon.get_units())
+        num_units = self._b(unit_count)
         params = (name, num_units)
 
-        announcement_msg = "%s is now initializing with %s units!" % params
+        announcement_msg = "%s appears. There seem to be %s monsters lurking about." % params
 
         self.announce(announcement_msg)
 
@@ -639,7 +682,7 @@ class SpiffyAnnouncer:
 
         self.announce(announcement_msg)
 
-    def player_dialogue(self, player, dialogue, destination):
+    def player_dialogue(self, player, dialogue, destination=GAME_CHANNEL):
         """
         %s: %s
         """
@@ -667,25 +710,24 @@ class SpiffyAnnouncer:
         unit = kwargs["unit"]
         dungeon = kwargs["dungeon"]
         seconds = int(time.time() - unit.created_at)
-        m, s = divmod(seconds, 60)
-        h, m = divmod(m, 60)
-        existed_timestamp = "%02d:%02d" % (m, s)
- 
-        if h > 0:
-            existed_timestamp = "%d:%s" % (h, existed)
-
-        existed = self._b(existed_timestamp)
+        duration = self._get_duration(seconds)
+        existed = self._b(duration)
 
         pink_heart = self._c(u"♥", "pink")
         unit_title = self._b(unit.name)
         level = self._b(unit.level)
         hp = self._b(unit.hp)
-        unit_slain_count = self._c(len(unit.slain_foes), "red")
+        body_count = len(unit.slain_foes)
+        unit_slain_count = self._c(body_count, "red")
         dungeon_name = self._get_dungeon_title(dungeon)
+        foe_word = "foes"
+
+        if body_count == 1:
+            foe_word = "foe"
 
         msg = "%s is level %s with %s %s and has " % (unit_title, level, hp, pink_heart)
-        msg += "existed in %s for %s. %s has slain %s foes." % \
-        (dungeon_name, existed, unit_title, unit_slain_count)
+        msg += "existed in %s for %s. %s has slain %s %s." % \
+        (dungeon_name, existed, unit_title, unit_slain_count, foe_word)
 
         self.announce(msg)
 
@@ -698,9 +740,10 @@ class SpiffyAnnouncer:
 
         player_xp = player.experience
 
-        if player_xp > 0:
-            xp_req_for_this_level = player.get_xp_required_for_next_level() + 1
-        else:
+        xp_req_for_this_level = player.get_xp_required_for_next_level() + 1
+        
+        """ If this is one, they're max level """
+        if xp_req_for_this_level == 1:
             xp_req_for_this_level = levels[-1][1]
 
         percent_xp = round(((float(player_xp) / float(xp_req_for_this_level)) * 100), 1)
@@ -708,7 +751,7 @@ class SpiffyAnnouncer:
         if percent_xp <= 20:
             xp_color = "yellow"
         elif percent_xp > 20 and percent_xp < 75:
-            xp_color = "gray"
+            xp_color = "white"
         elif percent_xp >= 75:
             xp_color = "green"
 
@@ -1008,8 +1051,8 @@ class SpiffyBattle:
 
         if not attacker.is_monster:
             xp = self._get_xp_for_battle(target_player_level=attacker.level)
-
-        attacker.add_slain_foe(opponent)
+        else:
+            attacker.add_slain_foe(opponent)
 
         self.announcer.player_victory(player_1=attacker, 
                                       player_2=opponent,
@@ -1113,36 +1156,56 @@ class SpiffyDungeon:
   max_units = 10
 
   def __init__(self, **kwargs):
-
-
     self.db = kwargs["db"]
     self.announcer = kwargs["announcer"]
     channel = kwargs["channel"]
     dungeon = self.get_dungeon_by_channel(channel)
     
     if dungeon is not None:
-      self.id = dungeon["id"]
-      self.name = dungeon["name"]
-      self.description = dungeon["description"]
-      self.min_level = dungeon["min_level"]
-      self.max_level = dungeon["max_level"]
+        self.player_level = SpiffyPlayerLevel()
+        self.created_at = time.time()
+        self.id = dungeon["id"]
+        self.name = dungeon["name"]
+        self.description = dungeon["description"]
+        self.min_level = dungeon["min_level"]
+        self.max_level = dungeon["max_level"]
 
-      self.channel = dungeon["channel"]
-      self.monster_quantity = kwargs["monster_quantity"]
+        self.channel = dungeon["channel"]
+        self.monster_quantity = kwargs["monster_quantity"]
 
-      """ Remove all timers on initialization """
-      self.destroy()
+        """ Remove all timers on initialization """
+        self.destroy()
 
-      self.start_dialogue_timer()
-      self.start_spawn_timer()
+        self.start_dialogue_timer()
+        self.start_spawn_timer()
 
-      if "max_level" in kwargs:
-          self.max_level = kwargs["max_level"]
-          log.info("SpiffyRPG: creating dungeon with max level %s" % self.max_level)
+        if "max_level" in kwargs:
+            self.max_level = kwargs["max_level"]
+            log.info("SpiffyRPG: creating dungeon with max level %s" % self.max_level)
 
     else:
-      log.error("SpiffyRPG: unable to find dungeon %s" % (channel,))
+        log.error("SpiffyRPG: unable to find dungeon %s" % (channel,))
 
+  def check_dungeon_cleared(self, player):
+      units = self.get_units()
+      num_units = len(units)
+      dungeon_cleared = num_units == 0
+
+      log.info("SpiffyRPG: checking if %s has been cleared" % self.name)
+
+      if dungeon_cleared:
+          xp_needed_this_level = self.player_level.get_xp_for_level(player.level)
+          xp = int(xp_needed_this_level / 4)
+
+          player.add_experience(xp)
+
+          log.info("SpiffyRPG: adding %s xp to %s" % (xp, player.name))
+
+          self.announcer.dungeon_cleared(dungeon=self,
+                                         player=player,
+                                         xp=xp)
+      else:
+          log.info("SpiffyRPG: %s has %s units" % (self.name, num_units))
 
   def destroy(self):
       log.info("SpiffyRPG: destroying %s" % self.name)
@@ -1229,9 +1292,8 @@ class SpiffyDungeon:
           log.info("SpiffyRPG: initializing dungeon #%s - %s with %s monsters" \
           % (self.id, self.name, self.monster_quantity))
 
-          self.announcer.dungeon_init(self)
-
           self.populate(self.monster_quantity)
+          self.announcer.dungeon_init(self)
       else:
         log.error("Cannot populate - no dungeon found.")
 
@@ -1283,6 +1345,13 @@ class SpiffyDungeon:
               (monster.level, monster.name, monster.hp, self.name))
 
               self.add_unit(monster)
+
+          """ Choose one of the monsters and possibly announce some intro dialogue """
+          random_monster = random.choice(monsters)
+          dialogue = random_monster.get_intro_dialogue()
+
+          self.announcer.player_dialogue(random_monster,
+                                         dialogue)
       else:
           log.info("SpiffyRPG: couldn't find any monsters to populate dungeon")
 
@@ -1500,9 +1569,9 @@ class SpiffyMonster:
         self.monster["character_name"]
 
     def apply_damage(self, hp):
-        self.hp -= hp
+        self.hp = int(self.hp - hp)
 
-        log.info("SpiffyRPG: %s -%s damage, now at %s" % (self.title, hp, self.hp))
+        log.info("SpiffyRPG: %s takes %s damage; now has %sHP" % (self.title, hp, self.hp))
 
     def is_killing_blow(self, **kwargs):
         hp = self.hp
@@ -1554,7 +1623,7 @@ class SpiffyPlayer:
         if is_vulnerable_to_physical or is_vulnerable_to_magic:
             damage *= 1.2
 
-        self.hp -= damage
+        self.hp = int(self.hp - damage)
 
         log.info("SpiffyRPG: %s - %s = %s" % (self.title, damage, self.hp))
 
@@ -1720,6 +1789,16 @@ class SpiffyPlayerLevel:
 
         return player_level
 
+    def get_xp_for_level(self, player_level):
+        xp = 1
+        levels = self.get_levels()
+ 
+        for level, experience_needed in levels:
+            if level == player_level:
+                return experience_needed
+
+        return player_level
+
     def get_xp_for_next_level(self, level):
         xp = 0
         levels = self.get_levels()
@@ -1732,37 +1811,41 @@ class SpiffyPlayerLevel:
         return xp
 
     def get_levels(self):
-        return [
-            (1, 0),
-            (2, 100),
-            (3, 200),
-            (4, 300),
-            (5, 400),
-            (6, 1000),
-            (7, 1500),
-            (8, 2500),
-            (9, 3500),
-            (10, 5000),
-            (11, 6500),
-            (12, 8000),
-            (13, 9500),
-            (14, 10500),
-            (15, 12000),
-            (16, 15000),
-            (17, 18000),
-            (18, 21000),
-            (19, 24000),
-            (20, 27000),
-            (21, 30000),
-            (22, 33000),
-            (24, 36000),
-            (25, 39000),
-            (26, 42000),
-            (27, 45000),
-            (28, 48000),
-            (29, 51000),
-            (30, 54000)
-        ]
+        return [(1, 0),
+                (2, 100),
+                (3, 200),
+                (4, 300),
+                (5, 400),
+                (6, 1000),
+                (7, 1500),
+                (8, 2500),
+                (9, 3500),
+                (10, 5000),
+                (11, 6500),
+                (12, 8000),
+                (13, 9500),
+                (14, 10500),
+                (15, 12000),
+                (16, 15000),
+                (17, 18000),
+                (18, 21000),
+                (19, 24000),
+                (20, 27000),
+                (21, 30000),
+                (22, 33000),
+                (24, 36000),
+                (25, 39000),
+                (26, 42000),
+                (27, 45000),
+                (28, 48000),
+                (29, 51000),
+                (30, 54000),
+                (31, 57000),
+                (32, 60000),
+                (33, 63000),
+                (34, 66000),
+                (35, 69000)
+      ]
 
 class SpiffyPlayerClass:
     """
@@ -1927,6 +2010,36 @@ class SpiffyRPG(callbacks.Plugin):
     
     look = wrap(look, ["user"])
 
+    def smap(self, irc, msg, args, user):
+        """
+        Examine your map to see where you are
+        """
+        channel = msg.args[0]
+        
+        if ircutils.isChannel(channel):
+            user_id = self._get_user_id(irc, msg.prefix)
+
+            if user_id:
+                p = self.db.get_player_by_user_id(user_id)
+
+                if p is not None:
+                    player = SpiffyPlayer(player=p, 
+                                          db=self.db._get_db(), 
+                                          announcer=self.announcer,
+                                          nick=msg.nick)
+
+                    dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
+
+                    if dungeon is not None:
+                        self.announcer.dungeon_map(dungeon=dungeon, 
+                                                   player=player)
+                    else:
+                        irc.error("Dungeon not found!")
+                else:
+                  irc.error("Could not look up your player")
+    
+    smap = wrap(smap, ["user"])
+
     def attack(self, irc, msg, args, user, target):
         """
         !attack <target> - Attack a non-player target in the dungeon
@@ -1960,13 +2073,14 @@ class SpiffyRPG(callbacks.Plugin):
                         battle.start()
 
                         dungeon.clear_dead_units()
+                        dungeon.check_dungeon_cleared(player)
                         #dungeon.check_population()
                     else:
-                      irc.error("Could not find unit %s" % target)
+                      irc.error("You try to attack %s, but realize nothing is there" % ircutils.bold(target))
                 else:
                     irc.error("Couldn't find dungeon with channel %s" % (channel))
             else:
-                irc.error("You ain't no playa!")        
+                log.info("SpiffyRPG: non-player %s tried to attack" % player.title)
         else:
             irc.error("You must attack non-player units in the channel.")
 
