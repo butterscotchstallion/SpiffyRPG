@@ -688,7 +688,8 @@ class SpiffyAnnouncer:
         """
         bold_title = self._get_player_title(player)
         orange_dialogue = self._c(dialogue, "orange")
-        bold_level = self._b(player.level)
+        padded_level = str(player.level).zfill(2)
+        bold_level = self._b(padded_level)
 
         params = (bold_level, bold_title, orange_dialogue)
         announcement_msg = "[%s] %s says %s" % params
@@ -951,8 +952,6 @@ class SpiffyBattle:
 
     def start(self):
         attacker, opponent = self._get_vs()
-
-        log.info("SpiffyRPG: battle started: %s vs %s" % (attacker.title, opponent.title))
 
         """ Once an attacker is chosen, show them intro dialogue 
         self.announcer.player_dialogue(attacker, 
@@ -1260,7 +1259,7 @@ class SpiffyDungeon:
                                 now=False)
 
   def random_monster_dialogue(self):
-      log.info("SpiffyRPG: dialogue interval")
+      log.info("SpiffyRPG: monster talkin'")
 
       """ Add random chance here """
       units = self.get_units()
@@ -1345,13 +1344,6 @@ class SpiffyDungeon:
               (monster.level, monster.name, monster.hp, self.name))
 
               self.add_unit(monster)
-
-          """ Choose one of the monsters and possibly announce some intro dialogue """
-          random_monster = random.choice(monsters)
-          dialogue = random_monster.get_intro_dialogue()
-
-          self.announcer.player_dialogue(random_monster,
-                                         dialogue)
       else:
           log.info("SpiffyRPG: couldn't find any monsters to populate dungeon")
 
@@ -1536,8 +1528,9 @@ class SpiffyMonster:
                           FROM spiffyrpg_monster_dialogue
                           WHERE 1=1
                           AND dialogue_type = 'win'
+                          AND monster_id = ?
                           ORDER BY RANDOM()
-                          LIMIT 1""")
+                          LIMIT 1""", (self.id,))
 
         dialogue = cursor.fetchone()
         cursor.close()
@@ -1629,6 +1622,23 @@ class SpiffyPlayer:
 
     def get_items(self):
         return self.items
+
+    def set_title(self, title):
+        self.title = title
+        self.name = title
+
+        log.info("Player %s sets title to %s" % (self.id, self.title))
+
+        cursor = self.db.cursor()
+        params = (title, self.id)
+
+        cursor.execute("""UPDATE spiffyrpg_players
+                          SET character_name = ?
+                          WHERE id = ?""", 
+                       params)
+
+        self.db.commit()
+        cursor.close()
 
     def add_experience(self, experience):
         log.info("Player %s adding %s xp" % (self.title, experience))
@@ -2040,9 +2050,33 @@ class SpiffyRPG(callbacks.Plugin):
     
     smap = wrap(smap, ["user"])
 
+    def title(self, irc, msg, args, user, title):
+        """
+        title <new title> - sets a new title for your character. Maximum 16 characters
+        """
+        is_channel = irc.isChannel(msg.args[0])
+
+        if is_channel:
+            user_id = self._get_user_id(irc, msg.prefix)
+            p = self.db.get_player_by_user_id(user_id)
+
+            if p is not None:
+                player = SpiffyPlayer(player=p, 
+                                      db=self.db._get_db(), 
+                                      announcer=self.announcer,
+                                      nick=msg.nick)
+
+                player.set_title(title[0:15])
+
+                levels = self.player_level.get_levels()
+
+                self.announcer.player_info(player, levels)
+
+    title = wrap(title, ["user", "text"])
+
     def attack(self, irc, msg, args, user, target):
         """
-        !attack <target> - Attack a non-player target in the dungeon
+        attack <target> - Attack a non-player target in the dungeon
         """
         is_channel = irc.isChannel(msg.args[0])
 
