@@ -520,15 +520,39 @@ class SpiffyAnnouncer:
         seconds = int(time.time() - dungeon.created_at)
         duration = self._b(self._get_duration(seconds))
         dungeon_title = self._get_dungeon_title(dungeon)
-        units = dungeon.get_living_units()
-        unit_count = len(units)
-        bold_unit_count = self._b(unit_count)
+        
+        """
+        "players": {
+              "living": 0,
+              "dead": 0
+          },
+          "npc": {
+              "hostile": {
+                  "living": 0,
+                  "dead": 0
+              },
+              "friendly": {
+                  "living": 0,
+                  "dead": 0
+              }
+          }
+        """
+        unit_distro = dungeon.get_unit_status_distribution()
+        hlive = unit_distro["npc"]["hostile"]["living"]
+        hdead = unit_distro["npc"]["hostile"]["dead"]   
+        flive = unit_distro["npc"]["friendly"]["living"]
+        fdead = unit_distro["npc"]["friendly"]["dead"]
+        plive = unit_distro["players"]["living"]
+        pdead = unit_distro["players"]["dead"]
+
+        unit_list_description = "%s/%s hostiles, %s/%s friendly, and %s/%s players" % \
+        (hlive, hdead, flive, fdead, plive, pdead)
 
         announcement_msg = "You are in %s. This dungeon has existed for %s." % \
         (dungeon_title, duration)
 
-        announcement_msg += " %s has %s monsters lurking about" % \
-        (dungeon_title, bold_unit_count)
+        announcement_msg += " %s has %s" % \
+        (dungeon_title, unit_list_description)
 
         self.announce(announcement_msg)
 
@@ -559,7 +583,6 @@ class SpiffyAnnouncer:
 
         if len(units) > 0:
             unit_titles = []
-            
             
             msg = "%s %s %s and sees " % \
             (player_name, look_phrase, dungeon_name)
@@ -1041,10 +1064,28 @@ class SpiffyBattle:
 
     def _get_xp_for_battle(self, **kwargs):
         target = kwargs["opponent"]
+        attacker = kwargs["attacker"]
         xp = int(5 * kwargs["target_player_level"])
 
         if target.is_monster:
             xp *= 3
+
+        if attacker.level > (target.level+3):
+            level_diff = attacker.level - target.level
+
+            log.info("SpiffyRPG: %s (%s) is higher level than %s (%s) - dividing by %s" % \
+            (attacker.name, attacker.level, target.name, target.level, level_diff))
+
+            xp /= level_diff
+        else:
+            level_diff = attacker.level - target.level
+
+            """ Level difference must be at least one """
+            if level_diff >= 1:
+                log.info("SpiffyRPG: %s (%s) is lower level than %s (%s) - multiplying by %s" % \
+                (attacker.name, attacker.level, target.name, target.level, level_diff))
+
+                xp *= level_diff
 
         return xp
 
@@ -1057,9 +1098,10 @@ class SpiffyBattle:
 
         xp = 0
 
-        if not attacker.is_monster:
+        if attacker.is_player:
             xp = self._get_xp_for_battle(target_player_level=attacker.level,
-                                         opponent=opponent)
+                                         opponent=opponent,
+                                         attacker=attacker)
         else:
             attacker.add_slain_foe(opponent)
 
@@ -1085,6 +1127,8 @@ class SpiffyBattle:
 
             if level_after_adding_xp > attacker.level:
                 log.info("SpiffyRPG: %s is now level %s!" % (attacker.title, level_after_adding_xp))
+                attacker.level = level_after_adding_xp
+
                 self.announcer.player_gained_level(attacker)
 
     def _get_vs(self):
@@ -1255,7 +1299,7 @@ class SpiffyDungeon:
   def start_dialogue_timer(self):
       log.info("SpiffyRPG: starting monster dialogue interval")
 
-      dialogue_interval = 600
+      dialogue_interval = 300
 
       schedule.addPeriodicEvent(self.random_monster_dialogue,
                                 dialogue_interval,
@@ -1263,8 +1307,6 @@ class SpiffyDungeon:
                                 now=False)
 
   def random_monster_dialogue(self):
-      log.info("SpiffyRPG: monster talkin'")
-
       """ Add random chance here """
       units = self.get_living_units()
 
@@ -1275,6 +1317,8 @@ class SpiffyDungeon:
               unit = random.choice(units)
 
               dialogue = unit.get_intro_dialogue()
+
+              log.info("SpiffyRPG: %s says '%s'" % (unit.name, dialogue))
 
               self.announcer.player_dialogue(unit,
                                              dialogue,
@@ -1294,10 +1338,11 @@ class SpiffyDungeon:
           log.info("SpiffyRPG: initializing dungeon #%s - %s with %s monsters" \
           % (self.id, self.name, self.monster_quantity))
 
+          """ Regular monsters """
           self.populate(self.monster_quantity)
           self.announcer.dungeon_init(self)
       else:
-        log.error("Cannot populate - no dungeon found.")
+          log.error("Cannot populate - no dungeon found.")
 
   def get_dungeon_by_channel(self, channel):
       cursor = self.db.cursor()
@@ -1335,18 +1380,34 @@ class SpiffyDungeon:
 
   def populate(self, monster_quantity):
       """ Add random monsters monsters """
-      monster_db = SpiffyMonsterDB(db=self.db)
+      unit_db = SpiffyUnitDB(db=self.db)
+      units = []
 
-      monsters = monster_db.spawn_many(monster_quantity=monster_quantity,
-                                       min_level=self.min_level,
-                                       max_level=self.max_level)
+      """ Special """
+      special_ids = unit_db.get_turkey_ids(limit=5)
+      turkeys = unit_db.spawn_many(monster_quantity=monster_quantity,
+                                   min_level=1,
+                                   max_level=10,
+                                   monster_ids=special_ids)
+      for turkey in turkeys:
+          units.append(turkey)
 
-      if monsters is not None and len(monsters) > 0:
-          for monster in monsters:
+      """ Regular monsters """
+      monster_ids = unit_db._get_monster_ids(limit=monster_quantity)
+      monsters = unit_db.spawn_many(monster_quantity=monster_quantity,
+                                    min_level=self.min_level,
+                                    max_level=self.max_level,
+                                    monster_ids=monster_ids)
+
+      for monster in monsters:
+          units.append(monster)
+
+      if units is not None and len(units) > 0:
+          for unit in units:
               log.info("SpiffyRPG: spawning a level %s %s with %s HP in %s" % \
-              (monster.level, monster.name, monster.hp, self.name))
+              (unit.level, unit.name, unit.hp, self.name))
 
-              self.add_unit(monster)
+              self.add_unit(unit)
       else:
           log.info("SpiffyRPG: couldn't find any monsters to populate dungeon")
 
@@ -1375,6 +1436,44 @@ class SpiffyDungeon:
           if unit.name.lower() == name.lower():
               return unit
 
+  def get_living_unit_by_name(self, name):
+      for unit in self.units:
+          if unit.hp > 0 and unit.name.lower() == name.lower():
+              return unit
+
+  def get_living_players(self):
+      players = []
+
+      for unit in self.units:
+          if unit.is_player and unit.hp > 0:
+              players.append(unit)
+
+      return players
+
+  def get_living_hostiles_near_level(self, **kwargs):
+      hostiles = []
+      near = 5
+      player_level = kwargs["level"]
+      
+      for unit in self.units:
+          is_hostile = not unit.is_player and unit.is_hostile
+          alive = unit.hp > 0
+          near_level = unit.level <= (player_level+near)
+
+          if is_hostile and alive and near_level:
+              hostiles.append(unit)
+
+      return hostiles
+
+  def get_dead_players(self):
+      players = []
+
+      for unit in self.units:
+          if unit.is_player and unit.hp <= 0:
+              players.append(unit)
+
+      return players
+
   def get_living_units(self):
       alive = []
 
@@ -1387,6 +1486,59 @@ class SpiffyDungeon:
 
       return alive
 
+  def search_living_units_by_name(self, name):
+      alive = []
+
+      for unit in self.units:
+          unit_name = unit.name.lower()
+          lower_search_input = name.lower()
+
+          if unit.hp > 0 and unit_name in lower_search_input:
+              alive.append(unit)
+
+      if len(alive) > 0:
+          alive = sorted(alive, key=lambda x: x.level, reverse=True)
+
+      return alive
+
+  def get_unit_status_distribution(self):
+      dist = {
+          "players": {
+              "living": 0,
+              "dead": 0
+          },
+          "npc": {
+              "hostile": {
+                  "living": 0,
+                  "dead": 0
+              },
+              "friendly": {
+                  "living": 0,
+                  "dead": 0
+              }
+          }
+      }
+
+      for unit in self.units:
+          if unit.is_player:
+              if unit.hp > 0:
+                  dist["players"]["living"] += 1
+              else:
+                  dist["players"]["dead"] += 1
+          else:
+              if unit.is_hostile:
+                  if unit.hp > 0:
+                      dist["npc"]["hostile"]["living"] += 1
+                  else:
+                      dist["npc"]["hostile"]["dead"] += 1
+              else:
+                  if unit.hp > 0:
+                      dist["npc"]["hostile"]["living"] += 1
+                  else:
+                      dist["npc"]["hostile"]["dead"] += 1
+
+      return dist
+
   def get_units(self):
       units = self.units
 
@@ -1395,12 +1547,41 @@ class SpiffyDungeon:
 
       return units
 
-class SpiffyMonsterDB:
+class SpiffyUnitDB:
     """
     DB operations for multiple monsters
     """
+    unit_turkey = 7
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
+
+    def get_turkey_ids(self, **kwargs):
+        return self.get_unit_type(monster_id=self.unit_turkey,
+                                  limit=kwargs["limit"])
+
+    def get_unit_type(self, **kwargs):
+        cursor = self.db.cursor()
+        limit = int(kwargs["limit"])
+        query = """SELECT id
+                   FROM spiffyrpg_monsters
+                   WHERE 1=1
+                   AND id = ?
+                   ORDER BY RANDOM() 
+                   LIMIT %s""" % (limit)
+
+        cursor.execute(query, (kwargs["monster_id"],))
+        ids = cursor.fetchall()
+
+        if ids is not None:
+            id_list = []
+
+            for i in ids:
+              id_list.append(str(dict(i)["id"]))
+
+            return id_list
+
+        cursor.close()
 
     def _get_monster_ids(self, **kwargs):
         """
@@ -1412,10 +1593,11 @@ class SpiffyMonsterDB:
         query = """SELECT id
                    FROM spiffyrpg_monsters
                    WHERE 1=1
-                   ORDER BY RANDOM() 
+                   AND id != ?
+                   ORDER BY RANDOM()
                    LIMIT %s""" % (limit,)
 
-        cursor.execute(query)
+        cursor.execute(query, (self.unit_turkey,))
         ids = cursor.fetchall()
 
         if ids is not None:
@@ -1430,50 +1612,48 @@ class SpiffyMonsterDB:
 
     def spawn_many(self, **kwargs):
         cursor = self.db.cursor()
-        monster_ids = self._get_monster_ids(limit=kwargs["monster_quantity"])
+        
+        if kwargs["monster_ids"] is not None:
+            comma_separated_string = ",".join(kwargs["monster_ids"])
+            params = (comma_separated_string,)
 
-        if monster_ids is not None:
-          comma_separated_string = ",".join(monster_ids)
-          params = (comma_separated_string,)
+            cursor.execute("""SELECT
+                              m.id, 
+                              m.name AS class_name,
+                              un.name AS name
+                              FROM spiffyrpg_monsters m
+                              JOIN spiffyrpg_unit_names un ON un.unit_id = m.id
+                              WHERE 1=1
+                              AND m.id IN (%s)""" % params)
 
-          cursor.execute("""SELECT
-                            m.id, 
-                            m.name AS class_name,
-                            un.name AS name
-                            FROM spiffyrpg_monsters m
-                            JOIN spiffyrpg_unit_names un ON un.unit_id = m.id
-                            WHERE 1=1
-                            AND m.id IN (%s)""" % params)
+            monsters = cursor.fetchall()
+            
+            if len(monsters) > 0:
+                augmented_monsters = []
 
-          monsters = cursor.fetchall()
-          
-          if len(monsters) > 0:
-              augmented_monsters = []
+                for m in monsters:
+                    monster = dict(m)
 
-              for m in monsters:
-                  monster = dict(m)
+                    """ 
+                    The monster level is generated according to the level
+                    range of the dungeon
+                    """
+                    augmented_monster = SpiffyUnit(min_level=kwargs["min_level"],
+                                                   max_level=kwargs["max_level"],                                           
+                                                   monster=monster,
+                                                   db=self.db)
 
-                  """ 
-                  The monster level is generated according to the level
-                  range of the dungeon
-                  """
-                  augmented_monster = SpiffyMonster(min_level=kwargs["min_level"],
-                                                    max_level=kwargs["max_level"],                                           
-                                                    monster=monster,
-                                                    db=self.db)
+                    augmented_monsters.append(augmented_monster)
 
-                  augmented_monsters.append(augmented_monster)
-
-              return augmented_monsters
-
+                return augmented_monsters
         else:
           log.error("SpiffyRPG: problem finding monsters")
 
         cursor.close()
 
-class SpiffyMonster:
+class SpiffyUnit:
     """
-    A monster!
+    A unit can be a player, or NPC. NPCs can be friendly/hostile
     """
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
@@ -1489,6 +1669,8 @@ class SpiffyMonster:
         self.title = kwargs["monster"]["name"]
         self.is_monster = True
         self.is_player = False
+        """ need to make this a db col """
+        self.is_hostile = True
         self.created_at = time.time()
         self.slain_foes = []
         self.class_name = kwargs["monster"]["class_name"]
@@ -1871,7 +2053,22 @@ class SpiffyPlayerLevel:
                 (32, 60000),
                 (33, 63000),
                 (34, 66000),
-                (35, 69000)
+                (35, 69000),
+                (36, 70000),
+                (37, 73000),
+                (38, 76000),
+                (39, 79000),
+                (40, 76000),
+                (41, 82000),
+                (42, 85000),
+                (43, 88000),
+                (44, 92000),
+                (45, 95000),
+                (46, 98000),
+                (47, 101000),
+                (48, 104000),
+                (49, 107000),
+                (50, 110000)
       ]
 
 class SpiffyPlayerClass:
@@ -1959,7 +2156,7 @@ class SpiffyRPG(callbacks.Plugin):
         dungeon = SpiffyDungeon(channel=a_channel, 
                                 db=self.db._get_db(),
                                 announcer=self.announcer,
-                                monster_quantity=10,
+                                monster_quantity=15,
                                 max_level=max_level)
 
         log.info("Initializing world with dungeon #%s" % dungeon.id)
@@ -2020,12 +2217,40 @@ class SpiffyRPG(callbacks.Plugin):
                     dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
 
                     if dungeon is not None:
-                        units = dungeon.get_living_units()
+                        units = dungeon.get_living_hostiles_near_level(level=player.level)
+                        #units = dungeon.get_living_units()
                         self.announcer.dungeon_look(dungeon=dungeon, 
                                                     player=player,
                                                     units=units)
     
     look = wrap(look, ["user"])
+
+    def find(self, irc, msg, args, user, name):
+        """
+        Searchs for a unit
+        """
+        channel = msg.args[0]
+        
+        if ircutils.isChannel(channel):
+            user_id = self._get_user_id(irc, msg.prefix)
+
+            if user_id:
+                p = self.db.get_player_by_user_id(user_id)
+
+                if p is not None:
+                    player = SpiffyPlayer(player=p, 
+                                          db=self.db._get_db(), 
+                                          announcer=self.announcer,
+                                          nick=msg.nick)
+
+                    dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
+
+                    if dungeon is not None:
+                        units = dungeon.search_living_units_by_name(name)
+                        self.announcer.dungeon_look(dungeon=dungeon, 
+                                                    player=player,
+                                                    units=units)
+    find = wrap(find, ["user", "text"])
 
     def smap(self, irc, msg, args, user):
         """
@@ -2101,7 +2326,7 @@ class SpiffyRPG(callbacks.Plugin):
                 dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
 
                 if dungeon is not None:
-                    unit = dungeon.get_unit_by_name(target)
+                    unit = dungeon.get_living_unit_by_name(target)
 
                     if unit is not None:
                         log.info("SpiffyRPG: found unit with name %s" % unit.name)
@@ -2213,7 +2438,7 @@ class SpiffyRPG(callbacks.Plugin):
                 d_p = dict(p)
                 
                 player = SpiffyPlayer(player=d_p, db=db, announcer=self.announcer,
-                                nick=msg.nick)
+                                      nick=msg.nick)
 
                 top_players.append(player)
 
@@ -2369,10 +2594,13 @@ class SpiffyRPG(callbacks.Plugin):
     fmove = wrap(fmove, ["text"])
 
     def doPart(self, irc, msg):
-      pass
+        pass
 
     def doKick(self, irc, msg):
-      pass
+        pass
+
+    def doPart(self, irc, msg):
+        pass
 
     def doJoin(self, irc, msg):
         """
@@ -2381,26 +2609,28 @@ class SpiffyRPG(callbacks.Plugin):
         is_bot_joining = msg.nick == irc.nick
         
         if is_bot_joining:
-          channel = msg.args[0]
+            channel = msg.args[0]
 
-          """ Bot joined. Start world/dungeon """
-          log.info("SpiffyRPG: bot joined %s - starting dungeon" % channel)
+            """ Bot joined. Start world/dungeon """
+            log.info("SpiffyRPG: bot joined %s - starting dungeon" % channel)
 
-          self._init_world(channel)
+            self._init_world(channel)
         else:
-          user_id = self._get_user_id(irc, msg.prefix)
+            user_id = self._get_user_id(irc, msg.prefix)
 
-          if user_id:
-              player = self.db.get_player_by_user_id(user_id)
+            if user_id:
+                player = self.db.get_player_by_user_id(user_id)
 
-              if player is not None:
-                  player = SpiffyPlayer(player=player, db=self.db._get_db(),
-                  announcer=self.announcer, nick=msg.nick)
+                if player is not None:
+                    player = SpiffyPlayer(player=player, db=self.db._get_db(),
+                    announcer=self.announcer, nick=msg.nick)
 
-                  levels = self.player_level.get_levels()
+                    levels = self.player_level.get_levels()
 
-                  self.announcer.player_info(player, levels)
-                  irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
+                    self.announcer.player_info(player, levels)
+                    irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
+
+                    #dungeon.add_unit(player)
 
 Class = SpiffyRPG
 
