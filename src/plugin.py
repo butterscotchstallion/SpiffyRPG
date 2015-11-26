@@ -511,7 +511,7 @@ class SpiffyAnnouncer:
         existed_timestamp = "%02d:%02d" % (m, s)
  
         if h > 0:
-            existed_timestamp = "%d:%s" % (h, existed)
+            existed_timestamp = "%d:%s" % (h, existed_timestamp)
 
         return existed_timestamp
 
@@ -520,7 +520,7 @@ class SpiffyAnnouncer:
         seconds = int(time.time() - dungeon.created_at)
         duration = self._b(self._get_duration(seconds))
         dungeon_title = self._get_dungeon_title(dungeon)
-        units = dungeon.get_units()
+        units = dungeon.get_living_units()
         unit_count = len(units)
         bold_unit_count = self._b(unit_count)
 
@@ -574,6 +574,7 @@ class SpiffyAnnouncer:
             msg = "%s %s %s but sees nothing of import" % \
             (player_name, look_phrase, dungeon_name)
 
+        #self._irc.reply(msg, notice=True)
         self.announce(msg)
 
     def dungeon_inspect(self, **kwargs):
@@ -726,7 +727,8 @@ class SpiffyAnnouncer:
         if body_count == 1:
             foe_word = "foe"
 
-        msg = "%s is level %s with %s %s and has " % (unit_title, level, hp, pink_heart)
+        cname = self._c(unit.class_name, "light green")
+        msg = "%s is a level %s %s with %s %s and has " % (unit_title, level, cname, hp, pink_heart)
         msg += "existed in %s for %s. %s has slain %s %s." % \
         (dungeon_name, existed, unit_title, unit_slain_count, foe_word)
 
@@ -976,68 +978,75 @@ class SpiffyBattle:
         attacker = kwargs["attacker"]
         opponent = kwargs["opponent"]
 
-        party_member_count = len(self.party)
+        if attacker is not None and opponent is not None:
+          party_member_count = len(self.party)
 
-        if party_member_count >= 2:
-            """ Get an attack """
-            attack = attacker.get_attack()
+          if party_member_count >= 2:
+              """ Get an attack """
+              attack = attacker.get_attack()
 
-            """ Check if this is a killing blow """
-            attack["is_killing_blow"] = (opponent.hp - attack["damage"]) <= 0
+              """ Check if this is a killing blow """
+              attack["is_killing_blow"] = (opponent.hp - attack["damage"]) <= 0
 
-            """ Opponent incoming damage """
-            opponent.apply_damage(attack["damage"])
+              """ Opponent incoming damage """
+              opponent.apply_damage(attack["damage"])
 
-            """ Record each attack """
-            if attack not in self.attacks:
-                self.attacks.append(attack)
+              """ Record each attack """
+              if attack not in self.attacks:
+                  self.attacks.append(attack)
 
-            """ Send attack info privately """
-            if not opponent.is_monster:
-              """
-              self.announcer.player_attack(player_1=attacker, 
-                                           player_2=opponent,
-                                           attack=attack,
-                                           destination=opponent.nick)
-              """
+              """ Send attack info privately """
+              if not opponent.is_monster:
+                """
+                self.announcer.player_attack(player_1=attacker, 
+                                             player_2=opponent,
+                                             attack=attack,
+                                             destination=opponent.nick)
+                """
 
-            """ If this attack was a killing blow, announce death """
-            if attack["is_killing_blow"]:
-                log.info("SpiffyRPG: %s struck killing blow on %s" % \
-                  (attacker.title, opponent.title))
+              """ If this attack was a killing blow, announce death """
+              if attack["is_killing_blow"]:
+                  log.info("SpiffyRPG: %s struck killing blow on %s" % \
+                    (attacker.title, opponent.title))
 
-            """ After each attack, remove anyone that is dead """
-            self.party = self._remove_dead_party_members()
+              """ After each attack, remove anyone that is dead """
+              self.party = self._remove_dead_party_members()
 
-            """ If anyone is left, get another """
-            if len(self.party) > 0:
-                vs = self._get_vs()
+              """ If anyone is left, get another """
+              if len(self.party) > 0:
+                  vs = self._get_vs()
 
-                if vs is not None:
-                    self.round_robin(attacker=opponent, opponent=attacker)
-                else:
-                    last_player_standing = self.party[0]
+                  if vs is not None:
+                      self.round_robin(attacker=opponent, opponent=attacker)
+                  else:
+                      last_player_standing = self.party[0]
 
-                    log.info("SpiffyRPG: %s WINS: %s" % \
-                    (last_player_standing.title, last_player_standing.hp))
-                    
-                    log.info("SpiffyRPG: attacker=%s and target=%s" % \
-                    (last_player_standing.title, opponent.title))
+                      log.info("SpiffyRPG: %s WINS: %s" % \
+                      (last_player_standing.title, last_player_standing.hp))
+                      
+                      log.info("SpiffyRPG: attacker=%s and target=%s" % \
+                      (last_player_standing.title, opponent.title))
 
-                    self._on_battle_completed(player_1=last_player_standing,
-                                              player_2=opponent,
-                                              attack=attack)
+                      self._on_battle_completed(player_1=last_player_standing,
+                                                player_2=opponent,
+                                                attack=attack)
 
-        elif party_member_count == 1:
-            log.info("SpiffyRPG: one party member left: %s" % self.party[0].title)
-            log.info("SpiffyRPG: attacker=%s and target=%s" % (attacker.title, opponent.title))
+          elif party_member_count == 1:
+              log.info("SpiffyRPG: one party member left: %s" % self.party[0].title)
+              log.info("SpiffyRPG: attacker=%s and target=%s" % (attacker.title, opponent.title))
 
-            self._on_battle_completed(player_1=attacker,
-                                      player_2=opponent,
-                                      attack=attack)
+              self._on_battle_completed(player_1=attacker,
+                                        player_2=opponent,
+                                        attack=attack)
 
     def _get_xp_for_battle(self, **kwargs):
-        return int(5 * kwargs["target_player_level"])
+        target = kwargs["opponent"]
+        xp = int(5 * kwargs["target_player_level"])
+
+        if target.is_monster:
+            xp *= 3
+
+        return xp
 
     def _on_battle_completed(self, **kwargs):      
         log.info("SpiffyRPG: battle concluded")
@@ -1049,7 +1058,8 @@ class SpiffyBattle:
         xp = 0
 
         if not attacker.is_monster:
-            xp = self._get_xp_for_battle(target_player_level=attacker.level)
+            xp = self._get_xp_for_battle(target_player_level=attacker.level,
+                                         opponent=opponent)
         else:
             attacker.add_slain_foe(opponent)
 
@@ -1155,38 +1165,38 @@ class SpiffyDungeon:
   max_units = 10
 
   def __init__(self, **kwargs):
-    self.db = kwargs["db"]
-    self.announcer = kwargs["announcer"]
-    channel = kwargs["channel"]
-    dungeon = self.get_dungeon_by_channel(channel)
-    
-    if dungeon is not None:
-        self.player_level = SpiffyPlayerLevel()
-        self.created_at = time.time()
-        self.id = dungeon["id"]
-        self.name = dungeon["name"]
-        self.description = dungeon["description"]
-        self.min_level = dungeon["min_level"]
-        self.max_level = dungeon["max_level"]
+      self.db = kwargs["db"]
+      self.announcer = kwargs["announcer"]
+      channel = kwargs["channel"]
+      dungeon = self.get_dungeon_by_channel(channel)
+      
+      if dungeon is not None:
+          self.player_level = SpiffyPlayerLevel()
+          self.created_at = time.time()
+          self.id = dungeon["id"]
+          self.name = dungeon["name"]
+          self.description = dungeon["description"]
+          self.min_level = dungeon["min_level"]
+          self.max_level = dungeon["max_level"]
 
-        self.channel = dungeon["channel"]
-        self.monster_quantity = kwargs["monster_quantity"]
+          self.channel = dungeon["channel"]
+          self.monster_quantity = kwargs["monster_quantity"]
 
-        """ Remove all timers on initialization """
-        self.destroy()
+          """ Remove all timers on initialization """
+          self.destroy()
 
-        self.start_dialogue_timer()
-        self.start_spawn_timer()
+          self.start_dialogue_timer()
+          self.start_spawn_timer()
 
-        if "max_level" in kwargs:
-            self.max_level = kwargs["max_level"]
-            log.info("SpiffyRPG: creating dungeon with max level %s" % self.max_level)
+          if "max_level" in kwargs:
+              self.max_level = kwargs["max_level"]
+              log.info("SpiffyRPG: creating dungeon with max level %s" % self.max_level)
 
-    else:
-        log.error("SpiffyRPG: unable to find dungeon %s" % (channel,))
+      else:
+          log.error("SpiffyRPG: unable to find dungeon %s" % (channel,))
 
   def check_dungeon_cleared(self, player):
-      units = self.get_units()
+      units = self.get_living_units()
       num_units = len(units)
       dungeon_cleared = num_units == 0
 
@@ -1210,6 +1220,7 @@ class SpiffyDungeon:
       log.info("SpiffyRPG: destroying %s" % self.name)
       
       try:
+          self.units = []
           schedule.removeEvent("spawn_timer")
           schedule.removeEvent("dialogue_timer")
       except KeyError:
@@ -1228,9 +1239,7 @@ class SpiffyDungeon:
                                 now=False)
 
   def check_population(self):
-      self.clear_dead_units()
-
-      units = self.get_units()
+      units = self.get_living_units()
       live_unit_count = len(units)
 
       if live_unit_count < self.max_units:
@@ -1242,11 +1251,6 @@ class SpiffyDungeon:
           self.populate(quantity)
       else:
           log.info("SpiffyRPG: [%s] %s units present" % (self.name, live_unit_count))
-
-  def clear_dead_units(self):
-      for unit in self.units:
-          if unit.hp < 0:
-              self.remove_unit(unit)
 
   def start_dialogue_timer(self):
       log.info("SpiffyRPG: starting monster dialogue interval")
@@ -1262,24 +1266,23 @@ class SpiffyDungeon:
       log.info("SpiffyRPG: monster talkin'")
 
       """ Add random chance here """
-      units = self.get_units()
+      units = self.get_living_units()
 
       if len(units) > 0:
-        dialogue_chance = random.randrange(1, 20) < 100
+          dialogue_chance = random.randrange(1, 20) < 100
 
-        if dialogue_chance:
-          unit = random.choice(units)
+          if dialogue_chance:
+              unit = random.choice(units)
 
-          dialogue = unit.get_intro_dialogue()
+              dialogue = unit.get_intro_dialogue()
 
-          """ TODO: replace this GAME_CHANNEL """
-          self.announcer.player_dialogue(unit,
-                                         dialogue,
-                                         GAME_CHANNEL)
-        else:
-          log.info("SpiffyRPG: dialoguing by not random enough")
+              self.announcer.player_dialogue(unit,
+                                             dialogue,
+                                             self.channel)
+          else:
+              log.info("SpiffyRPG: dialoguing by not random enough")
       else:
-        log.info("SpiffyRPG: no units in %s, not dialoguing" % self.name)
+          log.info("SpiffyRPG: no units in %s, not dialoguing" % self.name)
 
   def initialize(self, **kwargs):
       """
@@ -1297,38 +1300,38 @@ class SpiffyDungeon:
         log.error("Cannot populate - no dungeon found.")
 
   def get_dungeon_by_channel(self, channel):
-    cursor = self.db.cursor()
+      cursor = self.db.cursor()
 
-    cursor.execute("""SELECT id, 
-                      name, channel, description, 
-                      min_level, max_level
-                      FROM spiffyrpg_dungeons
-                      WHERE 1=1
-                      AND channel = ?
-                      LIMIT 1""", (channel.lower(),))
+      cursor.execute("""SELECT id, 
+                        name, channel, description, 
+                        min_level, max_level
+                        FROM spiffyrpg_dungeons
+                        WHERE 1=1
+                        AND channel = ?
+                        LIMIT 1""", (channel.lower(),))
 
-    dungeon = cursor.fetchone()
-    
-    cursor.close()
+      dungeon = cursor.fetchone()
+      
+      cursor.close()
 
-    if dungeon is not None:
-        return dict(dungeon)
+      if dungeon is not None:
+          return dict(dungeon)
 
   def get_dungeon_by_id(self, id):
-    cursor = self.db.cursor()
+      cursor = self.db.cursor()
 
-    cursor.execute("""SELECT id, name
-                      FROM spiffyrpg_dungeons
-                      WHERE 1=1
-                      AND id = ?
-                      LIMIT 1""", (id,))
+      cursor.execute("""SELECT id, name
+                        FROM spiffyrpg_dungeons
+                        WHERE 1=1
+                        AND id = ?
+                        LIMIT 1""", (id,))
 
-    dungeon = cursor.fetchone()
-    
-    cursor.close()
+      dungeon = cursor.fetchone()
+      
+      cursor.close()
 
-    if dungeon is not None:
-        return dict(dungeon)
+      if dungeon is not None:
+          return dict(dungeon)
 
   def populate(self, monster_quantity):
       """ Add random monsters monsters """
@@ -1338,7 +1341,7 @@ class SpiffyDungeon:
                                        min_level=self.min_level,
                                        max_level=self.max_level)
 
-      if len(monsters) > 0:
+      if monsters is not None and len(monsters) > 0:
           for monster in monsters:
               log.info("SpiffyRPG: spawning a level %s %s with %s HP in %s" % \
               (monster.level, monster.name, monster.hp, self.name))
@@ -1348,41 +1351,49 @@ class SpiffyDungeon:
           log.info("SpiffyRPG: couldn't find any monsters to populate dungeon")
 
   def add_unit(self, unit):
-    """
-    self.announcer.unit_spawned(unit)
-    """
-    if unit not in self.units:
-      self.units.append(unit)
+      """
+      self.announcer.unit_spawned(unit)
+      """
+      if unit not in self.units:
+          self.units.append(unit)
+      else:
+          log.info("SpiffyRPG: not adding duplicate unit %s" % (unit.name))
 
   def remove_unit(self, unit):
-    units = []
+      units = []
 
-    log.info("SpiffyRPG: [%s] Unit %s#%s died" % (self.name, unit.name, unit.id))
+      log.info("SpiffyRPG: [%s] Unit %s#%s died" % (self.name, unit.name, unit.id))
 
-    for u in self.units:
-      if unit.id != u.id:
-        units.append(u)
+      for u in self.units:
+          if unit.id != u.id:
+              units.append(u)
 
-    self.units = units
+      self.units = units
 
   def get_unit_by_name(self, name):
-    for unit in self.units:
-        log.info("Checking if %s starts with %s" % (unit.name, name))
+      for unit in self.units:
+          if unit.name.lower() == name.lower():
+              return unit
 
-        if unit.name.lower() == name.lower():
-          return unit
+  def get_living_units(self):
+      alive = []
+
+      for unit in self.units:
+          if unit.hp > 0:
+              alive.append(unit)
+
+      if len(alive) > 0:
+          alive = sorted(alive, key=lambda x: x.level, reverse=True)
+
+      return alive
 
   def get_units(self):
-    alive = []
+      units = self.units
 
-    for unit in self.units:
-      if unit.hp > 0:
-        alive.append(unit)
+      if len(units) > 0:
+          units = sorted(units, key=lambda x: x.level, reverse=True)
 
-    if len(alive) > 0:
-        alive = sorted(alive, key=lambda x: x.level, reverse=True)
-
-    return alive
+      return units
 
 class SpiffyMonsterDB:
     """
@@ -1425,10 +1436,14 @@ class SpiffyMonsterDB:
           comma_separated_string = ",".join(monster_ids)
           params = (comma_separated_string,)
 
-          cursor.execute("""SELECT id, name
-                            FROM spiffyrpg_monsters
+          cursor.execute("""SELECT
+                            m.id, 
+                            m.name AS class_name,
+                            un.name AS name
+                            FROM spiffyrpg_monsters m
+                            JOIN spiffyrpg_unit_names un ON un.unit_id = m.id
                             WHERE 1=1
-                            AND id IN (%s)""" % params)
+                            AND m.id IN (%s)""" % params)
 
           monsters = cursor.fetchall()
           
@@ -1476,6 +1491,7 @@ class SpiffyMonster:
         self.is_player = False
         self.created_at = time.time()
         self.slain_foes = []
+        self.class_name = kwargs["monster"]["class_name"]
 
     def add_slain_foe(self, foe):
         if foe not in self.slain_foes:
@@ -1568,6 +1584,7 @@ class SpiffyMonster:
 
     def is_killing_blow(self, **kwargs):
         hp = self.hp
+
         return (hp - damage) > 0
 
     def is_alive(self):
@@ -1950,16 +1967,6 @@ class SpiffyRPG(callbacks.Plugin):
         self.SpiffyWorld.add_dungeon(dungeon)
         self.SpiffyWorld.start()
 
-    def ssummon(self, irc, msg, args, user):
-        """
-        Summons a random monster your level with a random
-        class
-        """
-        irc.error("Monsters are now summoned randomly within the dungeon! Type .attack <monster name> in the channel when you see one talking!")
-        return
-
-    ssummon = wrap(ssummon, ["user"])
-
     def inspect(self, irc, msg, args, user, target):
         """
         Inspects a unit or item
@@ -2013,7 +2020,7 @@ class SpiffyRPG(callbacks.Plugin):
                     dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
 
                     if dungeon is not None:
-                        units = dungeon.get_units()
+                        units = dungeon.get_living_units()
                         self.announcer.dungeon_look(dungeon=dungeon, 
                                                     player=player,
                                                     units=units)
@@ -2106,7 +2113,7 @@ class SpiffyRPG(callbacks.Plugin):
                         battle.add_party_member(unit)
                         battle.start()
 
-                        dungeon.clear_dead_units()
+                        #dungeon.clear_dead_units()
                         dungeon.check_dungeon_cleared(player)
                         #dungeon.check_population()
                     else:
