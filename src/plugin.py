@@ -67,14 +67,12 @@ class SpiffyAnnouncer(object):
     The destination of the announcement is set when the announcer
     is instantiated.
     """
-    destination = GAME_CHANNEL
     is_public = True
 
     def __init__(self, **kwargs):
         self._irc = kwargs["irc"]
         self.is_public = kwargs["public"]
         self.destination = kwargs["destination"]
-
         unit_levels = SpiffyUnitLevel()
         self.levels = unit_levels.get_levels()
 
@@ -125,6 +123,22 @@ class SpiffyAnnouncer(object):
 
         return indicator
 
+    def _get_item_type_indicator(self, item_type):
+        indicator = ""
+
+        if item_type == "rock":
+            indicator = "R"
+        elif item_type == "paper":
+            indicator = "P"
+        elif item_type == "scissors":
+            indicator = "S"
+        elif item_type == "lizard":
+            indicator = "L"
+        elif item_type == "spock":
+            indicator = "V"
+
+        return self._b(indicator)
+
     def announce(self, message):
         if self.is_public:
             self._send_channel_notice(message)
@@ -160,168 +174,185 @@ class SpiffyAnnouncer(object):
         self._irc.queueMsg(ircmsgs.notice(GAME_CHANNEL, message))
 
 class SpiffyBattle:
-    """ Every battle should start with an empty party """
-    party = []
-    rounds = {}
-    last_attacker_unit_id = None
-    
     def __init__(self, **kwargs):
+        self.party = []
         self.db = kwargs["db"]
         self.announcer = SpiffyBattleAnnouncer(irc=kwargs["irc"],
                                                destination=kwargs["destination"],
                                                public=True)
         self.unit_level = SpiffyUnitLevel()
     
+    def is_hit(self, **kwargs):
+        """
+        Get the attacker and target weapon type,
+        and determine who wins the round. The winner
+        of the round deals damage
+        """
+        attacker = kwargs["attacker"]
+        target = kwargs["target"]
+        is_hit = False
+        is_draw = False
+        hit_word = "draw"
+
+        """ Attacker weapon """
+        attacker_weapon = attacker.get_equipped_weapon()
+        attacker_weapon_type = attacker_weapon["item_type"]
+
+        """ Target weapon """
+        target_weapon = target.get_equipped_weapon()
+        target_weapon_type = target_weapon["item_type"]
+
+        """ Rock crushes Scissors """
+        if attacker_weapon_type == "rock" and \
+        target_weapon_type == "scissors":
+            is_hit = True
+            hit_word = "crushes"
+
+        """ Scissors cuts Paper """
+        if attacker_weapon_type == "scissors" and \
+        target_weapon_type == "paper":
+            is_hit = True
+            hit_word = "cuts"
+
+        """ Paper covers Rock """
+        if attacker_weapon_type == "paper" and \
+        target_weapon_type == "rock":
+            is_hit = True
+            hit_word = "covers"
+
+        """ Lizard eats Paper """
+        if attacker_weapon_type == "lizard" and \
+        target_weapon_type == "paper":
+            is_hit = True
+            hit_word = "eats"
+
+        """ Spock vaporizes Rock """
+        if attacker_weapon_type == "spock" and \
+        target_weapon_type == "rock":
+            is_hit = True
+            hit_word = "vaporizes"
+
+        """ Lizard poisons Spock """
+        if attacker_weapon_type == "lizard" and \
+        target_weapon_type == "spock":
+            is_hit = True
+            hit_word = "poisons"
+
+        """ Rock crushes Lizard """
+        if attacker_weapon_type == "rock" and \
+        target_weapon_type == "lizard":
+            is_hit = True
+            hit_word = "crushes"
+
+        """ Spock smashes Scissors """
+        if attacker_weapon_type == "spock" and \
+        target_weapon_type == "scissors":
+            is_hit = True
+            hit_word = "smashes"
+
+        """ Paper disproves Spock """
+        if attacker_weapon_type == "paper" and \
+        target_weapon_type == "spock":
+            is_hit = True
+            hit_word = "disproves"
+
+        """ Scissors decapitate Lizard """
+        if attacker_weapon_type == "scissors" and \
+        target_weapon_type == "lizard":
+            is_hit = True
+            hit_word = "decapitates"
+
+        """ Draw! """
+        if attacker_weapon_type == target_weapon_type:
+            is_draw = True
+
+        log.info("SpiffyRPG: %s's %s vs %s's %s: hit is %s" % \
+        (attacker.name, attacker_weapon_type, target.name, target_weapon_type, is_hit))
+
+        return {
+            "is_hit": is_hit,
+            "attacker_weapon": attacker_weapon,
+            "target_weapon": target_weapon,
+            "is_draw": is_draw,
+            "hit_word": hit_word
+        }
+
     def start(self):
-        """ Once an attacker is chosen, show them intro dialogue 
+        """
+        Once an attacker is chosen, show them intro dialogue
         self.announcer.unit_dialogue(attacker, 
                                        attacker.dialogue_intro(),
                                        GAME_CHANNEL)
                                        #opponent.nick)
         """
-        self.round_robin()
+        log.info("SpiffyRPG: party consists of %s" % self.party)
 
-    def round_robin(self, **kwargs):
-        """ 
-        Versus returns two random living unique units to battle each other 
-        and returns None when there are no living party members left. A
-        battle begins with at least two units.
-        """
-        while len(self.party) >= 2:
-            vs = self.get_versus()
-
-            if vs is not None:
-                """
-                By convention, the attacker is always in position zero
-                """
-                attacker, target = vs
-                
-                if attacker is None or target is None:
-                    log.error("SpiffyRPG: unable to determine attacker and target")
-                    break
-
-                """
-                Record the last attacker so we know that
-                we should not pick this unit id for the next
-                round.
-                """
-                self.last_attacker_unit_id = attacker.id
-
-                attack = attacker.get_attack(target=target,
-                                             attacker=attacker)
-                
-                """
-                Target takes damage from attacker but only 
-                if they hit. Whether or not the hit lands
-                is based on what the target is wielding
-                """
-                if attack["damage"] > 0:
-                    target.apply_damage(attack["damage"])
-
-                    """
-                    Announce each attack. If an attack's damage is
-                    zero, it means they "missed". A miss occurs 
-                    when they play a scissor against a rock, for 
-                    example. The "attack" hash contains information
-                    about the attack itself, the attacker, and the
-                    target.
-                    """
-                    self.announcer.unit_attack(attack=attack,
-                                               attacker=attacker,
-                                               target=target)
-
-                vs_id = "%s_%s" % (attacker.id, target.id)
-
-                if vs_id not in self.rounds:
-                    self.rounds[vs_id] = []
-
-                self.rounds[vs_id].append({
-                    "attacker": attacker,
-                    "target": target,
-                    "attack": attack
-                })
-
-                """ If this attack was a killing blow, announce death 
-                if attack["is_killing_blow"]:
-                    log.info("SpiffyRPG: %s struck killing blow on %s" % \
-                      (attacker.name, opponent.name))
-                """
-                self.party = self.remove_dead_party_members()
-
-                """
-                If the target is a player, the round ends after
-                each attack.
-
-                If the target is a NPC, then the loop continues
-                with two random party members.
-                """
-                if attacker.is_player and target.is_player:
-                    log.info("SpiffyRPG: breaking loop because %s is a playa!" % target.name)
-                    break
-            else:
-                break
+        attacker = self.party[0]
+        target = self.party[1]
 
         """
-        When the above loop completes, the battle is over. 
-        The last attacker is victorious over the last target 
+        We initialize this way because in the case of a draw,
+        we're going to randomize the winner/loser anyway. If
+        it's not a draw, then winner and loser will be 
+        overwritten appropriately.
         """
-        self.on_battle_completed(attacker=attacker,
-                                 target=target)
+        winner = attacker
+        loser = target
 
-    def remove_dead_party_members(self):
-        alive = []
-
-        for unit in self.party:
-            if unit.is_alive():
-                alive.append(unit)
-            else:
-                log.info("SpiffyRPG: removing dead unit %s from party" % unit)
-
-        return alive
-
-    def get_attacker_from_versus(self, **kwargs):
         """
-        Initially we just assume the attacker is the first unit
-        and then overwrite it with anyone who wasn't the last attacker
-        if there was one
+        Check if the attacker hit. If the attacker hits successfully,
+        the round is over. If not, the target has an opportunity to
+        strike.
         """
-        attacker = kwargs["versus"][0]
+        hit_info = self.is_hit(attacker=attacker,
+                               target=target)
 
-        for unit in self.party:
-            if unit.id != self.last_attacker_unit_id:
-                attacker = unit
-                break
+        """
+        In the case of a draw, there will be no attack info,
+        as there was no attack!
+        """
+        attack_info = None
+        attack_hit_target = hit_info["is_hit"]
 
-        return attacker
+        if attack_hit_target:
+            """
+            Target takes damage from attacker but only 
+            if they hit. Whether or not the hit lands
+            is based on what the target is wielding.
+            A draw is possible, in which case neither side
+            takes damage.
+            """
+            attack_info = attacker.get_attack(attacker=attacker,
+                                              target=target)
+            target.apply_damage(attack_info["damage"])
 
-    def get_xp_for_battle(self, **kwargs):
-        target = kwargs["target"]
-        attacker = kwargs["attacker"]
-        xp = int(5 * target.level)
-
-        if not target.is_player:
-            xp *= 3
-
-        if attacker.level > (target.level+3):
-            level_diff = attacker.level - target.level
-
-            #log.info("SpiffyRPG: %s (%s) is higher level than %s (%s) - dividing by %s" % \
-            #(attacker.name, attacker.level, target.name, target.level, level_diff))
-
-            xp /= level_diff
-            #xp *= (attacker.level / target.level)
+            """ Target takes damage. Attacker wins """
+            winner = attacker
+            loser = target
         else:
-            level_diff = attacker.level - target.level
+            """
+            If the attacker did not strike the target, this could
+            be a draw. The target may only strike if it's not a draw.
+            """
+            if not hit_info["is_draw"]:
+                hit_info = self.is_hit(attacker=target,
+                                       target=attacker)
 
-            """ Level difference must be at least one """
-            if level_diff >= 1:
-                log.info("SpiffyRPG: %s (%s) is lower level than %s (%s) - multiplying by %s" % \
-                (attacker.name, attacker.level, target.name, target.level, level_diff))
+                attack_info = target.get_attack(target=attacker,
+                                                attacker=target)
 
-                xp *= level_diff
+                attacker.apply_damage(attack_info["damage"])
 
-        return xp
+                """ Attacker takes damage, target wins """
+                winner = target
+                loser = attacker
 
+        self.on_battle_completed(winner=winner,
+                                 loser=loser,
+                                 hit_info=hit_info,
+                                 attack_info=attack_info)
+
+    
     def on_battle_completed(self, **kwargs):
         """
         After the battle has completed, iterate rounds
@@ -329,67 +360,78 @@ class SpiffyBattle:
         """
         log.info("SpiffyRPG: battle concluded")
 
-        attacker = kwargs["attacker"]
-        target = kwargs["target"]
-        vs_id = "%s_%s" % (attacker.id, target.id)
-        last_round = self.rounds[vs_id][-1]
-        killing_blow = last_round["attack"]
-
+        winner = kwargs["winner"]
+        loser = kwargs["loser"]
+        hit_info = kwargs["hit_info"]
+        attack_info = kwargs["attack_info"]
         xp = 0
 
-        if attacker.is_player:
-            xp = self.get_xp_for_battle(target=target,
-                                        attacker=attacker)
-        
-        self.announcer.unit_victory(player_1=attacker,
-                                    player_2=target,
-                                    attack=killing_blow,
-                                    xp_gained=xp)
-
-        """ Win dialogue is sent to channel 
-        self.announcer.unit_dialogue(attacker,
-                                     attacker.get_win_dialogue(),
-                                     GAME_CHANNEL)
         """
-
-        if attacker.is_player:
-            log.info("SpiffyRPG: adding %s xp to player %s" % (xp, attacker.name))
-
-            attacker.add_experience(xp)
-
-            attacker.experience += xp
-
-            level_after_adding_xp = self.unit_level.get_level_by_xp(attacker.experience)
-
-            if level_after_adding_xp > attacker.level:
-                log.info("SpiffyRPG: %s is now level %s!" % (attacker.name, level_after_adding_xp))
-                attacker.level = level_after_adding_xp
-
-                self.announcer.player_gained_level(attacker)
-
-    def get_versus(self):
+        It is possible to have a draw! No XP in that case.
         """
-        Retrieves two unique units to battle from the party
-        """
-        units = self.get_living_party_members()
+        if hit_info["is_draw"]:
+            self.announcer.draw(hit_info=hit_info,
+                                winner=winner,
+                                loser=loser)
+        else:
+            if winner.is_player:
+                xp = self.get_xp_for_battle(winner=winner,
+                                            loser=loser)
 
-        if len(units) >= 2:
-            party = random.sample(units, 2)
+            self.announcer.unit_victory(winner=winner,
+                                        loser=loser,
+                                        attack=attack_info,
+                                        hit_info=hit_info,
+                                        xp_gained=xp)
 
-            if len(party) < 2:
-                log.error("SpiffyRPG: unable to get party")
-                return
+            """ Win dialogue is sent to channel 
+            self.announcer.unit_dialogue(attacker,
+                                         attacker.get_win_dialogue(),
+                                         GAME_CHANNEL)
+            """
 
             """
-            We always want the attacker to be in the 
-            first position by convention. The attacker
-            will attack whoever is next in line.
+            Only players gain experience...so far.
             """
-            while party[0].id == self.last_attacker_unit_id:
-                random.shuffle(party)
+            if winner.is_player:
+                log.info("SpiffyRPG: adding %s xp to player %s" % (xp, winner.name))
 
-            return party
+                winner.add_experience(xp)
 
+                winner.experience += xp
+
+                level_after_adding_xp = self.unit_level.get_level_by_xp(winner.experience)
+
+                if level_after_adding_xp > winner.level:
+                    log.info("SpiffyRPG: %s is now level %s!" % (winner.name, level_after_adding_xp))
+                    winner.level = level_after_adding_xp
+
+                    self.announcer.player_gained_level(winner)
+
+    def get_xp_for_battle(self, **kwargs):
+        loser = kwargs["loser"]
+        winner = kwargs["winner"]
+        xp = int(5 * loser.level)
+
+        if not loser.is_player:
+            xp *= 3
+
+        if winner.level > (loser.level+3):
+            level_diff = winner.level - loser.level
+
+            xp /= level_diff
+        else:
+            level_diff = winner.level - loser.level
+
+            """ Level difference must be at least one """
+            if level_diff >= 1:
+                log.info("SpiffyRPG: %s (%s) is lower level than %s (%s) - multiplying by %s" % \
+                (winner.name, winner.level, loser.name, loser.level, level_diff))
+
+                xp *= level_diff
+
+        return xp
+    
     def add_party_member(self, unit):
         if unit not in self.party:
             if unit.is_alive():
@@ -398,15 +440,6 @@ class SpiffyBattle:
                 self.party.append(unit)
             else:
                 log.error("SpiffyRPG: cannot add dead unit %s" % unit)
-
-    def get_living_party_members(self):
-        party = []
-
-        for unit in self.party:
-            if unit.is_alive():
-                party.append(unit)
-
-        return party
 
 class SpiffyWorld:
     """
@@ -468,45 +501,80 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
                                   destination=kwargs["destination"],
                                   public=True)
 
+    def player_gained_level(self, player):
+        """
+        Player_1 has gained level X! 
+        """
+        params = (self._b(self._c("DING!", "yellow")),
+                  self._get_unit_title(player), 
+                  self._b(player.level))
+
+        announcement_msg = "%s %s ascends to level %s!" % params
+
+        self.announce(announcement_msg)
+
+    def draw(self, **kwargs):
+        """
+        $target $blocks $attacker's $attack
+        """
+        hit_info = kwargs["hit_info"]
+        attacker, target = (kwargs["winner"], kwargs["loser"])
+        attacker_name = self._b(attacker.name)
+        attacker_item = self._c(hit_info["attacker_weapon"]["name"], "light green")
+        target_name = self._b(target.name)
+        target_item = self._c(hit_info["target_weapon"]["name"], "light green")
+
+        avoidance = ("blocks", "parries", "dodges", "escapes",
+        "misses", "sidesteps", "circumvents", "evades", "fends off",
+        "eludes", "deflects", "wards off")
+        avoidance_word = self._b(random.choice(avoidance))
+        
+        params = (target_name, avoidance_word, attacker_name, attacker_item)
+
+        announcement_msg = "%s %s %s's %s!" % params
+
+        self.announce(announcement_msg)
+
     def unit_victory(self, **kwargs):
         """
         $1 reduced to -22 ♥; $2` survived with 60 ♥. $2 gains +15 Internet Points
         """
-        player_1 = kwargs["player_1"]
-        player_2 = kwargs["player_2"]
+        winner = kwargs["winner"]
+        loser = kwargs["loser"]
+        hit_info = kwargs["hit_info"]
         attack = kwargs["attack"]
-        item = player_1.get_equipped_weapon()
-        attack_name = item["name"]
+        winner_weapon = hit_info["attacker_weapon"]
+        loser_weapon = hit_info["target_weapon"]
+        winner_attack = winner_weapon["name"]
+        winner_item_type = self._get_item_type_indicator(winner_weapon["item_type"])
+        loser_item_type = self._get_item_type_indicator(loser_weapon["item_type"])
 
         green_xp = self._c("{:,}".format(kwargs["xp_gained"]), "green")
         bonus_xp = ""
         internet_points = self._c("Internet Points", "purple")
         pink_heart = self._c(u"♥", "pink")
 
-        #player_1.title = self.title_shuffle(player_1.title)
-        #player_2.title = self.title_shuffle(player_2.title)
+        winner_title = self._get_unit_title(winner)
+        loser_title = self._get_unit_title(loser)
+        attack_name = self._c(winner_attack, "light green")
+        winner_hp = self._c(winner.get_hp(), "red")
+        loser_hp = self._c(loser.get_hp(), "green")
 
-        player_1_title = self._get_unit_title(player_1)
-        player_2_title = self._get_unit_title(player_2)
-        attack_name = self._c(attack_name, "light green")
-        player_2_hp = self._c(player_2.hp, "red")
-        player_1_hp = self._c(player_1.hp, "green")
-
-        attack_word = "hit"
+        attack_word = self._b(self._c(hit_info["hit_word"], "red"))
 
         #if attack["is_critical_strike"]:
         #    attack_word = self._b(self._c("critically struck", "red"))
 
         damage = self._c(attack["damage"], "red")
 
-        params = (player_1_title, attack_name, attack_word, player_2_title, 
-        damage, pink_heart, player_2_hp, player_1_title, player_1_hp, pink_heart)
+        params = (winner_title, attack_name, winner_item_type, attack_word, loser_title, 
+        loser_item_type, damage, pink_heart, loser_hp, winner_title, winner_hp, pink_heart)
 
-        announcement_msg = "%s's %s %s %s for %s, reducing %s to %s. %s survived with %s %s" % params
+        announcement_msg = "%s's %s [%s] %s %s [%s] for %s, reducing %s to %s. %s survived with %s %s" % params
         #announcement_msg += "%s attacked % times for %s damage." % ()
 
-        if player_1.is_player:
-            announcement_msg += ". %s gains %s %s" % (player_1_title, green_xp, internet_points)
+        if winner.is_player and kwargs["xp_gained"] > 0:
+            announcement_msg += " %s gains %s %s" % (winner_title, green_xp, internet_points)
 
         self._send_channel_notice(announcement_msg)
 
@@ -521,8 +589,8 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         attack = kwargs["attack"]
         attacker = attack["attacker"]
         target = attack["target"]        
-        attacker_title = self._b(attacker.get_title())
-        target_title = self._b(target.get_title())
+        attacker_title = self._b(attacker.name)
+        target_title = self._b(target.name)
         damage = self._b(attack["damage"])
         is_hit = attack["damage"] > 0
 
@@ -537,8 +605,39 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         params = (attacker_title, attack_name, attacker_item_type, \
         target_title, target_item_type, damage)
 
-        announcement_msg = "%s's %s (%s) hits %s (%s) for %s damage" % params
-       
+        announcement_msg = "%s's %s [%s] hits %s [%s] for %s damage" % params
+        
+        self.announce(announcement_msg)
+
+    def unit_miss(self, **kwargs):
+        """
+        $attacker's $attack ($type) hits $target ($type) for
+        $damage
+
+        Later we can expand this to be have flavored messages
+        based on the equipped item.
+        """
+        attack = kwargs["attack"]
+        attacker = attack["attacker"]
+        target = attack["target"]        
+        attacker_title = self._b(attacker.name)
+        target_title = self._b(target.name)
+        damage = self._b(attack["damage"])
+        is_hit = attack["damage"] > 0
+
+        attacker_item = attacker.get_equipped_weapon()
+        attacker_item_type = attacker_item["item_type"][0].upper()
+
+        attack_name = self._b(attacker_item["name"])
+
+        target_item = target.get_equipped_weapon()
+        target_item_type = target_item["item_type"][0].upper()
+
+        params = (attacker_title, attack_name, attacker_item_type, \
+        target_title)
+
+        announcement_msg = "%s's %s [%s] misses %s!" % params
+        
         self.announce(announcement_msg)
 
 class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
@@ -550,6 +649,25 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         announcer_parent.__init__(irc=kwargs["irc"],
                                   destination=kwargs["destination"],
                                   public=True)
+
+    def unit_death(self, **kwargs):
+        """
+        This occurs when the player tries to do something
+        silly, like attack with a weapon type that doesn't exist.
+        """
+        unit = kwargs["unit"]
+        unit_name = self._b(unit.name)
+
+        deaths = ("%s was eaten by wolves" % unit_name, 
+                  "%s's router was melted by DDoS" % unit_name,
+                  "%s's computer was compromised by malware" % unit_name,
+                  "%s ate expired Taco Bell" % unit_name,
+                  "%s was eaten by a grue" % unit_name,
+                  "%s bought the farm" % unit_name)
+
+        announcement_msg = self._b(random.choice(deaths))
+
+        self.announce(announcement_msg)
 
     def unit_dialogue(self, unit, dialogue):
         """
@@ -595,35 +713,14 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         item = kwargs["item"]
         item_name = self._b(item["name"])
         rarity_indicator = self.get_rarity_indicator(rarity=item["rarity"])
+        bold_item_type_label = self._b("Item type")
         params = (rarity_indicator, 
                   item_name,
                   item["min_level"],
+                  bold_item_type_label,
                   item["item_type"])
 
-        announcement_msg = "%s %s (%s) :: Item type: %s" % params
-
-        self._irc.reply(announcement_msg)
-
-    def player_inventory(self, **kwargs):
-        player = kwargs["player"]
-        items = player.items
-
-        if len(items) > 0:
-            item_name_list = []
-            equipped_item = player.get_equipped_weapon()
-
-            for item in player.items:
-                item_name = item["name"]
-                is_equipped = item["id"] == equipped_item["id"]
-
-                if is_equipped:
-                    item_name += " (Equipped)"
-
-                item_name_list.append(item_name)
-
-            announcement_msg = ", ".join(item_name_list)
-        else:
-            announcement_msg = "Your bags seem empty."
+        announcement_msg = "%s %s (%s) :: %s: %s" % params
 
         self._irc.reply(announcement_msg)
 
@@ -639,15 +736,15 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         # Check player_1 hp for danger
         if player_1.hp <= danger_low_hp_threshold:
-            player_1_hp = self._c(player_1.hp, "red")
+            winner_hp = self._c(player_1.hp, "red")
         else:
-            player_1_hp = self._c(player_1.hp, "green")
+            winner_hp = self._c(player_1.hp, "green")
 
         # Check player_2's hp for danger
         if player_2.hp <= danger_low_hp_threshold:
-            player_2_hp = self._c(player_2.hp, "red")
+            loser_hp = self._c(player_2.hp, "red")
         else:
-            player_2_hp = self._c(player_2.hp, "green")
+            loser_hp = self._c(player_2.hp, "green")
         
         """ Formatted attack damage """
         formatted_damage = "{:,}".format(attack["damage"])
@@ -669,7 +766,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         announcement_msg = "%s's %s %s you for %s %s. %s" % params
 
-        self._send_player_notice(player_2.nick, announcement_msg)
+        self._send_player_notice(announcement_msg)
 
     def effect_raise_dead(self, **kwargs):
         """
@@ -721,7 +818,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         existed = self._b(duration)
 
         pink_heart = self._c(u"♥", "pink")
-        unit_title = self._b(unit.get_title())
+        unit_title = self._b(unit.name)
         level = self._b(unit.level)
         hp = unit.get_hp()
 
@@ -829,16 +926,6 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         #    announcement_msg += " %s has raised %s units." % (bold_title, num_raised_units)
 
         #self._irc.reply(announcement_msg)
-        self._send_channel_notice(announcement_msg)
-
-    def player_gained_level(self, player):
-        """
-        Player_1 has gained level X! 
-        """
-        params = (self._get_unit_title(player), self._b(player.level))
-
-        announcement_msg = "%s ascends to level %s!" % params
-
         self._send_channel_notice(announcement_msg)
 
     def new_player(self, char_name, char_class):
@@ -951,7 +1038,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
                 (player_name, look_phrase, dungeon_name)
             
             for unit in units:
-                unit_name = self._b(unit.get_title())
+                unit_name = self._b(unit.name)
 
                 if is_seance:
                     unit_name = self._c(unit_name, "red")
@@ -1510,12 +1597,12 @@ class SpiffyDungeon:
 
     def get_living_unit_by_name(self, name):
         for unit in self.units:
-            if unit.get_hp() > 0 and unit.get_title().lower() == name.lower():
+            if unit.get_hp() > 0 and unit.name.lower() == name.lower():
                 return unit
 
     def get_dead_unit_by_name(self, name):
         for unit in self.units:
-            if unit.get_hp() <= 0 and unit.get_title().lower() == name.lower():
+            if unit.get_hp() <= 0 and unit.name.lower() == name.lower():
                 return unit
 
     def get_living_players(self):
@@ -1755,7 +1842,7 @@ class SpiffyUnitDB:
     def get_item_by_name(self, **kwargs):
         item_name = kwargs["item_name"]
         cursor = self.db.cursor()
-        wildcard_item_name = "%s%%" % item_name
+        wildcard_item_name = "%%%s%%" % item_name
 
         cursor.execute("""SELECT
                           i.id,
@@ -1943,7 +2030,7 @@ class SpiffyUnitDB:
                    WHERE 1=1
                    %s
                    GROUP BY u.id
-                   ORDER BY u.name""" % where
+                   ORDER BY u.experience""" % where
 
         cursor.execute(query)
 
@@ -2005,7 +2092,7 @@ class SpiffyUnitDB:
                           t.required_level,
                           t.title
                           FROM spiffyrpg_unit_type_titles t
-                          ORDER BY t.required_level""")
+                          ORDER BY t.required_level ASC""")
 
         titles = cursor.fetchall()
         cursor.close()
@@ -2040,7 +2127,9 @@ class SpiffyUnitDB:
                           i.created_at
                           FROM spiffyrpg_items i
                           WHERE 1=1
-                          AND i.min_level <= 5""")
+                          AND
+                          i.is_permanent = 1
+                          ORDER BY i.min_level ASC""")
 
         items = cursor.fetchall()
         cursor.close()
@@ -2048,12 +2137,12 @@ class SpiffyUnitDB:
 
         if len(items) > 0:
             for item in items:
-                item_type = item["item_type"]
+                unit_type_id = item["unit_type_id"]
 
-                if not item_type in items_lookup:
-                    items_lookup[item_type] = []
+                if not unit_type_id in items_lookup:
+                    items_lookup[unit_type_id] = []
 
-                items_lookup[item_type].append(item)
+                items_lookup[unit_type_id].append(item)
 
         return items_lookup
 
@@ -2251,12 +2340,11 @@ class SpiffyUnit:
         self.title = self.get_unit_title_from_lookup(kwargs["unit"]["titles"])
 
         """
-        Equipping a random weapon requires that there are some base
-        items
+        Each unit should get some base items for their level.
         """
-        if len(self.items) == 0:
-            self.items = self.get_base_items_from_lookup(kwargs["base_items_lookup"])
-        
+        base_items = self.get_base_items_from_lookup(kwargs["base_items_lookup"])
+        self.populate_inventory_with_base_items(base_items)
+
         """
         The above line ensures that the unit always has at least the
         base weapons.
@@ -2269,6 +2357,15 @@ class SpiffyUnit:
         """
         self.hp = self.calculate_hp()
 
+    def populate_inventory_with_base_items(self, base_items):
+        """
+        The base items contain all of the items available
+        for this unit type
+        """
+        for item in base_items:
+            if item not in self.items:
+                self.items.append(item)
+
     def get_unit_title_from_lookup(self, lookup):
         """
         Find the appropriate title based on the
@@ -2279,6 +2376,10 @@ class SpiffyUnit:
 
         #log.info("SpiffyRPG: lookup=%s" % lookup)
 
+        """
+        The unit's title is the one with the highest
+        required level that is <= unit level.
+        """
         for title in lookup:
             if self.level >= title["required_level"]:
                 unit_title = title["title"]
@@ -2288,32 +2389,26 @@ class SpiffyUnit:
     def get_base_items_from_lookup(self, lookup):
         items = []
 
-        """
-        NPCs start with scissors, players with rock.
-        """
-        item_type = "scissors"
-
-        if self.is_player:
-            item_type = "rock"
-
-        if item_type in lookup:
-            tmp_items = lookup[item_type]
+        if self.unit_type_id in lookup:
+            tmp_items = lookup[self.unit_type_id]
 
             for item in tmp_items:
-                items.append(dict(item))
-        else:
-            log.info("SpiffyRPG: warning: item type %s not in lookup" % item_type)
+                if self.level >= item["min_level"]:
+                    items.append(dict(item))
 
         return items
 
     def get_stage_by_level(self, **kwargs):
         stage = 1
+        stage_two_min_level = 3
+        stage_three_min_level = 10
+
         level = kwargs["level"]
 
-        if level >= 5:
+        if level >= stage_two_min_level:
             stage = 2
 
-        if level >= 10:
+        if level >= stage_three_min_level:
             stage = 3
 
         return stage
@@ -2332,7 +2427,7 @@ class SpiffyUnit:
 
     def equip_random_inventory_item_by_type(self, **kwargs):
         item_name = kwargs["item_type_name"]
-        inventory_item = self.get_item_from_inventory_by_type(item_name=item_name)
+        inventory_item = self.get_item_from_inventory_by_type(item_type_name=item_name)
 
         if inventory_item is not None:
             self.equip_item(item=inventory_item)
@@ -2346,7 +2441,7 @@ class SpiffyUnit:
     def equip_item_by_name(self, **kwargs):
         item_name = kwargs["item_name"]
         inventory_item = self.get_item_from_inventory_by_name(item_name=item_name)
-
+        
         if inventory_item is not None:
             self.equip_item(item=inventory_item)
 
@@ -2355,6 +2450,40 @@ class SpiffyUnit:
         else:
             self.announcer.item_equip_failed(player=self,
                                              item_name=item_name)
+
+    def get_item_type_from_user_input(self, **kwargs):
+        item_type = kwargs["item_type"].lower()
+
+        if item_type == "rock" or item_type[0] == "r":
+            item_type = "rock"
+
+        if item_type == "paper" or item_type[0] == "p":
+            item_type = "paper"
+
+        if item_type == "scissors" or item_type[0] == "s":
+            item_type = "scissors"
+
+        if item_type == "lizard" or item_type[0] == "l":
+            item_type = "lizard"
+
+        if item_type == "spock" or item_type[0] == "v":
+            item_type = "spock"
+
+        return item_type
+
+    def equip_item_by_type(self, **kwargs):
+        item_type = self.get_item_type_from_user_input(item_type=kwargs["item_type"])
+        inventory_item = self.get_item_from_inventory_by_type(item_type_name=item_type)
+        equip_ok = False
+
+        if inventory_item is not None:
+            self.equip_item(item=inventory_item)
+            equip_ok = True
+        else:
+            self.announcer.item_equip_failed(player=self)
+            equip_ok = False
+
+        return equip_ok
 
     def get_equipped_weapon(self):
         """
@@ -2383,12 +2512,16 @@ class SpiffyUnit:
         items = []
         inventory_item_to_equip = None
 
+        log.info("SpiffyRPG: trying to find items of type %s" % item_type_name)
+
         """
         Find a random item of $type in inventory
         """
         for item in self.items:
-            if item.item_type_name.startswith(item_type_name):
+            if item["item_type"] == item_type_name:
                 items.append(item)
+
+        log.info("SpiffyRPG: unit %s has items %s" % (self.name, self.items))
 
         if len(items) > 0:
             inventory_item_to_equip = random.choice(items)
@@ -2537,83 +2670,8 @@ class SpiffyUnit:
         if effect not in self.effects:
             self.effects.append(effect)
 
-    def get_attack_damage(self, **kwargs):
-        attacker = kwargs["attacker"]
-        target = kwargs["target"]
-        is_hit = self.is_hit(attacker=attacker,
-                             target=target)
-        damage = 0
-
-        if is_hit:
-            damage = random.randrange(1, 5) * self.level
-
-        return damage
-
-    def is_hit(self, **kwargs):
-        attacker = kwargs["attacker"]
-        target = kwargs["target"]
-        is_hit = False
-
-        attacker_weapon = attacker.get_equipped_weapon()
-        attacker_weapon_type = attacker_weapon["item_type"]
-
-        target_weapon = target.get_equipped_weapon()
-        target_weapon_type = target_weapon["item_type"]
-
-        log.info("SpiffyRPG: %s's %s vs %s's %s" % \
-        (attacker.name, attacker_weapon_type, target.name, target_weapon_type))
-
-        """ Rock crushes Scissors """
-        if attacker_weapon_type == "rock" and \
-        target_weapon_type == "scissors":
-            is_hit = True
-
-        """ Scissors cuts Paper """
-        if attacker_weapon_type == "scissors" and \
-        target_weapon_type == "target":
-            is_hit = True
-
-        """ Paper covers Rock """
-        if attacker_weapon_type == "paper" and \
-        target_weapon_type == "rock":
-            is_hit = True
-
-        """ Lizard eats Paper """
-        if attacker_weapon_type == "lizard" and \
-        target_weapon_type == "paper":
-            is_hit = True
-
-        """ Spock vaporizes Rock """
-        if attacker_weapon_type == "spock" and \
-        target_weapon_type == "rock":
-            is_hit = True
-
-        """ Lizard poisons Spock """
-        if attacker_weapon_type == "lizard" and \
-        target_weapon_type == "spock":
-            is_hit = True
-
-        """ Rock crushes Lizard """
-        if attacker_weapon_type == "rock" and \
-        target_weapon_type == "lizard":
-            is_hit = True
-
-        """ Spock smashes Scissors """
-        if attacker_weapon_type == "spock" and \
-        target_weapon_type == "scissors":
-            is_hit = True
-
-        """ Paper disproves Spock """
-        if attacker_weapon_type == "paper" and \
-        target_weapon_type == "spock":
-            is_hit = True
-
-        """ Scissors decapitate Lizard """
-        if attacker_weapon_type == "scissors" and \
-        target_weapon_type == "lizard":
-            is_hit = True
-
-        return is_hit
+    def get_attack_damage(self):
+        return random.randrange(1, 5) * self.level
 
     def is_counterpart(self, **kwargs):
         target_unit = kwargs["target_unit"]
@@ -2635,22 +2693,15 @@ class SpiffyUnit:
         return is_counterpart
 
     def get_attack(self, **kwargs):
-        target = kwargs["target"]
-        attacker = kwargs["attacker"]
+        damage = self.get_attack_damage()
+        item = self.get_equipped_weapon()
 
-        damage = self.get_attack_damage(attacker=attacker,
-                                        target=target)
-        item = attacker.get_equipped_weapon()
-
-        if item is None:
-            log.error("SpiffyRPG: couldn't get equipped weapon item id: %s" \
-            % self.equipped_weapon["id"])
-
-        return {
-            "attacker": attacker,
-            "target": target,
-            "damage": damage
+        attack_info = {
+            "damage": damage,
+            "item": item
         }
+
+        return attack_info
 
     def apply_damage(self, hp):
         self.hp = int(self.hp - hp)
@@ -2680,8 +2731,32 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
     def __init__(self, **kwargs):
         announcer_parent = super(SpiffyPlayerAnnouncer, self)
         announcer_parent.__init__(irc=kwargs["irc"],
-                                  destination=["destination"],
+                                  destination=kwargs["destination"],
                                   public=False)
+
+    def inventory(self, **kwargs):
+        player = kwargs["player"]
+        items = player.items
+
+        if len(items) > 0:
+            item_name_list = []
+            equipped_item = player.get_equipped_weapon()
+
+            for item in player.items:
+                item_type = self._get_item_type_indicator(item["item_type"])
+                item_name = "%s [%s]" % (self._b(item["name"]), item_type)
+                is_equipped = item["id"] == equipped_item["id"]                
+
+                if is_equipped:
+                    item_name += " [E]"
+
+                item_name_list.append(item_name)
+
+            announcement_msg = ", ".join(item_name_list)
+        else:
+            announcement_msg = "Your bags seem empty."
+
+        self.announce(announcement_msg)
 
     def item_equip(self, **kwargs):
         item = kwargs["item"]
@@ -2689,7 +2764,7 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
         
         announcement_msg = "You have equipped %s" % item_name
 
-        self._irc.reply(announcement_msg)
+        self.announce(announcement_msg)
 
     def item_equip_failed(self, **kwargs):
         deaths = ("you suddenly burst into flames", 
@@ -2700,11 +2775,11 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
         "lava begins pouring out of your bags",
         "spiders begin pouring out of your bags")
 
-        params = (self._b(kwargs["item_name"]), self._b(random.choice(deaths)))
+        bold_death = self._b(random.choice(deaths))
 
-        announcement_msg = "You attempt to equip %s, but %s" % params
+        announcement_msg = "You attempt to equip that item, but %s" % bold_death
 
-        self._irc.reply(announcement_msg)
+        self.announce(announcement_msg)
 
     def player_regenerates(self, **kwargs):
         """
@@ -3042,9 +3117,9 @@ class SpiffyRPG(callbacks.Plugin):
 
     title = wrap(title, ["user", "text"])
 
-    def attack(self, irc, msg, args, user, target):
+    def attack(self, irc, msg, args, user, target, item_type):
         """
-        attack <target> - Attack something.
+        attack <target> <rock|paper|scissors|lizard|spock>
         """
         is_channel = irc.isChannel(msg.args[0])
 
@@ -3055,31 +3130,52 @@ class SpiffyRPG(callbacks.Plugin):
 
             if dungeon is not None:
                 player = dungeon.get_unit_by_user_id(user_id)
-                unit = dungeon.get_living_unit_by_name(target)
 
-                if unit is not None and player is not None:
-                    log.info("SpiffyRPG: found unit with name %s" % unit.get_title())
+                if player.is_alive():
+                    unit = dungeon.get_living_unit_by_name(target)
 
-                    battle = SpiffyBattle(db=self.db,
-                                          irc=irc,
-                                          destination=msg.args[0])
+                    if unit is not None and player is not None:
+                        log.info("SpiffyRPG: found unit with name %s" % unit.name)
 
-                    battle.add_party_member(player)
-                    battle.add_party_member(unit)
-                    battle.start()
+                        battle = SpiffyBattle(db=self.db,
+                                              irc=irc,
+                                              destination=msg.args[0])
 
-                    #dungeon.clear_dead_units()
-                    dungeon.check_dungeon_cleared(player)
-                    #dungeon.check_population()
+                        """
+                        In order to facilitate the player choosing
+                        their attack, we equip the weapon by the 
+                        type they choose.
+                        """
+                        equip_ok = player.equip_item_by_type(item_type=item_type)
+
+                        """
+                        If the player tries to equip an invalid weapon type,
+                        they DIE. If all is well, the battle begins!
+                        """
+                        if equip_ok:
+                            """
+                            The target unit of the attack now equips a weapon!
+                            """
+                            unit.equip_random_weapon()
+
+                            battle.add_party_member(player)
+                            battle.add_party_member(unit)
+                            battle.start()
+
+                            dungeon.check_dungeon_cleared(player)
+                        else:
+                            dungeon.announcer.unit_death(unit=player)
+                    else:
+                        irc.error("You try to attack %s, but realize nothing is there" % ircutils.bold(target))
                 else:
-                    irc.error("You try to attack %s, but realize nothing is there" % ircutils.bold(target))
+                    irc.error("You are dead.")
             else:
                 irc.error("The dungeon collapses!")
         else:
             """ TODO: allow attacking players in PM """
             irc.error("You must attack channels in the channel.")
 
-    attack = wrap(attack, ["user", "text"])
+    attack = wrap(attack, ["user", "something", "something"])
 
     def sbattle(self, irc, msg, args, user, target_nick_and_weapon):
         """
@@ -3088,8 +3184,8 @@ class SpiffyRPG(callbacks.Plugin):
         is_channel = irc.isChannel(msg.args[0])
 
         if is_channel:
-          irc.error("Start battles in PM: /msg %s b %s" % (irc.nick, target_nick))
-          return
+            irc.error("Start battles in PM: /msg %s b" % (irc.nick))
+            return
 
         target_nick, weapon = target_nick_and_weapon.split(" ", 1)
 
@@ -3249,8 +3345,10 @@ class SpiffyRPG(callbacks.Plugin):
         
         if dungeon is not None:
             player = dungeon.get_unit_by_user_id(user_id)
+            announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                              destination=msg.nick)
 
-            dungeon.announcer.player_inventory(player=player)
+            announcer.inventory(player=player)
         else:
             irc.error("Your bags explode, blanketing you in flames!")
 
