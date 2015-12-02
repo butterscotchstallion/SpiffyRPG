@@ -25,7 +25,8 @@ def configure(advanced):
     conf.registerPlugin('SpiffyRPG', True)
 
 SpiffyRPG = conf.registerPlugin('SpiffyRPG')
-# This is where your configuration variables (if any) should go.  For example:
 
+conf.registerGlobalValue(SpiffyRPG, 'ignoreNicks',
+                         registry.CommaSeparatedListOfStrings(["ChanServ"], _("""These nicks are not players""")))
 
 # vim:set shiftwidth=4 tabstop=4 expandtab textwidth=79:
