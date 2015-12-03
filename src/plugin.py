@@ -462,20 +462,81 @@ class SpiffyBattle:
 class SpiffyWorld:
     """
     Representation of the world
-    """
-    dungeons = []
 
+    1. Get dungeon collection
+    3. Get lookups for items collection (needed for units)
+    4. Get lookups for unit effects collection (needed for units)
+    5. Get lookup for NPC units collection
+    6. Get lookup for player units collection
+    """
     def __init__(self, **kwargs):
         self._irc = kwargs["irc"]
-        self.ignore_nicks = kwargs["ignore_nicks"]
         self.unit_db = kwargs["unit_db"]
+        self.dungeons = []
 
         log.info("SpiffyRPG: SpiffyWorld initializing!")
 
         """
-        Realm announcer could be happening here, iterating
-        each dungeon (channel) and announcing
+        Initialize everything we need for the world
         """
+
+        """
+        The list of user IDs is built using the nicks in the channel
+        at the time of the bot joining. We then use this list to get
+        those units from the PlayerCollection lookup
+        """
+        user_lookup = kwargs["user_lookup"]
+        user_id_list = user_lookup["player_user_id_list"]
+
+        self.ItemCollection = SpiffyItemCollection(db=self.db)
+
+        title_collection = SpiffyUnitTitleCollection(db=self.db)
+
+        base_items = self.ItemCollection.get_base_items()
+
+        """
+        Base items are used every time a unit is created so that
+        the base items can be populated into their inventory. When
+        the dungeons are created, it is populated with its permanent
+        NPCs.
+        """
+        self.dungeon_unit_collection = SpiffyDungeonUnitCollection(db=self.db,
+                                                                   base_items=base_items,
+                                                                   title_collection=title_collection)
+
+        dungeon_collection = SpiffyDungeonCollection(db=self.db,
+                                                     base_items=base_items,
+                                                     title_collection=title_collection)
+        
+        main_dungeon = dungeon_collection.get_dungeon_by_channel(GAME_CHANNEL)
+
+        if main_dungeon is None:
+            log.error("SpiffyRPG: no dungeons for channel %s" % GAME_CHANNEL)
+
+        self.dungeons.append(main_dungeon)
+
+        self.npc_unit_collection = SpiffyNPCUnitCollection(db=self.db,
+                                                           base_items=base_items,
+                                                           title_collection=title_collection)
+
+        """
+        Unlike NPCs, players have a user_id which corresponds to their Limnoria
+        user ID
+        """
+        self.player_unit_collection = SpiffyPlayerUnitCollection(db=self.db,
+                                                                 user_id_list=user_id_list,
+                                                                 base_items=base_items)
+
+    def start(self):
+        for dungeon in self.dungeons:
+            """
+            Pass in the collections so the dungeon can populate
+            using these units
+            """
+            dungeon.populate({
+                player_unit_collection: self.player_unit_collection,
+                dungeon_unit_collection: self.dungeon_unit_collection
+            })
 
     def destroy(self):
         log.info("SpiffyRPG: destroying world!")
@@ -483,23 +544,10 @@ class SpiffyWorld:
         for dungeon in self.dungeons:
             dungeon.destroy()
 
-    def start(self):
-        self.initialize_dungeons()
-
-    def initialize_dungeons(self):
-        if len(self.dungeons) > 0:
-            for dungeon in self.dungeons:
-                dungeon.initialize(irc=self._irc,
-                                   ignore_nicks=self.ignore_nicks,
-                                   unit_db=self.unit_db)
-        else:
-            log.info("SpiffyRPG: warning, no dungeons in this world!")
-
-    def add_dungeon(self, dungeon):
-      if dungeon is not None and dungeon not in self.dungeons:
-          self.dungeons.append(dungeon)
-
     def get_dungeon_by_channel(self, channel):
+        """
+        Retrieves dungeons in the current world
+        """
         lower_channel = channel.lower()
 
         for dungeon in self.dungeons:
@@ -545,7 +593,7 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         avoidance = ("blocks", "parries", "dodges", "escapes",
         "misses", "sidesteps", "circumvents", "evades", "fends off",
         "eludes", "deflects", "wards off")
-        avoidance_word = self._b(random.choice(avoidance))
+        avoidance_word = self._c(random.choice(avoidance), "yellow")
         
         params = (target_name, avoidance_word, attacker_name, attacker_item)
 
@@ -1143,48 +1191,42 @@ class SpiffyDungeon:
         self.irc = kwargs["irc"]
         self.unit_db = kwargs["unit_db"]
         self.unit_level = SpiffyUnitLevel()
-        dungeon = self.get_dungeon_by_channel(GAME_CHANNEL)
+
+        dungeon = kwargs["dungeon"]
+        self.created_at = time.time()
+        self.id = dungeon["id"]
+        self.name = dungeon["name"]
+        self.description = dungeon["description"]
+        self.min_level = dungeon["min_level"]
+        self.max_level = dungeon["max_level"]
+        self.channel = dungeon["channel"].lower()
+
+        self.announcer = SpiffyDungeonAnnouncer(irc=self.irc,
+                                                destination=self.channel)
+
+        self.battle = SpiffyBattle(db=self.db,
+                                   irc=self.irc,
+                                   destination=self.channel)
+
+        """ Remove all timers on initialization """
+        self.destroy()
+
+        """
+        Apparently scheduling these events can throw
+        even when you remove them first!
+        """
+        try:
+            #self.start_dialogue_timer()
+            self.start_spawn_timer()
+            #self.start_chaos_timer()
+            self.start_player_regen_timer()
+        except:
+            pass
         
-        if dungeon is not None:            
-            self.created_at = time.time()
-            self.id = dungeon["id"]
-            self.name = dungeon["name"]
-            self.description = dungeon["description"]
-            self.min_level = dungeon["min_level"]
-            self.max_level = dungeon["max_level"]
+        if "max_level" in kwargs:
+            self.max_level = kwargs["max_level"]
 
-            self.channel = dungeon["channel"].lower()
-            self.unit_quantity = kwargs["unit_quantity"]
-
-            self.announcer = SpiffyDungeonAnnouncer(irc=self.irc,
-                                                    destination=self.channel)
-
-            self.battle = SpiffyBattle(db=self.db,
-                                       irc=kwargs["irc"],
-                                       destination=self.channel)
-
-            """ Remove all timers on initialization """
-            self.destroy()
-
-            """
-            Apparently scheduling these events can throw
-            even when you remove them first!
-            """
-            try:
-                #self.start_dialogue_timer()
-                self.start_spawn_timer()
-                #self.start_chaos_timer()
-                self.start_player_regen_timer()
-            except:
-                pass
-            
-            if "max_level" in kwargs:
-                self.max_level = kwargs["max_level"]
-
-                log.info("SpiffyRPG: creating dungeon with max level %s" % self.max_level)
-
-        else:
-            log.error("SpiffyRPG: unable to find dungeon %s" % (GAME_CHANNEL,))
+            log.info("SpiffyRPG: creating dungeon with max level %s" % self.max_level)
 
     def check_dungeon_cleared(self, player):
         units = self.get_living_units()
@@ -1358,71 +1400,34 @@ class SpiffyDungeon:
         else:
             log.info("SpiffyRPG: no units in %s, not dialoguing" % self.name)
 
-    def initialize(self, **kwargs):
+    def spawn_unit(self, **kwargs):
         """
-        Later on we can add a dungeon id here to customize the 
-        monsters spawned. Maybe make the base monster count a db 
-        column.
+        Spawns a unit based on specs
         """
-        if self.id:
-            self._irc = kwargs["irc"]
-            self.ignore_nicks = kwargs["ignore_nicks"]
+        unit = kwargs["unit"]
 
-            log.info("SpiffyRPG: initializing dungeon #%s - %s with %s monsters" \
-            % (self.id, self.name, self.unit_quantity))
+        objectified_unit = SpiffyUnit(unit=unit,
+                                      db=self.db,
+                                      irc=self.irc)
 
-            """ Regular monsters """
-            self.populate(self.unit_quantity)
-            #self.announcer.open_map(dungeon=self)
-        else:
-            log.error("Cannot populate - no dungeon found.")
+        self.add_unit(objectified_unit)
 
-    def get_dungeon_by_channel(self, channel):
-        cursor = self.db.cursor()
+    def populate(self):
+        """
+        Permanent units in this dungeon
+        """
+        dungeon_unit_collection = kwargs["DungeonUnitCollection"]
+        dungeon_units = dungeon_unit_collection.get_units_by_dungeon_id(self.id)
 
-        cursor.execute("""SELECT id, 
-                          name, channel, description, 
-                          min_level, max_level
-                          FROM spiffyrpg_dungeons
-                          WHERE 1=1
-                          AND channel = ?
-                          LIMIT 1""", (channel.lower(),))
+        for unit in dungeon_units:
+            self.add_unit(unit)
 
-        dungeon = cursor.fetchone()
-        
-        cursor.close()
+        """ Get players """
+        player_unit_collection = kwargs["PlayerUnitCollection"]
+        player_units = player_unit_collection.get_units_by_dungeon_id(self.id)
 
-        if dungeon is not None:
-            return dict(dungeon)
-
-    def get_dungeon_by_id(self, id):
-        cursor = self.db.cursor()
-
-        cursor.execute("""SELECT id, name
-                          FROM spiffyrpg_dungeons
-                          WHERE 1=1
-                          AND id = ?
-                          LIMIT 1""", (id,))
-
-        dungeon = cursor.fetchone()
-        
-        cursor.close()
-
-        if dungeon is not None:
-            return dict(dungeon)
-
-    def populate(self, unit_quantity):
-        units = []
-     
-        """ Random NPCs """
-        unit_id_list = self.unit_db.get_unit_ids(limit=unit_quantity)
-
-        """ Special units """
-        special_ids = self.unit_db.get_turkey_ids(limit=5)
-
-        for sid in special_ids:
-            if sid not in unit_id_list:
-                unit_id_list.append(str(sid))
+        for player in player_units:
+            self.add_unit(player)
 
         """
         Player lookup
@@ -1441,13 +1446,6 @@ class SpiffyDungeon:
             else:
                 log.info("SpiffyRPG: couldn't find players to add to dungeon")
 
-        """
-        1. Get dialogue
-        2. Get unit effects
-        2. Get items
-        3. Get item effects
-        4. 
-        """
         dialogues_lookup = self.unit_db.get_unit_dialogue(unit_ids=unit_id_list)
         items_lookup = self.unit_db.get_unit_items(unit_ids=unit_id_list)
         unit_effects_lookup = self.unit_db.get_unit_effects(unit_ids=unit_id_list)        
@@ -1837,6 +1835,9 @@ class SpiffyUnitDB:
         cursor.close()
 
     def get_top_players_by_xp(self):
+        """
+        Players are units that have a limnoria_user_id > 0
+        """
         cursor = self.db.cursor()
 
         cursor.execute("""SELECT p.id,
@@ -1848,6 +1849,8 @@ class SpiffyUnitDB:
                           u.experience_gained
                           FROM spiffyrpg_units u
                           JOIN spiffyrpg_unit_types ut ON ut.id = u.unit_type_id
+                          WHERE 1=1
+                          AND u.limnoria_user_id > 0
                           ORDER BY p.experience_gained DESC
                           LIMIT 3""")
 
@@ -2002,10 +2005,6 @@ class SpiffyUnitDB:
 
         return battle_id
 
-    def get_turkey_ids(self, **kwargs):
-        return self.get_units_by_type(unit_id=self.unit_turkey,
-                                      limit=kwargs["limit"])
-
     def get_unit_types(self):
         cursor = self.db.cursor()
 
@@ -2031,31 +2030,6 @@ class SpiffyUnitDB:
                    LIMIT %s""" % (limit)
 
         cursor.execute(query, (kwargs["unit_id"],))
-        ids = cursor.fetchall()
-        cursor.close()
-
-        if ids is not None:
-            for i in ids:
-                id_list.append(str(dict(i)["id"]))
-
-        return id_list
-
-    def get_unit_ids(self, **kwargs):
-        """
-        Fetches random units with a limit
-        """
-        id_list = []
-        cursor = self.db.cursor()
-        limit = int(kwargs["limit"])
-
-        query = """SELECT id
-                   FROM spiffyrpg_units
-                   WHERE 1=1
-                   AND limnoria_user_id = 0
-                   ORDER BY RANDOM()
-                   LIMIT %s""" % (limit,)
-
-        cursor.execute(query)
         ids = cursor.fetchall()
         cursor.close()
 
@@ -2152,32 +2126,6 @@ class SpiffyUnitDB:
 
         return lookup
 
-    def get_unit_type_titles_lookup(self, **kwargs):
-        cursor = self.db.cursor()
-        
-        cursor.execute("""SELECT
-                          t.unit_type_id,
-                          t.required_level,
-                          t.title
-                          FROM spiffyrpg_unit_type_titles t
-                          ORDER BY t.required_level ASC""")
-
-        titles = cursor.fetchall()
-        cursor.close()
-        titles_lookup = {}
-
-        if len(titles) > 0:
-            for t in titles:
-                title = dict(t)
-                unit_type_id = title["unit_type_id"]
-
-                if not unit_type_id in titles_lookup:
-                    titles_lookup[unit_type_id] = []
-
-                titles_lookup[unit_type_id].append(title)
-
-        return titles_lookup
-
     def get_base_items_lookup(self):
         cursor = self.db.cursor()
         
@@ -2214,15 +2162,282 @@ class SpiffyUnitDB:
 
         return items_lookup
 
-    def get_unit_items(self, **kwargs):
+class SpiffyDungeonUnitCollection:
+    """
+    Stores persistant units in a dungeon by the dungeon ID
+    """
+    def __init__(self, **kwargs):
+        self.db = kwargs["db"]
+        self.base_items = kwargs["base_items"]
+        self.title_collection = kwargs["title_collection"]
+        self.units = self._get_dungeon_unit_lookup()
+
+    def get_units_by_dungeon_id(self, **kwargs):
+        dungeon_id = kwargs["dungeon_id"]
+
+        if dungeon_id in self.units:
+            return self.units[dungeon_id]
+
+    def _get_dungeon_unit_lookup(self):
+        cursor = self.db.cursor()
+   
+        cursor.execute("""SELECT
+                          u.id,
+                          u.unit_type_id,
+                          u.name AS unit_name,
+                          utypes.name AS unit_type_name,
+                          u.experience,
+                          u.limnoria_user_id AS user_id,
+                          du.unit_id,
+                          du.dungeon_id
+                          FROM spiffyrpg_dungeon_units du
+                          JOIN spiffyrpg_units u ON u.id = du.unit_id
+                          JOIN spiffyrpg_unit_types utypes ON utypes.id = u.unit_type_id
+                          JOIN spiffyrpg_dungeons d ON d.id = du.dungeon_id""")
+
+        tmp_units = cursor.fetchall()
+        
+        cursor.close()
+
+        dungeons_lookup = {}
+
+        if len(tmp_units) > 0:
+            for u in tmp_units:
+                unit = dict(u)
+                dungeon_id = dungeon["dungeon_id"]
+
+                if not dungeon_id in dungeons_lookup:
+                    dungeons_lookup = []
+
+                objectified_unit = SpiffyUnit(unit=unit,
+                                              db=self.db,
+                                              irc=self.irc,
+                                              base_items=self.base_items,
+                                              title_collection=self.title_collection)
+
+                dungeons_lookup[dungeon_id].append(objectified_unit)
+
+        return dungeons_lookup
+
+class SpiffyDungeonCollection:
+    """
+    Stores a lookup of dungeons
+    """
+    def __init__(self, **kwargs):
+        self.db = kwargs["db"]
+        self.UnitDB = SpiffyUnitDB(db=self.db)
+        self.base_items = kwargs["base_items"]
+        self.title_collection = kwargs["title_collection"]
+        self.dungeons = self._get_dungeon_lookup()
+
+        log.info("SpiffyRPG: fetching dungoens")
+
+    def get_dungeon_by_channel(self, **kwargs):
+        channel = kwargs["channel"].lower()
+
+        for dungeon in self.dungeons:
+            if dungeon["channel"].lower() == channel:
+                return dungeon
+
+    def _get_dungeon_lookup(self):
+        cursor = self.db.cursor()
+   
+        cursor.execute("""SELECT 
+                          id, 
+                          name, 
+                          channel, 
+                          description, 
+                          min_level,
+                          max_level
+                          FROM spiffyrpg_dungeons""")
+
+        dungeons = cursor.fetchall()
+        
+        cursor.close()
+
+        dungeons_lookup = {}
+
+        if len(dungeons) > 0:
+            for d in dungeons:
+                dungeon = dict(d)
+                channel = dungeon["channel"]
+
+                objectified_dungeon = SpiffyDungeon(db=self.db,
+                                                    irc=self.irc,
+                                                    dungeon=dungeon,
+                                                    unit_db=self.UnitDB,
+                                                    base_items=self.base_items,
+                                                    title_collection=self.title_collection)
+
+                dungeons_lookup[channel] = objectified_dungeon
+
+        return dungeons_lookup
+
+class SpiffyUnitTitleCollection:
+    """
+    Stores unit type titles based on stage/level
+    """
+    def __init__(self, **kwargs):
+        self.db = kwargs["db"]
+        self.titles = self._get_titles_lookup()
+
+        log.info("SpiffyRPG: fetching unit titles")
+
+    def get_title_by_unit_type_id(self, **kwargs):
+        unit_type_id = kwargs["unit_type_id"]
+
+        if unit_type_id in self.titles:
+            return self.titles[unit_type_id]
+
+    def _get_titles_lookup(self):
+        cursor = self.db.cursor()
+        
+        cursor.execute("""SELECT
+                          t.unit_type_id,
+                          t.required_level,
+                          t.title
+                          FROM spiffyrpg_unit_type_titles t
+                          ORDER BY t.required_level ASC""")
+
+        titles = cursor.fetchall()
+        cursor.close()
+        titles_lookup = {}
+
+        if len(titles) > 0:
+            for t in titles:
+                title = dict(t)
+                unit_type_id = title["unit_type_id"]
+
+                if not unit_type_id in titles_lookup:
+                    titles_lookup[unit_type_id] = []
+
+                titles_lookup[unit_type_id].append(title)
+
+        return titles
+
+class SpiffyEffect:
+    """
+    Representation of an effect. Effects can alter the behavior
+    or stats of a unit and can have a duration or be permanent
+    """
+    def __init__(self, **kwargs):
+        effect = kwargs["effect"]
+        self.id = effect["id"]
+        self.name = effect["name"]
+        self.description = effect["description"]
+        self.operator = effect["operator"]
+        self.hp_adjustment = effect["hp_adjustment"]
+        self.incoming_damage_adjustment = effect["incoming_damage_adjustment"]
+        self.outgoing_damage_adjustment = effect["outgoing_damage_adjustment"]
+        self.interval_seconds = effect["interval_seconds"]
+        self.stacks = int(effect["stacks"])
+
+    def get_hp_adjustment(self):
+        return self.hp_adjustment * self.stacks
+
+    def get_incoming_damage_adjustment(self):
+        return self.incoming_damage_adjustment * self.stacks
+
+    def get_outgoing_damage_adjustment(self):
+        return self.outgoing_damage_adjustment * self.stacks
+
+class SpiffyItem:
+    """
+    Representation of an item which a unit can possess
+    """
+    def __init__(self, **kwargs):
+        self.db = kwargs["db"]
+        self.id = kwargs["id"]
+        self.effects = kwargs["effects"]
+        self.name = kwargs["name"]
+        self.description = kwargs["description"]
+        self.min_level = kwargs["min_level"]
+        self.max_level = kwargs["max_level"]
+        self.rarity = kwargs["rarity"]
+        self.equipment_slot = kwargs["equipment_slot"]
+        self.item_type = kwargs["item_type"].lower()
+        self.is_permanent = kwargs["is_permanent"]
+        self.unit_type_id = kwargs["unit_type_id"]
+        self.created_at = kwargs["created_at"]
+
+    def is_rock(self):
+        return self.item_type == "rock"
+
+    def is_paper(self):
+        return self.item_type == "paper"
+
+    def is_scissors(self):
+        return self.item_type == "scissors"
+
+    def is_lizard(self):
+        return self.item_type == "lizard"
+
+    def is_spock(self):
+        return self.item_type == "spock"
+
+    def is_usable_by_level(self, **kwargs):
+        return self.min_level <= kwargs["level"] and \
+        kwargs["level"] <= self.max_level
+
+class SpiffyItemCollection:
+    """
+    Stores a lookup of all items by item id
+    """
+    def __init__(self, **kwargs):
+        self.db = kwargs["db"]
+        self.items = {}
+        self.item_lookup = self._get_items()
+        self.item_effects = self._get_item_effects()
+        self.create_items()
+
+    def get_item_by_id(self, **kwargs):
+        item_id = kwargs["item_id"]
+
+        if item_id in self.items:
+            return self.items[item_id]
+
+    def _create_items(self):
+        for item in self.item_lookup:
+            effects = []
+
+            if item["id"] in self.item_effects:
+                effects = self.item_effects
+
+            objectified_item = SpiffyItem({
+                "db": self.db,
+                "effects": effects,
+                "name": item["name"],
+                "id": item["id"],
+                "description": item["description"],
+                "min_level": item["min_level"],
+                "max_level": item["max_level"],
+                "rarity": item["rarity"],
+                "equipment_slot": item["equipment_slot"],
+                "item_type": item["item_type"],
+                "is_permanent": item["is_permanent"],
+                "unit_type_id": item["unit_type_id"],
+                "created_at": item["created_at"]
+            })
+
+            if objectified_item.id not in self.items:
+                self.items[objectified_item.id] = objectified_item
+
+    def get_base_items(self, **kwargs):
+        items = kwargs["items"]
+        base_items = []
+
+        for item in items:
+            if item.is_permanent:
+                base_items.append(item)
+
+        return base_items
+
+    def _get_items(self, **kwargs):
         """
         Fetches items for one or many units
         """
         cursor = self.db.cursor()
         
-        comma_separated_string = ",".join(kwargs["unit_ids"])
-        params = (comma_separated_string,)
-
         cursor.execute("""SELECT
                           i.id,
                           i.name,
@@ -2234,12 +2449,8 @@ class SpiffyUnitDB:
                           i.equipment_slot,
                           i.is_permanent,
                           i.unit_type_id,
-                          i.created_at,
-                          ui.unit_id
-                          FROM spiffyrpg_items i
-                          JOIN spiffyrpg_unit_items ui ON ui.item_id = i.id
-                          WHERE 1=1
-                          AND ui.unit_id IN (%s)""" % params)
+                          i.created_at
+                          FROM spiffyrpg_items i""")
 
         items = cursor.fetchall()
         
@@ -2248,36 +2459,31 @@ class SpiffyUnitDB:
         lookup = {}
 
         if len(items) > 0:
-            for item in items:
-                i = dict(item)
-                item_id = i["id"]
-                unit_id = i["unit_id"]
+            for i in items:
+                item = dict(i)
+                item_id = item["id"]
 
-                if not item_id in lookup:
-                    lookup[unit_id] = []
-
-                lookup[unit_id].append(i)
+                """
+                This item is objectified above ^
+                """
+                lookup[item_id] = item
 
         return lookup
 
-    def get_item_effects(self, **kwargs):
+    def _get_item_effects(self, **kwargs):
         """
-        Fetches item effects for one or items
+        Fetches item effects
         """
         cursor = self.db.cursor()
         
-        comma_separated_string = ",".join(kwargs["item_ids"])
-        params = (comma_separated_string,)
-
         cursor.execute("""SELECT
-                          i.id,
+                          e.item_id,
+                          e.effect_id,
                           e.effect_on_possession,
                           e.duration_in_seconds,
                           e.created_at
                           FROM spiffyrpg_item_effects e
-                          JOIN spiffyrpg_items i ON i.id = e.item_id                        
-                          WHERE 1=1
-                          AND i.id IN (%s)""" % params)
+                          WHERE 1=1""" % params)
 
         effects = cursor.fetchall()
         
@@ -2286,26 +2492,163 @@ class SpiffyUnitDB:
         lookup = {}
 
         if len(effects) > 0:
-            for effect in effects:
-                e = dict(effect)
-                effect_id = e["id"]
-                item_id = e["item_id"]
+            for e in effects:
+                effect = dict(e)
+                item_id = effect["item_id"]
 
-                if not effect_id in lookup:
+                if not item_id in lookup:
                     lookup[item_id] = []
 
-                lookup[item_id].append(effect)
+                objectified_effect = SpiffyEffect(effect=effect)
+
+                lookup[item_id].append(objectified_effect)
 
         return lookup
 
-    def get_unit_dialogue(self, **kwargs):
+class SpiffyNPCUnitCollection:
+    """
+    Stores a lookup of all the NPCs by their unit id
+    """
+    def __init__(self, **kwargs):
+        self.irc = kwargs["irc"]
+        self.db = kwargs["db"]
+        self.base_items = kwargs["base_items"]
+        self.unit_lookup = self._get_unit_lookup()
+
+    def get_unit_by_id(self, **kwargs):
+        unit_id = kwargs["unit_id"]
+
+        if unit_id in self.unit_lookup:
+            return self.unit_lookup[unit_id]
+
+    def _get_unit_lookup(self, **kwargs):
+        """
+        Grab all NPCs
+        """
+        cursor = self.db.cursor()
+        
+        query = """SELECT
+                   u.id,
+                   u.unit_type_id,
+                   u.name AS unit_name,
+                   utypes.name AS unit_type_name,
+                   u.experience,
+                   u.limnoria_user_id AS user_id
+                   FROM spiffyrpg_units u
+                   JOIN spiffyrpg_unit_types utypes ON utypes.id = u.unit_type_id
+                   WHERE 1=1
+                   AND u.limnoria_user_id = 0
+                   GROUP BY u.id"""
+
+        cursor.execute(query)
+
+        tmp_units = cursor.fetchall()
+        units = {}
+
+        if len(tmp_units) > 0:
+            for u in tmp_units:
+                unit = dict(u)
+                unit_id = unit["id"]
+
+                objectified_unit = SpiffyUnit(unit=unit,
+                                              db=self.db,
+                                              irc=self.irc,
+                                              base_items=self.base_items)
+
+                units[unit_id] = objectified_unit
+
+        cursor.close()
+
+        return units
+
+class SpiffyPlayerUnitCollection:
+    """
+    Stores a lookup of all the players in the channel by
+    their user id. Different from other units because 
+    NPCs have a user id of zero
+    """
+    def __init__(self, **kwargs):
+        self.db = kwargs["db"]
+        self.base_items = kwargs["base_items"]
+        self.players = self._get_player_ids(kwargs["user_id_list"])
+
+    def get_player_by_user_id(self, **kwargs):
+        user_id = kwargs["user_id"]
+
+        if unit_id in self.players:
+            return self.players[user_id]
+
+    def _get_player_lookup(self, **kwargs):
+        """
+        This query grabs the unit, its type, and its
+        title.
+        """
+        cursor = self.db.cursor()
+        
+        """
+        The main difference between players and NPCs is that
+        only players have a Limnoria user id.
+        """
+        where = ""
+
+        comma_separated_string = ",".join(kwargs["user_id_list"])
+        where = "AND u.limnoria_user_id IN (%s)" % comma_separated_string
+
+        query = """SELECT
+                   u.id,
+                   u.unit_type_id,
+                   u.name AS unit_name,
+                   utypes.name AS unit_type_name,
+                   u.experience,
+                   u.limnoria_user_id AS user_id
+                   FROM spiffyrpg_units u
+                   JOIN spiffyrpg_unit_types utypes ON utypes.id = u.unit_type_id
+                   WHERE 1=1
+                   AND u.limnoria_user_id > 0
+                   GROUP BY u.id
+                   ORDER BY u.experience DESC""" % where
+
+        cursor.execute(query)
+
+        tmp_units = cursor.fetchall()
+        units = {}
+
+        if len(tmp_units) > 0:
+            for unit in tmp_units:
+                objectified_unit = SpiffyUnit(unit=unit,
+                                              db=self.db,
+                                              irc=self.irc,
+                                              base_items=self.base_items)
+
+                units[unit.user_id] = objectified_unit
+
+        cursor.close()
+
+        return units
+
+class SpiffyUnitDialogueCollection:
+    """
+    Stores a lookup of all dialogue each time the world
+    loads
+    """
+    def __init__(self, **kwargs):
+        self.db = kwargs["db"]
+        self.dialogue = self.get_unit_dialogue()
+
+    def get_dialogue_by_unit_id(self, **kwargs):
+        unit_id = kwargs["unit_id"]
+
+        if unit_id in self.dialogue:
+            return self.dialogue[unit_id]
+
+    def _get_unit_dialogue(self, **kwargs):
         """
         Fetches dialogue for one or many units
         """
         cursor = self.db.cursor()
         
-        comma_separated_string = ",".join(kwargs["unit_ids"])
-        params = (comma_separated_string,)
+        #comma_separated_string = ",".join(kwargs["unit_ids"])
+        #params = (comma_separated_string,)
 
         cursor.execute("""SELECT
                           ud.id,
@@ -2314,8 +2657,7 @@ class SpiffyUnitDB:
                           u.id AS unit_id
                           FROM spiffyrpg_dialogue ud
                           JOIN spiffyrpg_units u ON u.id = ud.unit_id
-                          WHERE 1=1
-                          AND u.id IN (%s)""" % params)
+                          WHERE 1=1""" % params)
 
         dialogues = cursor.fetchall()
         
@@ -2348,39 +2690,30 @@ class SpiffyUnit:
         self.db = kwargs["db"]
 
         """
-        min/max level are only used for NPCs
-        """
-        min_level = 1
-        max_level = 5
-
-        if "min_level" in kwargs:
-            min_level = kwargs["min_level"]
-
-        if "max_level" in kwargs:
-            max_level = kwargs["max_level"]
-
-        """
         Start by initializing the unit as if it is an NPC,
         since for the most part, a player is identical to a NPC.
         """
         self.slain_foes = []
         self.battles = []
         self.unit_level = SpiffyUnitLevel()
-        self.id = kwargs["unit"]["id"]
-        self.user_id = kwargs["user_id"]
+
+        unit = kwargs["unit"]
+
+        self.id = unit["id"]
+        self.user_id = unit["user_id"]
         self.created_at = time.time()
-        self.unit_type_name = kwargs["unit"]["unit_type_name"]
-        self.unit_type_id = kwargs["unit"]["unit_type_id"]
-        self.effects = kwargs["unit"]["effects"]
-        self.items = kwargs["unit"]["items"]
-        self.level = random.randrange(min_level, max_level)
-        self.experience = self.unit_level.get_xp_for_level(self.level)
+        self.unit_type_name = unit["unit_type_name"]
+        self.unit_type_id = unit["unit_type_id"]
+        self.effects = unit["effects"]
+        self.items = unit["items"]
+        self.experience = unit["experience"]
+        self.level = self.unit_level.get_level_by_xp(self.experience)
         self.is_hostile = True
-        self.name = kwargs["unit"]["unit_name"]
+        self.name = unit["unit_name"]
         self.nick = self.name
 
         """ When unit is an NPC then use the unit name """
-        self.name = kwargs["unit"]["unit_name"]
+        self.name = unit["unit_name"]
 
         """
         If the unit has a non-zero user_id, then they are a player. 
@@ -2393,11 +2726,9 @@ class SpiffyUnit:
             """
             When the unit is a player, recalculate experience
             """
-            self.experience = kwargs["unit"]["experience"]
-            self.level = self.unit_level.get_level_by_xp(self.experience)
             self.is_hostile = False
             self.is_player = True
-            self.nick = kwargs["nick"]
+            self.nick = unit["nick"]
 
             self.announcer = SpiffyPlayerAnnouncer(irc=kwargs["irc"],
                                                    destination=self.nick)
@@ -2406,13 +2737,15 @@ class SpiffyUnit:
         A unit's title is customized based on the unit type
         and current level.
         """
-        self.title = self.get_unit_title_from_lookup(kwargs["unit"]["titles"])
+        title_collection = kwargs["title_collection"]
+        title_lookup = title_collection.get_title_by_unit_type_id(self.unit_type_id)
+
+        self.title = self.get_unit_title_from_lookup(title_lookup)
 
         """
         Each unit should get some base items for their level.
         """
-        base_items = self.get_base_items_from_lookup(kwargs["base_items_lookup"])
-        self.populate_inventory_with_base_items(base_items)
+        self.populate_inventory_with_base_items(kwargs["base_items"])
 
         """
         The above line ensures that the unit always has at least the
@@ -2456,9 +2789,9 @@ class SpiffyUnit:
         if self.is_below_max_hp():
             self.hp += regen_hp
 
-            log.info("SpiffyRPG: unit %s gains %sHP for winning" % (self.name, regen_hp))
+            log.info("SpiffyRPG: unit %s gains %sHP from Regneration" % (self.name, regen_hp))
         else:
-            log.info("SpiffyRPG: unit %s is at max HP (%s/%s)" % (self.name, current_hp, max_hp))
+            log.info("SpiffyRPG: unit %s is not rengerating because max HP (%s/%s)" % (self.name, current_hp, max_hp))
 
     def is_below_max_hp(self):
         current_hp = self.get_hp()
@@ -2469,7 +2802,7 @@ class SpiffyUnit:
     def add_victory_hp_bonus(self):
         current_hp = self.get_hp()
         max_hp = self.calculate_hp()
-        hp_bonus = int(max_hp * .25)
+        hp_bonus = int(max_hp * .10)
 
         if self.is_below_max_hp():
             self.hp += hp_bonus
@@ -2583,7 +2916,7 @@ class SpiffyUnit:
         if item_type == "paper" or item_type[0] == "p":
             item_type = "paper"
 
-        if item_type == "scissors" or item_type[0] == "s":
+        if item_type == "scissors" or (item_type[0] == "s" and item_type != "spock"):
             item_type = "scissors"
 
         if item_type == "lizard" or item_type[0] == "l":
@@ -2792,7 +3125,7 @@ class SpiffyUnit:
             self.effects.append(effect)
 
     def get_attack_damage(self):
-        return random.randrange(1, 5) * self.level
+        return random.randrange(5, 10) * self.level
 
     def is_counterpart(self, **kwargs):
         target_unit = kwargs["target_unit"]
@@ -3021,19 +3354,13 @@ class SpiffyRPG(callbacks.Plugin):
         self.__parent = super(SpiffyRPG, self)
         self.__parent.__init__(irc)
         self.irc = irc
-
+        self.ignore_nicks = self.registryValue("ignoreNicks")
         db_lib = SpiffyRPGDB()
         self.db = db_lib._get_db()
         self.unit_level = SpiffyUnitLevel()
         
         self.unit_db = SpiffyUnitDB(db=self.db)
         self.classes = self.unit_db.get_unit_types()
-
-        self.SpiffyWorld = SpiffyWorld(irc=irc,
-                                       unit_db=self.unit_db,
-                                       ignore_nicks=self.registryValue("ignoreNicks"))
-        
-        self._init_world()
 
     def _get_user_id(self, irc, prefix):
         try:
@@ -3073,18 +3400,15 @@ class SpiffyRPG(callbacks.Plugin):
                 return c["id"]
 
     def _init_world(self):
-        max_xp = self.unit_db.get_max_player_level()
-        max_level = self.unit_level.get_level_by_xp(max_xp)
-        max_units = random.randrange(5, 20)
-
-        dungeon = SpiffyDungeon(db=self.db,
-                                irc=self.irc,
-                                unit_db=self.unit_db,
-                                unit_quantity=max_units,
-                                max_level=max_level,
-                                destination=GAME_CHANNEL)
+        """
+        We need the nicks in the channel in order to initialize
+        the world.
+        """
+        user_lookup = self.get_user_lookup_from_channel()
         
-        self.SpiffyWorld.add_dungeon(dungeon)
+        self.SpiffyWorld = SpiffyWorld(irc=self.irc,
+                                       unit_db=self.unit_db,
+                                       user_lookup=user_lookup)
         self.SpiffyWorld.start()
 
     def inspect(self, irc, msg, args, user, target):
@@ -3627,6 +3951,21 @@ class SpiffyRPG(callbacks.Plugin):
 
     """ Admin-only commands """
 
+    def fspawn(self, irc, msg, args, unit_level, unit_type_name):
+        """
+        Spawns a NPC - <level> <zen master|hacker|troll>
+        """
+        dungeon = self.SpiffyWorld.get_dungeon_by_channel(msg.args[0])
+
+        if dungeon is not None:
+            unit_type_id = self._get_unit_type_id_by_name(unit_type_name)
+
+            dungeon.spawn_unit(level=unit_level, unit_type_id=unit_type_id)
+        else:
+            log.error("SpiffyRPG: could not find dungeon %s" % msg.args[0])
+
+    fchaos = wrap(fchaos, [positiveInt("something"), optional("anything")])
+
     def fchaos(self, irc, msg, args):
         """
         Heralds chaos
@@ -3720,17 +4059,15 @@ class SpiffyRPG(callbacks.Plugin):
         is_bot_joining = msg.nick == irc.nick
         user_id = None
 
-        if not is_bot_joining:
+        if is_bot_joining:
+            registered_users = self.get_user_ids_for_channel()
+
+            self._init_world(registered_users=registered_users)
+        else:
             try:
                 user_id = self._get_user_id(irc, msg.prefix)
             except KeyError:
                 pass
-
-            """
-            Need to refactor this so that I don't have to repeat
-            all the stuff in dungeon->populate
-            """
-            return
 
             if user_id is not None:
                 user_ids = [str(user_id)]
@@ -3747,7 +4084,6 @@ class SpiffyRPG(callbacks.Plugin):
                         unit = SpiffyUnit(unit=player,
                                           db=self.db,
                                           irc=irc,
-                                          user_id=user_id,
                                           nick=msg.nick)
 
                         """ Voice recognized users """
