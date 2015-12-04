@@ -1032,11 +1032,11 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
             effects = []
 
             for effect in player.effects:
-                duration = int((time.time() - effect["expires_at"]) / 60)
-                bold_effect_name = ircutils.bold(effect["name"])
-                bold_duration = ircutils.bold(duration)
+                #duration = int((time.time() - effect["expires_at"]) / 60)
+                bold_effect_name = ircutils.bold(effect.name)
+                #bold_duration = ircutils.bold(duration)
                 
-                effects.append("%s (%s minutes)" % (bold_effect_name, bold_duration))
+                effects.append("%s" % (bold_effect_name,))
 
             effects_str = ", ".join(effects)
 
@@ -2648,6 +2648,7 @@ class SpiffyPlayerUnitCollection:
         cursor.execute(query)
 
         tmp_units = cursor.fetchall()
+        cursor.close()
         units = []
         user_lookup = self.user_lookup["look_up_user_ids"]
 
@@ -2655,22 +2656,19 @@ class SpiffyPlayerUnitCollection:
             for u in tmp_units:
                 unit = dict(u)
                 user_id = unit["user_id"]
-                nick = ""
 
                 if user_id in user_lookup:
                     nick = user_lookup[user_id]
 
-                unit["nick"] = nick
+                    unit["nick"] = nick
 
-                objectified_unit = SpiffyUnit(unit=unit,
-                                              db=self.db,
-                                              user_lookup=self.user_lookup,
-                                              collections=self.collections)
+                    objectified_unit = SpiffyUnit(unit=unit,
+                                                  db=self.db,
+                                                  user_lookup=self.user_lookup,
+                                                  collections=self.collections)
 
-                units.append(objectified_unit)
-
-        cursor.close()
-
+                    units.append(objectified_unit)
+        
         return units
 
 class SpiffyUnitDialogueCollection:
@@ -3858,6 +3856,22 @@ class SpiffyRPG(callbacks.Plugin):
             irc.error("You must attack channels in the channel.")
 
     attack = wrap(attack, ["user", "text"])
+
+    def _challenge_exists(self, attacker_user_id, target_user_id):
+        """
+        Checks if there is a challenge for this versus
+        """
+        vs_id = "%s_%s" % (attacker_user_id, target_user_id)
+        vs_id_backwards = "%s_%s" % (target_user_id, attacker_user_id)
+        versus = None
+
+        if vs_id in self.challenges:
+            versus = self.challenges[vs_id]
+
+        if vs_id_backwards in self.challenges:
+            versus = self.challenges[vs_id_backwards]
+
+        return versus is not None
 
     def challenge(self, irc, msg, args, user, target_nick):
         """
