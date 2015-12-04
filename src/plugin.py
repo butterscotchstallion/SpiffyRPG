@@ -396,7 +396,15 @@ class SpiffyBattle:
                                          GAME_CHANNEL)
             """
             if not loser.is_alive():
-                self.announcer.unit_death(unit=loser)
+                self.announcer.unit_death(unit=loser,
+                                          slain_by=winner)
+
+                dialogue = winner.dialogue_win()
+
+                self.announcer.unit_dialogue(winner,
+                                             dialogue)
+
+            #winner.add_victory(battle_info=battle_info)
 
             """
             Only players gain experience...so far.
@@ -417,8 +425,6 @@ class SpiffyBattle:
                 player_gained_level = winner.add_experience(xp)
 
                 if player_gained_level:
-                    log.info("SpiffyRPG: %s is now level %s!" % (winner.name, winner.level))
-
                     self.announcer.player_gained_level(winner)
             else:
                 log.info("SpiffyRPG: %s won but they ain't no not a playa!" % winner.name)
@@ -480,7 +486,7 @@ class SpiffyWorld:
         item_collection = SpiffyItemCollection(db=self.db)
         effects_collection = SpiffyEffectsCollection(db=self.db)
         title_collection = SpiffyUnitTitleCollection(db=self.db)
-
+        dialogue_collection = SpiffyUnitDialogueCollection(db=self.db)
         self.item_collection = item_collection
 
         """
@@ -492,6 +498,7 @@ class SpiffyWorld:
             "effects_collection": effects_collection,
             "item_collection": item_collection,
             "title_collection": title_collection,
+            "dialogue_collection": dialogue_collection,
             "ignore_nicks": kwargs["ignore_nicks"]
         }
 
@@ -556,19 +563,41 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
                                   destination=kwargs["destination"],
                                   public=True)
 
+    def unit_dialogue(self, unit, dialogue):
+        """
+        %s: %s
+        """
+        if dialogue is None:
+            log.error("SpiffyWorld: dialogue error for unit %s" % unit.name)
+            return
+
+        bold_title = self._get_unit_title(unit)
+        dialogue_text = dialogue["dialogue"]
+        orange_dialogue = self._c(dialogue_text, "orange")
+        padded_level = str(unit.level).zfill(2)
+        bold_level = self._b(padded_level)
+
+        params = (bold_level, bold_title, orange_dialogue)
+
+        announcement_msg = "[%s] %s says %s" % params
+
+        self.announce(announcement_msg)
+
     def unit_death(self, **kwargs):
         unit = kwargs["unit"]
+        slain_by = kwargs["slain_by"]
+        slain_by_name = self._b(slain_by.name)
 
         name = self._b(unit.name)
-        died = self._c("died", "red")
+        slain = self._c("slain", "red")
 
-        announcement_msg = "%s has %s." % (name, died)
+        announcement_msg = "%s was %s by %s." % (name, slain, slain_by_name)
 
         self.announce(announcement_msg)
 
     def player_gained_level(self, player):
         """
-        Player_1 has gained level X! 
+        Player_1 has gained level X!
         """
         params = (self._b(self._c("DING!", "yellow")),
                   self._get_unit_title(player), 
@@ -745,7 +774,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         %s: %s
         """
         if dialogue is None:
-            log.error("SpiffyWorld: dialogue error for unit %s" % unit.name)
+            log.error("SpiffyWorld: no dialogue for %s" % unit.name)
             return
 
         bold_title = self._get_unit_title(unit)
@@ -1545,7 +1574,7 @@ class SpiffyDungeon:
         for unit in self.units:
             unit_name_match = unit.name.lower() == lower_name
 
-            if unit.is_alive and unit_name_match:
+            if unit.is_alive() and unit_name_match:
                 return unit
 
     def get_dead_unit_by_name(self, name):
@@ -2601,10 +2630,10 @@ class SpiffyUnitDialogueCollection:
         
         cursor.execute("""SELECT
                           ud.id,
-                          ud.name,
+                          ud.dialogue,
                           ud.context,
                           u.id AS unit_id
-                          FROM spiffyrpg_dialogue ud
+                          FROM spiffyrpg_unit_dialogue ud
                           JOIN spiffyrpg_units u ON u.id = ud.unit_id""")
 
         dialogues = cursor.fetchall()
@@ -2645,15 +2674,16 @@ class SpiffyUnit:
         self.title_collection = collections["title_collection"]
         item_collection = collections["item_collection"]
         effects_collection = collections["effects_collection"]
+        dialogue_collection = collections["dialogue_collection"]
 
-        base_items = item_collection.get_base_items()
+        self.base_items = item_collection.get_base_items()
 
         """
         Start by initializing the unit as if it is an NPC,
         since for the most part, a player is identical to a NPC.
         """
         self.slain_foes = []
-        self.battles = []
+        self.victories = []
         
         unit = kwargs["unit"]
 
@@ -2664,6 +2694,7 @@ class SpiffyUnit:
         self.unit_type_id = unit["unit_type_id"]
         self.effects = effects_collection.get_effects_by_unit_id(unit_id=self.id)
         self.items = item_collection.get_items_by_unit_id(unit_id=self.id)
+        self.dialogue = dialogue_collection.get_dialogue_by_unit_id(unit_id=self.id)
         self.experience = unit["experience"]
         self.level = self.unit_level.get_level_by_xp(self.experience)
         self.is_hostile = True
@@ -2695,7 +2726,7 @@ class SpiffyUnit:
         """
         Each unit should get some base items for their level.
         """
-        self.populate_inventory_with_base_items(base_items)
+        self.populate_inventory_with_base_items()
 
         """
         The above line ensures that the unit always has at least the
@@ -2708,6 +2739,13 @@ class SpiffyUnit:
         the level must be determined prior.
         """
         self.hp = self.calculate_hp()
+
+        log.info("SpiffyRPG: %s has %s dialogues" % (self.name, len(self.dialogue)))
+
+    def add_victory(self, **kwargs):
+        battle_info = kwargs["battle_info"]
+
+        self.victories.append(battle_info)
 
     def get_unit_title(self):
         """
@@ -2739,9 +2777,9 @@ class SpiffyUnit:
         if target_unit_stage == this_unit_stage:
             can_battle = True
         elif target_unit_stage > this_unit_stage:
-            reason = "You have no weapons that can damage that target"
+            reason = "That target is too powerful! Try using .look to find monsters your level."
         elif target_unit_stage < this_unit_stage:
-            reason = "That target is not worth your time"
+            reason = "That target is not worth your time. Try using .look to find monsters your level."
 
         return {
             "reason": reason,
@@ -2779,11 +2817,13 @@ class SpiffyUnit:
 
         return hp_bonus
 
-    def populate_inventory_with_base_items(self, base_items):
+    def populate_inventory_with_base_items(self):
         """
         The base items contain all of the items available
         for this unit type
         """
+        base_items = self.base_items
+
         for item in base_items:
             is_in_bags = item in self.items
             is_unit_type = item.unit_type_id == self.unit_type_id
@@ -2801,9 +2841,7 @@ class SpiffyUnit:
                         continue
                 
                 self.items.append(item)
-            else:
-                log.info("SpiffyRPG: anomalous item: %s" % item.name)
-
+    
     def get_unit_title_from_lookup(self, lookup):
         """
         Find the appropriate title based on the
@@ -3034,18 +3072,18 @@ class SpiffyUnit:
         dialogue_type = kwargs["dialogue_type"]
         dialogues = []
 
-        for dialogue in dialogues:
-            if dialogue.type == dialogue_type:
+        for dialogue in self.dialogue:
+            if dialogue["context"] == dialogue_type:
                 dialogues.append(dialogue)
 
         if len(dialogues) > 0:
-            return random.choice(dialogue)
+            return random.choice(dialogues)
 
     def dialogue_intro(self):
         return self.get_dialogue_by_type(dialogue_type="intro")
 
     def dialogue_win(self):
-        return self.get_dialogue_by_type(dialogue_type="intro")
+        return self.get_dialogue_by_type(dialogue_type="win")
 
     def dialogue_sup(self):
         return self.get_dialogue_by_type(dialogue_type="sup")
@@ -3088,7 +3126,8 @@ class SpiffyUnit:
         return self.unit_level.get_level_by_xp(self.experience)
 
     def on_unit_level(self, **kwargs):
-        pass
+        self.title = self.get_unit_title()
+        self.populate_inventory_with_base_items()
 
     def add_experience(self, experience):
         gained_level = False
@@ -3098,7 +3137,6 @@ class SpiffyUnit:
         current_level = self.level
 
         self.experience += experience
-
         self.level = self.get_level()
 
         if self.level != current_level:
@@ -3113,7 +3151,7 @@ class SpiffyUnit:
         log.info("Player %s adding %s xp" % (self.name, experience))
 
         cursor = self.db.cursor()
-        params = (experience, self.id)
+        params = (self.experience, self.id)
 
         cursor.execute("""UPDATE spiffyrpg_units
                           SET experience = ?
@@ -3185,8 +3223,11 @@ class SpiffyUnit:
             self.on_unit_death()
 
     def on_unit_death(self):
+        """
         if self.is_player:
             self.announcer.unit_death()
+        """
+        pass
 
     def remove_effect_by_id(self, id):
         effects = []
@@ -3777,6 +3818,11 @@ class SpiffyRPG(callbacks.Plugin):
                     battle.add_party_member(player_2)
                     battle.start()
 
+                    if vs_id in self.challenges:
+                        del self.challenges[vs_id]
+
+                    if vs_id_backwards in self.challenges:
+                        del self.challenges[vs_id_backwards]
         else:
             self.challenges[vs_id] = {
                 "challenged_at": time.time(),
@@ -4259,14 +4305,14 @@ class SpiffyRPG(callbacks.Plugin):
             if user_id is not None:
                 dungeon = self.SpiffyWorld.get_dungeon_by_channel(msg.args[0])
   
-                if dungeon is not None:
-                    """ Voice recognized users """
-                    irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
-                    
+                if dungeon is not None:                    
                     """ Add player to dungeon """
                     player = dungeon.spawn_player_unit(user_id=user_id)
 
                     if player is not None:
+                        """ Voice recognized users """
+                        irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
+                    
                         if player.id in self.welcome_messages:
                             last_welcome = time.time() - self.welcome_messages[player.id]
                         else:
