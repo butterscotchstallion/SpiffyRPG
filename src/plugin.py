@@ -1597,7 +1597,7 @@ class SpiffyDungeon:
 
     def get_dead_unit_by_name(self, name):
         for unit in self.units:
-            if unit.get_hp() <= 0 and unit.name.lower() == name.lower():
+            if not unit.is_alive() and unit.name.lower() == name.lower():
                 return unit
 
     def get_living_players(self):
@@ -2753,7 +2753,7 @@ class SpiffyUnit:
         since for the most part, a player is identical to a NPC.
         """
         self.slain_foes = []
-        self.victories = []
+        self.winning_streak = []
         self.raised_units = []
         unit = kwargs["unit"]
 
@@ -2818,10 +2818,13 @@ class SpiffyUnit:
         if not unit in self.raised_units:
             self.raised_units.append(unit)
 
-    def add_victory(self, **kwargs):
-        battle_info = kwargs["battle_info"]
+    def add_winning_streak_unit(self, **kwargs):
+        unit = kwargs["unit"]
 
-        self.victories.append(battle_info)
+        self.winning_streak.append(unit)
+
+    def reset_winning_streak(self):
+        self.winning_streak = []
 
     def get_unit_title(self):
         """
@@ -3262,9 +3265,11 @@ class SpiffyUnit:
 
     def on_effect_undead_applied(self):
         total_hp = self.calculate_hp()
-        reduced_hp = total_hp * .30
+        #reduced_hp = total_hp * .30
+        reduced_hp = total_hp
         self.hp = reduced_hp
         params = (self.name, reduced_hp, total_hp)
+
         log.info("SpiffyRPG: %s has been turned! setting HP to %s (%s total)" % params)
 
     def get_attack_damage(self):
@@ -3293,12 +3298,28 @@ class SpiffyUnit:
         damage = self.get_attack_damage()
         item = self.get_equipped_weapon()
 
-        """ TODO: critical strike here """
+        """ Critical Strikes """
         crit_chance = self.get_critical_strike_chance()
         is_critical_strike = random.randrange(1, 100) < crit_chance
 
         if is_critical_strike:
             damage *= 2
+
+        """ Undead bonus """
+        log.info("SpiffyRPG: unit has effects %s" % self.effects)
+
+        for effect in self.effects:
+            if effect.operator == "+":
+                outgoing_damage_adjustment = effect.outgoing_damage_adjustment
+
+                if outgoing_damage_adjustment > 0:
+                    decimal_adjustment = 100 / outgoing_damage_adjustment
+                    
+                    damage *= decimal_adjustment
+
+                    log.info("SpiffyRPG: adjusting damage by %s%%" % outgoing_damage_adjustment)
+
+        damage = int(damage)
 
         attack_info = {
             "damage": damage,
@@ -3307,6 +3328,16 @@ class SpiffyUnit:
         }
 
         return attack_info
+
+    def is_undead(self):
+        return self.has_effect_name(name="Undead")
+
+    def has_effect_name(self, **kwargs):
+        name = kwargs["name"]
+
+        for effect in self.effects:
+            if effect.name.lower() == name.lower():
+                return True
 
     def get_critical_strike_chance(self):
         return 10
@@ -4313,7 +4344,7 @@ class SpiffyRPG(callbacks.Plugin):
                 unit.experience = xp_for_level
                 unit.level = self.unit_level.get_level_by_xp(unit.experience)
                 unit.on_unit_level()
-                
+
                 dungeon.announcer.player_info(player=unit)
         else:
             log.error("SpiffyRPG: could not find dungeon %s" % msg.args[0])
