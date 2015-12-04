@@ -1343,7 +1343,7 @@ class SpiffyDungeon:
 
         if len(wounded_players) > 0:
             for player in wounded_players:
-                total_hp = player._get_hp()
+                total_hp = player.calculate_hp()
                 regen_hp = total_hp * .25
 
                 player.regenerate_hp(regen_hp)
@@ -3314,7 +3314,7 @@ class SpiffyUnit:
 
                 if outgoing_damage_adjustment > 0:
                     decimal_adjustment = 100 / outgoing_damage_adjustment
-                    
+
                     damage *= decimal_adjustment
 
                     log.info("SpiffyRPG: adjusting damage by %s%%" % outgoing_damage_adjustment)
