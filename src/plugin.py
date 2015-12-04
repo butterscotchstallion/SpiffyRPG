@@ -404,8 +404,13 @@ class SpiffyBattle:
                 self.announcer.unit_dialogue(winner,
                                              dialogue)
 
-            #winner.add_victory(battle_info=battle_info)
+            streak_count = winner.add_winning_streak_unit(unit=loser)
+            loser.reset_winning_streak()
 
+            if streak_count is not None:
+                self.announcer.hot_streak(unit=winner,
+                                          streak_count=streak_count)
+            
             """
             Only players gain experience...so far.
             """
@@ -569,6 +574,25 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         announcer_parent.__init__(irc=kwargs["irc"],
                                   destination=kwargs["destination"],
                                   public=True)
+
+    def hot_streak(self, **kwargs):
+        """
+        %s is on fire!
+        """
+        unit = kwargs["unit"]
+        streak_count = kwargs["streak_count"]
+        unit_name = self._b(unit.name)
+
+        if streak_count == 3:
+            announcement_msg = "%s is on fire!" % unit_name
+        elif streak_count == 5:
+            announcement_msg = "%s is unstoppable!" % unit_name
+        elif streak_count == 6:
+            announcement_msg = "%s is CLEARLY wall hacking" % unit_name
+
+        announcement_msg = self._c(announcement_msg, "light green")
+
+        self.announce(announcement_msg)
 
     def unit_dialogue(self, unit, dialogue):
         """
@@ -966,12 +990,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         if len(unit.effects) > 0:
             msg += " %s: " % self._b("Effects")
-            fx = []
-
-            for effect in unit.effects:
-                fx.append("%s" % self._c(effect.name, "light blue"))
-
-            msg += ", ".join(fx)
+            msg += self._c(unit.get_effects_list(), "light blue")
 
         self.announce(msg)
 
@@ -1027,24 +1046,13 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         # Effects!
         if len(player.effects):
-            log.info("SpiffyRPG: effects: %s" % player.effects)
+            announcement_msg += " %s: " % self._b("Effects")
+            announcement_msg += self._c(player.get_effects_list(), "light blue")
 
-            effects = []
+        num_raised_units = len(player.raised_units)
 
-            for effect in player.effects:
-                #duration = int((time.time() - effect["expires_at"]) / 60)
-                bold_effect_name = ircutils.bold(effect.name)
-                #bold_duration = ircutils.bold(duration)
-                
-                effects.append("%s" % (bold_effect_name,))
-
-            effects_str = ", ".join(effects)
-
-            announcement_msg += ". %s is affected by %s" % (bold_title, effects_str)
-
-        #num_raised_units = len(player.raised_units)
-        #if num_raised_units > 0:
-        #    announcement_msg += " %s has raised %s units." % (bold_title, num_raised_units)
+        if num_raised_units > 0:
+            announcement_msg += " %s has raised %s dead." % (bold_title, num_raised_units)
 
         #self._irc.reply(announcement_msg)
         self._send_channel_notice(announcement_msg)
@@ -2810,6 +2818,17 @@ class SpiffyUnit:
 
         log.info("SpiffyRPG: %s has %s dialogues" % (self.name, len(self.dialogue)))
 
+    def get_effects_list(self):
+        """
+        Retrieves a list of effects on this unit
+        """
+        effect_names = []
+
+        for effect in self.effects:
+            effect_names.append(effect.name)
+
+        return ", ".join(effect_names)
+
     def add_raised_unit(self, **kwargs):
         unit = kwargs["unit"]
 
@@ -2820,6 +2839,16 @@ class SpiffyUnit:
         unit = kwargs["unit"]
 
         self.winning_streak.append(unit)
+
+        streak_count = len(self.winning_streak)
+
+        if streak_count >= 3:
+            if streak_count == 3:
+                log.info("SpiffyRPG: %s is on a streak of 3!" % self.name)
+            elif streak_count == 4:
+                log.info("SpiffyRPG: %s is on a streak of 4!" % self.name)
+
+            return streak_count
 
     def reset_winning_streak(self):
         self.winning_streak = []
