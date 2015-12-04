@@ -832,6 +832,16 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         self._irc.reply(announcement_msg)
 
+    def effect_info(self, **kwargs):
+        effect = kwargs["effect"]
+        effect_name = self._b(effect.name)
+        params = (effect_name,
+                  effect.description)
+
+        announcement_msg = "%s :: %s" % params
+
+        self._irc.reply(announcement_msg)
+
     def unit_attack(self, **kwargs):
         danger_low_hp_threshold = 20
         attack_word = "hits"
@@ -2224,7 +2234,7 @@ class SpiffyEffectsCollection:
         name = kwargs["name"].lower()
 
         for effect in self.effects:
-            if effect.name.lower() == name:
+            if name in effect.name.lower():
                 return effect
 
     def _get_effects(self):
@@ -3193,6 +3203,7 @@ class SpiffyUnit:
 
     def on_unit_level(self, **kwargs):
         self.title = self.get_unit_title()
+        self.hp = self.calculate_hp()
         self.populate_inventory_with_base_items()
 
     def add_experience(self, experience):
@@ -4047,6 +4058,22 @@ class SpiffyRPG(callbacks.Plugin):
 
     item = wrap(item, ["user", "text"])
 
+    def effect(self, irc, msg, args, user, effect_name):
+        """
+        Searches for an effect by its name
+        """
+        effect = self.SpiffyWorld.effects_collection.get_effect_by_name(name=effect_name)
+
+        if isinstance(effect, SpiffyEffect):
+            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+
+            if dungeon is not None:
+                dungeon.announcer.effect_info(effect=effect)
+        else:
+            irc.error("The tomes hold no mention of this spell.")
+
+    effect = wrap(effect, ["user", "text"])
+
     def equip(self, irc, msg, args, user, item_name):
         """
         Equips an item from your inventory
@@ -4259,6 +4286,7 @@ class SpiffyRPG(callbacks.Plugin):
 
             if unit is not None:
                 unit.apply_damage(unit.calculate_hp())
+
                 dungeon.announcer.unit_death(unit=unit,
                                              slain_by=player)
         else:
@@ -4277,11 +4305,15 @@ class SpiffyRPG(callbacks.Plugin):
             unit = dungeon.get_unit_by_user_id(user_id)
 
             if unit is not None:
-                xp_for_level = self.unit_level.get_xp_for_level(level)
+                int_level = int(level)
+                xp_for_level = self.unit_level.get_xp_for_level(int_level) + 1
+
+                log.info("SpiffyRPG: setting xp for %s to %s (level %s)" % (unit.name, xp_for_level, int_level))
 
                 unit.experience = xp_for_level
                 unit.level = self.unit_level.get_level_by_xp(unit.experience)
-
+                unit.on_unit_level()
+                
                 dungeon.announcer.player_info(player=unit)
         else:
             log.error("SpiffyRPG: could not find dungeon %s" % msg.args[0])
