@@ -663,11 +663,12 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         attack_name = self._c(winner_attack, "light green")
         winner_hp = self._c(winner.get_hp(), "red")
         loser_hp = self._c(loser.get_hp(), "green")
+        attack_word = hit_info["hit_word"]
 
-        attack_word = self._b(self._c(hit_info["hit_word"], "red"))
+        if attack["is_critical_strike"]:
+            attack_word = "*%s*" % attack_word
 
-        #if attack["is_critical_strike"]:
-        #    attack_word = self._b(self._c("critically struck", "red"))
+        attack_word = self._b(self._c(attack_word, "red"))
 
         damage = self._c(attack["damage"], "red")
 
@@ -3282,13 +3283,22 @@ class SpiffyUnit:
         item = self.get_equipped_weapon()
 
         """ TODO: critical strike here """
+        crit_chance = self.get_critical_strike_chance()
+        is_critical_strike = random.randrange(1, 100) < crit_chance
+
+        if is_critical_strike:
+            damage *= 2
 
         attack_info = {
             "damage": damage,
-            "item": item
+            "item": item,
+            "is_critical_strike": is_critical_strike
         }
 
         return attack_info
+
+    def get_critical_strike_chance(self):
+        return 10
 
     def apply_damage(self, hp):
         self.hp = int(self.hp - hp)
