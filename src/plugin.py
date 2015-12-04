@@ -410,7 +410,7 @@ class SpiffyBattle:
             if streak_count is not None:
                 self.announcer.hot_streak(unit=winner,
                                           streak_count=streak_count)
-            
+
             """
             Only players gain experience...so far.
             """
@@ -585,10 +585,14 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
 
         if streak_count == 3:
             announcement_msg = "%s is on fire!" % unit_name
-        elif streak_count == 5:
+        elif streak_count == 4:
             announcement_msg = "%s is unstoppable!" % unit_name
-        elif streak_count == 6:
+        elif streak_count == 5:
             announcement_msg = "%s is CLEARLY wall hacking" % unit_name
+        elif streak_count == 6:
+            announcement_msg = "%s is GOD-LIKE!" % unit_name
+        elif streak_count == 7:
+            announcement_msg = "BOOMSHAKALAKA! %s is DOMINATING!"
 
         announcement_msg = self._c(announcement_msg, "light green")
 
