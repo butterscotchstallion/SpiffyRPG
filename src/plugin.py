@@ -484,10 +484,16 @@ class SpiffyWorld:
         Initialize everything we need for the world
         """
         item_collection = SpiffyItemCollection(db=self.db)
+        unit_effects_collection = SpiffyUnitEffectsCollection(db=self.db)
         effects_collection = SpiffyEffectsCollection(db=self.db)
         title_collection = SpiffyUnitTitleCollection(db=self.db)
         dialogue_collection = SpiffyUnitDialogueCollection(db=self.db)
+
+        """
+        Some collections need to be usable by the outside world
+        """
         self.item_collection = item_collection
+        self.effects_collection = effects_collection
 
         """
         All of the below collections are used when constructing
@@ -496,6 +502,7 @@ class SpiffyWorld:
         self.collections = {
             "irc": self._irc,
             "effects_collection": effects_collection,
+            "unit_effects_collection": unit_effects_collection,
             "item_collection": item_collection,
             "title_collection": title_collection,
             "dialogue_collection": dialogue_collection,
@@ -875,7 +882,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         player = kwargs["player"]
         unit = kwargs["unit"]
         ptitle = self._get_unit_title(player)
-        utitle = self._b(unit.get_title())
+        utitle = self._b(unit.name)
 
         announcement_msg = "%s raises %s from the dead!" % \
         (ptitle, utitle)
@@ -951,7 +958,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
             fx = []
 
             for effect in unit.effects:
-                fx.append("%s" % self._c(effect["name"], "light blue"))
+                fx.append("%s" % self._c(effect.name, "light blue"))
 
             msg += ", ".join(fx)
 
@@ -1765,8 +1772,9 @@ class SpiffyUnitDB:
                           limnoria_user_id,
                           name, 
                           unit_type_id,
+                          experience,
                           created_at)
-                          VALUES (?, ?, ?, ?)""", params)
+                          VALUES (?, ?, ?, 0, ?)""", params)
         db.commit()
         cursor.close()
 
@@ -2201,13 +2209,63 @@ class SpiffyUnitTitleCollection:
 
 class SpiffyEffectsCollection:
     """
+    Representation of all effects
+    """
+    def __init__(self, **kwargs):
+        self.db = kwargs["db"]
+        self.effects = self._get_effects()
+        log.info("SpiffyRPG: fetched effects")
+
+    def get_effect_undead(self):
+        return self.get_effect_by_name(name="Undead")
+
+    def get_effect_by_name(self, **kwargs):
+        name = kwargs["name"].lower()
+
+        for effect in self.effects:
+            if effect.name.lower() == name:
+                return effect
+
+    def _get_effects(self):
+        """
+        Fetches effects for one or many units
+        """
+        cursor = self.db.cursor()
+        
+        cursor.execute("""SELECT
+                          e.id,
+                          e.name,
+                          e.description,
+                          e.operator,
+                          e.hp_adjustment,
+                          e.incoming_damage_adjustment,
+                          e.outgoing_damage_adjustment,
+                          e.interval_seconds,
+                          e.stacks,
+                          e.created_at
+                          FROM spiffyrpg_effects e""")
+
+        tmp_effects = cursor.fetchall()
+        effects = []
+
+        cursor.close()
+
+        if len(tmp_effects) > 0:
+            for e in tmp_effects:
+                effect = dict(e)
+                objectified_effect = SpiffyEffect(effect=effect)
+                effects.append(objectified_effect)
+
+        return effects
+
+class SpiffyUnitEffectsCollection:
+    """
     Representation of persisted effects on a unit
     """
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
         self.effects = self._get_unit_effects()
-
-        log.info("SpiffyRPG: fetched effects")
+        log.info("SpiffyRPG: fetched unit effects")
 
     def get_effects_by_unit_id(self, **kwargs):
         unit_id = kwargs["unit_id"]
@@ -2673,6 +2731,7 @@ class SpiffyUnit:
         """
         self.title_collection = collections["title_collection"]
         item_collection = collections["item_collection"]
+        unit_effects_collection = collections["unit_effects_collection"]
         effects_collection = collections["effects_collection"]
         dialogue_collection = collections["dialogue_collection"]
 
@@ -2684,7 +2743,7 @@ class SpiffyUnit:
         """
         self.slain_foes = []
         self.victories = []
-        
+        self.raised_units = []
         unit = kwargs["unit"]
 
         self.id = unit["id"]
@@ -2692,7 +2751,7 @@ class SpiffyUnit:
         self.created_at = time.time()
         self.unit_type_name = unit["unit_type_name"]
         self.unit_type_id = unit["unit_type_id"]
-        self.effects = effects_collection.get_effects_by_unit_id(unit_id=self.id)
+        self.effects = unit_effects_collection.get_effects_by_unit_id(unit_id=self.id)
         self.items = item_collection.get_items_by_unit_id(unit_id=self.id)
         self.dialogue = dialogue_collection.get_dialogue_by_unit_id(unit_id=self.id)
         self.experience = unit["experience"]
@@ -2741,6 +2800,12 @@ class SpiffyUnit:
         self.hp = self.calculate_hp()
 
         log.info("SpiffyRPG: %s has %s dialogues" % (self.name, len(self.dialogue)))
+
+    def add_raised_unit(self, **kwargs):
+        unit = kwargs["unit"]
+
+        if not unit in self.raised_units:
+            self.raised_units.append(unit)
 
     def add_victory(self, **kwargs):
         battle_info = kwargs["battle_info"]
@@ -3178,7 +3243,17 @@ class SpiffyUnit:
 
     def apply_effect(self, effect):
         if effect not in self.effects:
+            if effect.name == "Undead":
+                self.on_effect_undead_applied()
+
             self.effects.append(effect)
+
+    def on_effect_undead_applied(self):
+        total_hp = self.calculate_hp()
+        reduced_hp = total_hp * .30
+        self.hp = reduced_hp
+        params = (self.name, reduced_hp, total_hp)
+        log.info("SpiffyRPG: %s has been turned! setting HP to %s (%s total)" % params)
 
     def get_attack_damage(self):
         return random.randrange(5, 10) * self.level
@@ -3205,6 +3280,8 @@ class SpiffyUnit:
     def get_attack(self, **kwargs):
         damage = self.get_attack_damage()
         item = self.get_equipped_weapon()
+
+        """ TODO: critical strike here """
 
         attack_info = {
             "damage": damage,
@@ -3462,9 +3539,6 @@ class SpiffyRPG(callbacks.Plugin):
             return ircdb.users.getUserId(prefix)
         except KeyError:
             pass
-            #irc.errorNotRegistered(Raise=True)
-
-        return False
 
     def _is_alphanumeric_with_dashes(self, input):
         return re.match('^[\w-]+$', input) is not None
@@ -4055,26 +4129,25 @@ class SpiffyRPG(callbacks.Plugin):
         Attempts to raise your target from the dead
         """
         user_id = self._get_user_id(irc, msg.prefix)
-        channel = msg.args[0]
-        dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
+        dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
 
         if dungeon is not None:
             player = dungeon.get_unit_by_user_id(user_id)
             unit = dungeon.get_dead_unit_by_name(target)
 
             if unit is not None:
-                undead_effect = self.db.get_effect_by_name("Undead")
+                undead_effect = self.SpiffyWorld.effects_collection.get_effect_undead()
 
                 unit.apply_effect(undead_effect)
 
-                self.announcer.effect_raise_dead(player=player,
-                                                 unit=unit)
+                dungeon.announcer.effect_raise_dead(player=player,
+                                                    unit=unit)
 
-                self.announcer.unit_info(unit=unit,
-                                         player=player, 
-                                         dungeon=dungeon)
+                dungeon.announcer.unit_info(unit=unit,
+                                            player=player,
+                                            dungeon=dungeon)
 
-                player.add_raised_unit(unit)
+                player.add_raised_unit(unit=unit)
             else:
                 irc.error("You attempt to perform the ritual, but something seems amiss.")
         else:
@@ -4117,29 +4190,32 @@ class SpiffyRPG(callbacks.Plugin):
 
         if user_id is not None:
             char_name = msg.nick
-            channel = msg.args[0]
-            player = self.db.get_unit_by_user_id(user_id)
+            channel = GAME_CHANNEL
+            dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
+  
+            if dungeon is not None:                    
+                """ Add player to dungeon """
+                player = dungeon.spawn_player_unit(user_id=user_id)
 
-            if player is not None:
-                irc.error("You look familiar...")
-            else:
-                valid_registration = self._is_valid_char_class(character_class)
+                if player is not None:
+                    valid_registration = self._is_valid_char_class(character_class)
 
-                if valid_registration:
-                    unit_type_id = self._get_unit_type_id_by_name(character_class)
+                    if valid_registration:
+                        unit_type_id = self._get_unit_type_id_by_name(character_class)
 
-                    if unit_type_id is not None:
-                        log.info("SpiffyRPG: %s -> register '%s' the '%s' with class id %s " % (msg.nick, char_name, character_class, unit_type_id))
+                        if unit_type_id is not None:
+                            log.info("SpiffyRPG: %s -> register '%s' the '%s' with class id %s " % (msg.nick, char_name, character_class, unit_type_id))
 
-                        self.db.register_new_player(user_id, char_name, unit_type_id)
-                        self.dungeon_announcer.new_player(irc, char_name, character_class)
-                        irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
+                            self.db.register_new_player(user_id, char_name, unit_type_id)
+                            dungeon.announcer.new_player(irc, char_name, character_class)
+                            irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
+                        else:
+                            log.error("SpiffyRPG: error determining class id from '%s'" % character_class)
                     else:
-                        log.error("SpiffyRPG: error determining class id from '%s'" % character_class)
-
-                else:
-                    classes = self._get_unit_type_list()
-                    irc.reply("Please choose one of the following classes: %s" % classes)
+                        classes = self._get_unit_type_list()
+                        irc.reply("Please choose one of the following classes: %s" % classes)
+        else:
+            log.info("SpiffyRPG: %s is trying to join but is not registered" % msg.nick)
 
     sjoin = wrap(sjoin, ["user", "text"])
 
@@ -4159,6 +4235,26 @@ class SpiffyRPG(callbacks.Plugin):
             log.error("SpiffyRPG: could not find dungeon %s" % msg.args[0])
 
     fspawn = wrap(fspawn, ["something", optional("anything")])
+
+    def fkill(self, irc, msg, args, unit_name):
+        """
+        Kill target unit
+        """
+        dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+
+        if dungeon is not None:
+            user_id = self._get_user_id(irc, msg.prefix)
+            unit = dungeon.get_unit_by_name(unit_name)
+            player = dungeon.get_player_by_user_id(user_id)
+
+            if unit is not None:
+                unit.apply_damage(unit.calculate_hp())
+                dungeon.announcer.unit_death(unit=unit,
+                                             slain_by=player)
+        else:
+            log.error("SpiffyRPG: could not find dungeon %s" % GAME_CHANNEL)
+
+    fkill = wrap(fkill, ["text"])
 
     def flevel(self, irc, msg, args, level):
         """
