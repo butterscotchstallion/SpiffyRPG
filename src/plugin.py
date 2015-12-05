@@ -140,6 +140,9 @@ class SpiffyAnnouncer(object):
 
         return self._b(indicator)
 
+    def get_pink_heart(self):
+        return self._c(u"♥", "pink")
+
     def announce(self, message):
         if self.is_public:
             self._send_channel_notice(message)
@@ -175,6 +178,10 @@ class SpiffyAnnouncer(object):
         self._irc.queueMsg(ircmsgs.notice(GAME_CHANNEL, message))
 
 class SpiffyBattle:
+    """
+    Handles battles between NPCs and PCs. Also keeps track of
+    PvP challenges.
+    """
     def __init__(self, **kwargs):
         self.party = []
         self.db = kwargs["db"]
@@ -182,7 +189,95 @@ class SpiffyBattle:
                                                destination=kwargs["destination"],
                                                public=True)
         self.unit_level = SpiffyUnitLevel()
+        self.challenges = []
     
+    def set_challenger_announcer(self, announcer):
+        self.challenger_announcer = announcer
+
+    def set_opponent_announcer(self, announcer):
+        self.opponent_announcer = announcer
+
+    def send_challenge(self, **kwargs):
+        """
+        Sends a PvP challenge to a user in the channel. The challenge
+        contains the following:
+        - challenger user id
+        - opponent user id
+        - time of challenge
+        - default state of accepted: False
+        """
+        challenger_nick = kwargs["challenger_nick"]
+        challenger_id = kwargs["challenger_user_id"]
+        opponent_id = kwargs["opponent_user_id"]
+        pending_challenge = self.is_challenge_pending(challenger=challenger_id,
+                                                      opponent=opponent_id)
+
+        if pending_challenge:
+            #return pending_challenge
+            return
+
+        challenge = {
+            "challenger_user_id": challenger_id,
+            "opponent_user_id": opponent_id,
+            "challenged_at": time.time(),
+            "accepted": False
+        }
+
+        if challenge not in self.challenges:
+            self.challenges.append(challenge)
+            self.opponent_announcer.challenge_received(player_nick=challenger_nick)
+            return True
+    
+    def remove_challenges_by_user_id(self, user_id):
+        for index, challenge in self.challenges:
+            if challenge["challenger_user_id"] == user_id or \
+            challenge["opponent_user_id"] == user_id:
+                del self.challenges[index]
+
+    def accept_challenge(self, **kwargs):
+        """
+        Returns True if challenge is accepted, None if there is
+        currently a challenge pending
+        """
+        challenger = kwargs["challenger_user_id"]
+        opponent = kwargs["opponent_user_id"]
+        pending = self.is_challenge_pending(challenger=challenger,
+                                            opponent=opponent)
+
+        if pending is not None:
+            for index, challenge in self.challenges:
+                challenger_match = challenge["challenger_user_id"] == challenger
+                opponent_match = challenge["opponent_user_id"] == opponent
+                inverse_match = challenger ==  challenge["opponent_user_id"]
+
+                if challenger_match and opponent_match or inverse_match and \
+                not challenge["accepted"]:
+                    self.challenges[index]["accepted"] = True
+        else:
+            log.info("SpiffyRPG: challenge pending for %s vs %s" % ())
+
+    def is_challenge_accepted(self, **kwargs):
+        challenger_user_id = kwargs["challenger_user_id"]
+        opponent_user_id = kwargs["opponent_user_id"]
+
+        log.info("SpiffyRPG: challenges=%s" % self.challenges)
+
+        for challenge in self.challenges:
+            if challenge["challenger_user_id"] == challenger_user_id and \
+            challenge["opponent_user_id"] == opponent_user_id and \
+            challenge["accepted"]:
+                return True
+
+    def is_challenge_pending(self, **kwargs):
+        challenger_user_id = kwargs["challenger"]
+        opponent_user_id = kwargs["opponent"]
+
+        for challenge in self.challenges:
+            if challenge["challenger_user_id"] == challenger_user_id and \
+            challenge["opponent_user_id"] == opponent_user_id and \
+            not challenge["accepted"]:
+                return challenge
+
     def is_hit(self, **kwargs):
         """
         Get the attacker and target weapon type,
@@ -403,6 +498,8 @@ class SpiffyBattle:
 
                 self.announcer.unit_dialogue(winner,
                                              dialogue)
+
+                self.remove_challenges_by_user_id(loser.user_id)
 
             """
             Check if the winner is on a hot streak and announce it
@@ -1042,6 +1139,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         bold_class = self._get_player_role(player)
 
         player_xp = player.experience
+        
 
         xp_req_for_this_level = player.get_xp_required_for_next_level() + 1
         
@@ -1060,12 +1158,26 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         colored_xp = self._c(percent_xp, xp_color)
 
+        player_hp = player.get_hp()
+        hp_color = "green"
+
+        if player_hp <= 75:
+            hp_color = "white"
+
+        if player_hp <= 50:
+            hp_color = "yellow"
+
+        if player_hp <= 0:
+            hp_color = "red"
+
+        colored_hp = self._c(player_hp, hp_color)
+        heart = self._c(u"♥", hp_color)
+
         # + 1 xp because you don't level until you breach the limit
         formatted_xp = "{:,}".format(xp_req_for_this_level)
         bold_xp_needed_this_level = self._b(formatted_xp)
         bold_next_level = self._b(player.get_level() + 1)
-        bold_hp = self._b(player.hp)
-        pink_heart = self._c(u"♥", "pink")
+        bold_hp = self._b(colored_hp)
         bold_level = self._b(player.get_level())
 
         # xp gained
@@ -1078,7 +1190,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         stage = player.get_stage_by_level(level=player.level)
 
-        params = (bold_title, bold_level, bold_class, stage, bold_hp, pink_heart)
+        params = (bold_title, bold_level, bold_class, stage, bold_hp, heart)
         announcement_msg = "%s is a level %s %s [%s] with %s %s" % params
         announcement_msg += " %s to level %s" % \
         (xp_combo, bold_next_level)
@@ -1324,8 +1436,8 @@ class SpiffyDungeon:
             #self.start_spawn_timer()
             #self.start_chaos_timer()
             self.start_player_regen_timer()
-        except:
-            pass
+        except AssertionError:
+            log.error("SpiffyRPG: Error starting periodic events")
         
         if "max_level" in kwargs:
             self.max_level = kwargs["max_level"]
@@ -1359,9 +1471,9 @@ class SpiffyDungeon:
         log.info("SpiffyRPG: destroying %s" % self.name)
         
         try:
-            schedule.removeEvent("spawn_timer")
-            schedule.removeEvent("dialogue_timer")
-            schedule.removeEvent("chaos_timer")
+            #schedule.removeEvent("spawn_timer")
+            #schedule.removeEvent("dialogue_timer")
+            #schedule.removeEvent("chaos_timer")
             schedule.removeEvent("player_regen_timer")
         except:
             pass
@@ -1396,7 +1508,7 @@ class SpiffyDungeon:
         if len(wounded_players) > 0:
             for player in wounded_players:
                 total_hp = player.calculate_hp()
-                regen_hp = total_hp * .25
+                regen_hp = int(total_hp * .25)
 
                 player.regenerate_hp(regen_hp)
         else:
@@ -2929,22 +3041,24 @@ class SpiffyUnit:
         cannot battle each other.
         """
         unit = kwargs["unit"]
-        this_unit_stage = self.get_stage_by_level(level=self.level)
-        target_unit_stage = self.get_stage_by_level(level=unit.level)
-        can_battle = False
-        reason = "You are in the same stage"
 
-        if target_unit_stage == this_unit_stage:
-            can_battle = True
-        elif target_unit_stage > this_unit_stage:
-            reason = "That target is too powerful! Try using .look to find monsters your level."
-        elif target_unit_stage < this_unit_stage:
-            reason = "That target is not worth your time. Try using .look to find monsters your level."
+        if unit is not None:
+            this_unit_stage = self.get_stage_by_level(level=self.level)
+            target_unit_stage = self.get_stage_by_level(level=unit.level)
+            can_battle = False
+            reason = "You are in the same stage"
 
-        return {
-            "reason": reason,
-            "can_battle": can_battle
-        }
+            if target_unit_stage == this_unit_stage:
+                can_battle = True
+            elif target_unit_stage > this_unit_stage:
+                reason = "That target is too powerful! Try using .look to find monsters your level."
+            elif target_unit_stage < this_unit_stage:
+                reason = "That target is not worth your time. Try using .look to find monsters your level."
+
+            return {
+                "reason": reason,
+                "can_battle": can_battle
+            }
 
     def regenerate_hp(self, regen_hp):
         current_hp = self.get_hp()
@@ -2952,6 +3066,8 @@ class SpiffyUnit:
 
         if self.is_below_max_hp():
             self.hp += regen_hp
+
+            self.announcer.player_regenerates(regen_hp=regen_hp)
 
             log.info("SpiffyRPG: unit %s gains %sHP from Regneration" % (self.name, regen_hp))
         else:
@@ -2966,9 +3082,10 @@ class SpiffyUnit:
     def add_victory_hp_bonus(self, **kwargs):
         current_hp = self.get_hp()
         max_hp = self.calculate_hp()
-        hp_bonus = int(max_hp * .10)
+        hp_bonus = 0
 
         if self.is_below_max_hp():
+            hp_bonus = int(max_hp * .10)
             self.hp += hp_bonus
 
             log.info("SpiffyRPG: unit %s gains %sHP for winning" % (self.name, hp_bonus))
@@ -3534,6 +3651,14 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
 
         self.announce(announcement_msg)
 
+    def player_regenerates(self, **kwargs):
+        regen_hp = self._b(kwargs["regen_hp"])
+        params = (regen_hp, self.get_pink_heart())
+
+        announcement_msg = "You receive %s %s from Regeneration." % params
+
+        self.announce(announcement_msg)
+
     def item_equip_failed(self, **kwargs):
         deaths = ("you suddenly burst into flames", 
         "a wild boar emerges from the jungle and charges at you",
@@ -3648,17 +3773,20 @@ class SpiffyRPG(callbacks.Plugin):
         self.__parent = super(SpiffyRPG, self)
         self.__parent.__init__(irc)
         self.irc = irc
-        self.challenges = {}
         self.welcome_messages = {}
         self.welcome_message_cooldown_in_seconds = 600
 
         db_lib = SpiffyRPGDB()
         self.db = db_lib._get_db()
         self.unit_level = SpiffyUnitLevel()
-        self.SpiffyWorld = None
         self.unit_db = SpiffyUnitDB(db=self.db)
         self.classes = self.unit_db.get_unit_types()
+
         ignore_nicks = self.registryValue("ignoreNicks")
+
+        self.battle = SpiffyBattle(db=self.db,
+                                   irc=irc,
+                                   destination=GAME_CHANNEL)
 
         self.SpiffyWorld = SpiffyWorld(irc=self.irc,
                                        db=self.db,
@@ -3894,7 +4022,19 @@ class SpiffyRPG(callbacks.Plugin):
             player = dungeon_info["player"]
             unit = dungeon.get_living_unit_by_name(target)
 
-            if target is not None:
+            log.info("Attempting to rock %s" % unit)
+
+            if unit is not None:
+                """
+                PvP battles require prior challenge acceptance.
+                """
+                if unit.is_player:
+                    accepted_challenge = self.battle.is_challenge_accepted(challenger_user_id=player.user_id,
+                                                                           opponent_user_id=unit.user_id)
+                    if accepted_challenge is None:
+                        irc.error("That player must first accept your challenger. Use \"challenge %s\" to issue a challenge.")
+                        return
+                
                 equip_ok = player.equip_item_by_type(item_type="rock")
 
                 if equip_ok:
@@ -3931,7 +4071,7 @@ class SpiffyRPG(callbacks.Plugin):
             player = dungeon_info["player"]
             unit = dungeon.get_living_unit_by_name(target)
 
-            if target is not None:
+            if unit is not None:
                 equip_ok = player.equip_item_by_type(item_type="paper")
 
                 if equip_ok:
@@ -3968,7 +4108,7 @@ class SpiffyRPG(callbacks.Plugin):
             player = dungeon_info["player"]
             unit = dungeon.get_living_unit_by_name(target)
 
-            if target is not None:
+            if unit is not None:
                 equip_ok = player.equip_item_by_type(item_type="scissors")
 
                 if equip_ok:
@@ -4005,7 +4145,7 @@ class SpiffyRPG(callbacks.Plugin):
             player = dungeon_info["player"]
             unit = dungeon.get_living_unit_by_name(target)
 
-            if target is not None:
+            if unit is not None:
                 equip_ok = player.equip_item_by_type(item_type="lizard")
 
                 if equip_ok:
@@ -4042,7 +4182,7 @@ class SpiffyRPG(callbacks.Plugin):
             player = dungeon_info["player"]
             unit = dungeon.get_living_unit_by_name(target)
 
-            if target is not None:
+            if unit is not None:
                 equip_ok = player.equip_item_by_type(item_type="spock")
 
                 if equip_ok:
@@ -4147,21 +4287,48 @@ class SpiffyRPG(callbacks.Plugin):
 
     attack = wrap(attack, ["user", "text"])
 
-    def _challenge_exists(self, attacker_user_id, target_user_id):
+    def accept_challenge(self, irc, msg, user, target_nick):
         """
-        Checks if there is a challenge for this versus
+        accept <nick> - Accepts a PvP challenge from another player
         """
-        vs_id = "%s_%s" % (attacker_user_id, target_user_id)
-        vs_id_backwards = "%s_%s" % (target_user_id, attacker_user_id)
-        versus = None
+        attacker_user_id = self._get_user_id(irc, msg.prefix)
+        target_nick_is_here = self._is_nick_in_channel(irc, target_nick)
 
-        if vs_id in self.challenges:
-            versus = self.challenges[vs_id]
+        if not target_nick_is_here:
+            irc.error("That nick doesn't appear to be here")
+            return
 
-        if vs_id_backwards in self.challenges:
-            versus = self.challenges[vs_id_backwards]
+        target_hostmask = irc.state.nickToHostmask(target_nick)
+        target_user_id = self._get_user_id(irc, target_hostmask)
 
-        return versus is not None
+        # Make sure we can get the target user id
+        if target_user_id is None:
+            irc.error("Could not find user id for that nick")
+            log.error("SpiffyRPG: could not find user id for nick '%s'" % target_nick)
+            return
+
+        challenge_accepted = self.battle.accept_challenge(challenger_user_id=attacker_user_id,
+                                                          opponent_user_id=target_user_id)
+
+        if challenge_accepted:
+            irc.reply("Challenge accepted. You may now attack %s!" % target_nick)
+
+            """
+            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+
+            if dungeon is not None:
+                player_1 = dungeon.get_unit_by_user_id(attacker_user_id)
+                player_2 = dungeon.get_unit_by_user_id(target_user_id)
+                
+                if player_1 is not None and player_2 is not None:
+                    self.battle.add_party_member(player_1)
+                    self.battle.add_party_member(player_2)
+                    battle.start()
+            """
+        else:
+            irc.error("There is already a challenge pending for that player")
+
+    accept_challenge = wrap(accept_challenge, ["user", "something"])
 
     def challenge(self, irc, msg, args, user, target_nick):
         """
@@ -4195,73 +4362,26 @@ class SpiffyRPG(callbacks.Plugin):
             log.error("SpiffyRPG: could not find user id for nick '%s'" % target_nick)
             return
 
-        attacker_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                   destination=msg.nick)
-        target_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                 destination=target_nick)
-
         """
         After determining both attacker and target are valid, check
         if there is an outstanding challenge
         """
-        vs_id = "%s_%s" % (attacker_user_id, target_user_id)
-        vs_id_backwards = "%s_%s" % (target_user_id, attacker_user_id)
-        versus = None
+        attacker_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                       destination=msg.nick)
+        target_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                 destination=target_nick)
 
-        if vs_id in self.challenges:
-            versus = self.challenges[vs_id]
+        self.battle.set_challenger_announcer(attacker_announcer)
+        self.battle.set_opponent_announcer(target_announcer)
 
-        if vs_id_backwards in self.challenges:
-            versus = self.challenges[vs_id_backwards]
+        challenged_successfully = self.battle.send_challenge(challenger_user_id=attacker_user_id,
+                                                             opponent_user_id=target_user_id,
+                                                             challenger_nick=msg.nick)
 
-        if versus is not None:
-            attacker_user_id = versus["attacker_user_id"]
-            target_user_id = versus["target_user_id"]
-
-            seconds_since_last_challenge = time.time() - versus["challenged_at"]
-            params = (attacker_user_id, target_user_id, seconds_since_last_challenge)
-
-            log.info("SpiffyRPG: last %s vs %s was %s seconds ago" % params)
-            
-            """
-            if seconds_since_last_challenge < 30:
-                irc.error("You are weary from battle and must rest before battling this player again.")
-                return
-            """
-
-            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
-
-            if dungeon is not None:
-                player_1 = dungeon.get_unit_by_user_id(attacker_user_id)
-                player_2 = dungeon.get_unit_by_user_id(target_user_id)
-                
-                if player_1.is_stage_one() or player_2.is_stage_one():
-                    irc.error("You must seek additional enlightenment before battling other players.")
-                    return
-
-                if player_1 is not None and player_2 is not None:
-                    battle = SpiffyBattle(db=self.db,
-                                          irc=irc,
-                                          destination=GAME_CHANNEL)
-
-                    battle.add_party_member(player_1)
-                    battle.add_party_member(player_2)
-                    battle.start()
-
-                    if vs_id in self.challenges:
-                        del self.challenges[vs_id]
-
-                    if vs_id_backwards in self.challenges:
-                        del self.challenges[vs_id_backwards]
+        if challenged_successfully is not None:
+            irc.reply("Challenge sent.")
         else:
-            self.challenges[vs_id] = {
-                "challenged_at": time.time(),
-                "attacker_user_id": attacker_user_id,
-                "target_user_id": target_user_id
-            }
-
-            attacker_announcer.challenge_sent(player_nick=target_nick)
-            target_announcer.challenge_received(player_nick=msg.nick)
+            irc.error("Challenge pending for that player already.")
 
     challenge = wrap(challenge, ["user", "something"])
 
