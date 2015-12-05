@@ -1045,13 +1045,13 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         xp_req_for_this_level = player.get_xp_required_for_next_level() + 1
         xp_req_for_previous_level = player.get_xp_required_for_previous_level() + 1
-        xp_marginal_requirement = xp_req_for_this_level - xp_req_for_previous_level
+        xp_req_margin = xp_req_for_this_level - xp_req_for_previous_level
         
         """ If this is one, they're max level """
         if xp_req_for_this_level == 1:
             xp_req_for_this_level = self.levels[-1][1]
 
-        percent_xp = round((((float(player_xp) / xp_marginal_requirement) / (float(xp_req_for_this_level) / xp_marginal_requirement)) * 100), 1)
+        percent_xp = round((((float(player_xp) / xp_req_margin) - (float(xp_req_for_this_level) / xp_req_margin)) * 100), 1)
 
         if percent_xp <= 20:
             xp_color = "yellow"
