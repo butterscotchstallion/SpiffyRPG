@@ -404,12 +404,29 @@ class SpiffyBattle:
                 self.announcer.unit_dialogue(winner,
                                              dialogue)
 
+            """
+            Check if the winner is on a hot streak and announce it
+            if so.
+            """
             streak_count = winner.add_winning_streak_unit(unit=loser)
-            loser.reset_winning_streak()
-
+            
             if streak_count is not None:
                 self.announcer.hot_streak(unit=winner,
                                           streak_count=streak_count)
+
+            """
+            Check if the winner has broken the loser's hot streak
+            """
+            loser_hot_streak = loser.is_on_hot_streak()
+
+            if loser_hot_streak is not None:
+                self.announcer.hot_streak_ended(unit=loser,
+                                                ended_by=winner)
+
+            """
+            Reset streak of whoever just lost
+            """
+            loser.reset_winning_streak()
 
             """
             Only players gain experience...so far.
@@ -574,6 +591,19 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         announcer_parent.__init__(irc=kwargs["irc"],
                                   destination=kwargs["destination"],
                                   public=True)
+
+    def hot_streak_ended(self, **kwargs):
+        unit = kwargs["unit"]
+        ended_by = kwargs["ended_by"]
+        unit_name = self._b(unit.name)
+        ended_by_name = self._b(ended_by.name)
+
+        announcement_msg = "%s's hot streak was ended by %s" % \
+        (unit_name, ended_by_name)
+        
+        #announcement_msg = self._c(announcement_msg, "light green")
+
+        self.announce(announcement_msg)
 
     def hot_streak(self, **kwargs):
         """
@@ -996,6 +1026,11 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
             msg += " %s: " % self._b("Effects")
             msg += self._c(unit.get_effects_list(), "light blue")
 
+        hot_streak = unit.is_on_hot_streak()
+
+        if hot_streak is not None:
+            msg += " Hot streak: %s" % self._b(hot_streak)
+
         self.announce(msg)
 
     def player_info(self, **kwargs):
@@ -1057,6 +1092,11 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         if num_raised_units > 0:
             announcement_msg += " %s has raised %s dead." % (bold_title, num_raised_units)
+
+        hot_streak = player.is_on_hot_streak()
+
+        if hot_streak is not None:
+            announcement_msg += " Hot streak: %s" % self._b(hot_streak)
 
         #self._irc.reply(announcement_msg)
         self._send_channel_notice(announcement_msg)
@@ -2844,6 +2884,16 @@ class SpiffyUnit:
 
         self.winning_streak.append(unit)
 
+        streak_count = self.is_on_hot_streak()
+
+        return streak_count
+
+    def is_on_hot_streak(self):
+        """
+        Determines if unit is on a hot streak. A streak is
+        at least three consecutive victories. Returns the 
+        streak count, if any.
+        """
         streak_count = len(self.winning_streak)
 
         if streak_count >= 3:
@@ -3810,6 +3860,213 @@ class SpiffyRPG(callbacks.Plugin):
                 dungeon.announcer.player_info(player=player)
 
     title = wrap(title, ["user", "text"])
+
+    def _get_dungeon_and_user_id(self, irc, msg):
+        """
+        Get user_id, dungeon id, and user. This occurs before
+        almost every user interaction
+        """
+        user_id = self._get_user_id(irc, msg.prefix)          
+        channel = GAME_CHANNEL
+        dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+
+        if dungeon is not None and user_id is not None:
+            player = dungeon.get_unit_by_user_id(user_id)
+            
+            if player.is_alive():
+                battle = SpiffyBattle(db=self.db,
+                                      irc=irc,
+                                      destination=GAME_CHANNEL)
+                return {
+                    "dungeon": dungeon,
+                    "player": player,
+                    "battle": battle
+                }
+
+    def rock(self, irc, msg, args, user, target):
+        """
+        rock <target> - attacks your target with a Rock type weapon
+        """
+        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
+
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            player = dungeon_info["player"]
+            unit = dungeon.get_living_unit_by_name(target)
+
+            if target is not None:
+                equip_ok = player.equip_item_by_type(item_type="rock")
+
+                if equip_ok:
+                    can_battle_info = player.can_battle_unit(unit=unit)
+
+                    if can_battle_info["can_battle"]:
+                        """
+                        The target unit of the attack now equips a weapon!
+                        """
+                        unit.equip_random_weapon()
+
+                        battle = dungeon_info["battle"]
+                        battle.add_party_member(player)
+                        battle.add_party_member(unit)
+                        battle.start()
+                    else:
+                        reason = can_battle_info["reason"]
+                        irc.error("You can't attack that. %s" % reason)
+                else:
+                    dungeon.announcer.unit_death(unit=player)
+        else:
+            irc.error("That target appears to be dead or non-existent")
+
+    rock = wrap(rock, ["user", "text"])
+
+    def paper(self, irc, msg, args, user, target):
+        """
+        paper <target> - attacks your target with a Pock type weapon
+        """
+        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
+
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            player = dungeon_info["player"]
+            unit = dungeon.get_living_unit_by_name(target)
+
+            if target is not None:
+                equip_ok = player.equip_item_by_type(item_type="paper")
+
+                if equip_ok:
+                    can_battle_info = player.can_battle_unit(unit=unit)
+
+                    if can_battle_info["can_battle"]:
+                        """
+                        The target unit of the attack now equips a weapon!
+                        """
+                        unit.equip_random_weapon()
+
+                        battle = dungeon_info["battle"]
+                        battle.add_party_member(player)
+                        battle.add_party_member(unit)
+                        battle.start()
+                    else:
+                        reason = can_battle_info["reason"]
+                        irc.error("You can't attack that. %s" % reason)
+                else:
+                    dungeon.announcer.unit_death(unit=player)
+        else:
+            irc.error("That target appears to be dead or non-existent")
+    
+    paper = wrap(paper, ["user", "text"])
+
+    def scissors(self, irc, msg, args, user, target):
+        """
+        scissors <target> - attacks your target with a Sock type weapon
+        """
+        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
+
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            player = dungeon_info["player"]
+            unit = dungeon.get_living_unit_by_name(target)
+
+            if target is not None:
+                equip_ok = player.equip_item_by_type(item_type="scissors")
+
+                if equip_ok:
+                    can_battle_info = player.can_battle_unit(unit=unit)
+
+                    if can_battle_info["can_battle"]:
+                        """
+                        The target unit of the attack now equips a weapon!
+                        """
+                        unit.equip_random_weapon()
+
+                        battle = dungeon_info["battle"]
+                        battle.add_party_member(player)
+                        battle.add_party_member(unit)
+                        battle.start()
+                    else:
+                        reason = can_battle_info["reason"]
+                        irc.error("You can't attack that. %s" % reason)
+                else:
+                    dungeon.announcer.unit_death(unit=player)
+        else:
+            irc.error("That target appears to be dead or non-existent")
+    
+    scissors = wrap(scissors, ["user", "text"])
+
+    def lizard(self, irc, msg, args, user, target):
+        """
+        lizard <target> - attacks your target with a Lizard type weapon
+        """
+        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
+
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            player = dungeon_info["player"]
+            unit = dungeon.get_living_unit_by_name(target)
+
+            if target is not None:
+                equip_ok = player.equip_item_by_type(item_type="lizard")
+
+                if equip_ok:
+                    can_battle_info = player.can_battle_unit(unit=unit)
+
+                    if can_battle_info["can_battle"]:
+                        """
+                        The target unit of the attack now equips a weapon!
+                        """
+                        unit.equip_random_weapon()
+
+                        battle = dungeon_info["battle"]
+                        battle.add_party_member(player)
+                        battle.add_party_member(unit)
+                        battle.start()
+                    else:
+                        reason = can_battle_info["reason"]
+                        irc.error("You can't attack that. %s" % reason)
+                else:
+                    dungeon.announcer.unit_death(unit=player)
+        else:
+            irc.error("That target appears to be dead or non-existent")
+    
+    lizard = wrap(lizard, ["user", "text"])
+
+    def spock(self, irc, msg, args, user, target):
+        """
+        spock <target> - attacks your target with a Spock type weapon
+        """
+        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
+
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            player = dungeon_info["player"]
+            unit = dungeon.get_living_unit_by_name(target)
+
+            if target is not None:
+                equip_ok = player.equip_item_by_type(item_type="spock")
+
+                if equip_ok:
+                    can_battle_info = player.can_battle_unit(unit=unit)
+
+                    if can_battle_info["can_battle"]:
+                        """
+                        The target unit of the attack now equips a weapon!
+                        """
+                        unit.equip_random_weapon()
+
+                        battle = dungeon_info["battle"]
+                        battle.add_party_member(player)
+                        battle.add_party_member(unit)
+                        battle.start()
+                    else:
+                        reason = can_battle_info["reason"]
+                        irc.error("You can't attack that. %s" % reason)
+                else:
+                    dungeon.announcer.unit_death(unit=player)
+        else:
+            irc.error("That target appears to be dead or non-existent")
+    
+    spock = wrap(spock, ["user", "text"])
 
     def attack(self, irc, msg, args, user, target_and_item_type):
         """
