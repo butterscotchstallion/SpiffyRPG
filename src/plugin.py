@@ -974,6 +974,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
     def item_info(self, **kwargs):
         item = kwargs["item"]
+        player = kwargs["player"]
         item_name = self._b(item.name)
         rarity_indicator = self.get_rarity_indicator(rarity=item.rarity)
         bold_item_type_label = self._b("Item type")
@@ -984,6 +985,10 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
                   item.item_type)
 
         announcement_msg = "%s %s (%s) :: %s: %s" % params
+
+        if player is not None:
+            if player.get_equipped_weapon().id == item.id:
+                announcement_msg += ". This item is currently equipped."
 
         self._irc.reply(announcement_msg)
 
@@ -1140,7 +1145,6 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         player_xp = player.experience
         
-
         xp_req_for_this_level = player.get_xp_required_for_next_level() + 1
         xp_req_for_previous_level = player.get_xp_required_for_previous_level() + 1
         
@@ -3636,9 +3640,6 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
                 item_name = "%s [%s]" % (self._b(item.name), item_type)
                 is_equipped = item.id == equipped_item.id                
 
-                if is_equipped:
-                    item_name += " [E]"
-
                 item_name_list.append(item_name)
 
             announcement_msg = ", ".join(item_name_list)
@@ -4511,7 +4512,10 @@ class SpiffyRPG(callbacks.Plugin):
             dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
 
             if dungeon is not None:
-                dungeon.announcer.item_info(item=item)
+                user_id = self._get_user_id(irc, msg.prefix)
+                player = dungeon.get_unit_by_user_id(user_id)
+                dungeon.announcer.item_info(item=item,
+                                            player=player)
         else:
             irc.error("The tomes hold no mention of this artifact.")
 
