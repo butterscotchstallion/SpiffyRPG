@@ -185,6 +185,7 @@ class SpiffyBattle:
     def __init__(self, **kwargs):
         self.party = []
         self.db = kwargs["db"]
+        self.irc = kwargs["irc"]
         self.announcer = SpiffyBattleAnnouncer(irc=kwargs["irc"],
                                                destination=kwargs["destination"],
                                                public=True)
@@ -374,6 +375,10 @@ class SpiffyBattle:
         }
 
     def start(self):
+        attacker_announcer = None
+        target_announcer = None
+        battle_completed = False
+
         """
         Once an attacker is chosen, show them intro dialogue
         self.announcer.unit_dialogue(attacker, 
@@ -385,13 +390,9 @@ class SpiffyBattle:
         target = self.party[1]
 
         """
-        We initialize this way because in the case of a draw,
-        we're going to randomize the winner/loser anyway. If
-        it's not a draw, then winner and loser will be 
-        overwritten appropriately.
+        Initialize combat!
         """
-        winner = attacker
-        loser = target
+        rounds = 3
 
         """
         Check if the attacker hit. If the attacker hits successfully,
@@ -400,6 +401,14 @@ class SpiffyBattle:
         """
         hit_info = self.is_hit(attacker=attacker,
                                target=target)
+
+        if attacker.is_player:
+            attacker_announcer = SpiffyPlayerAnnouncer(irc=self.irc,
+                                                       destination=attacker.nick)
+
+        if target.is_player:
+            target_announcer = SpiffyPlayerAnnouncer(irc=self.irc,
+                                                     destination=target.nick)
 
         """
         In the case of a draw, there will be no attack info,
@@ -418,11 +427,16 @@ class SpiffyBattle:
             """
             attack_info = attacker.get_attack(attacker=attacker,
                                               target=target)
-            target.apply_damage(attack_info["damage"])
 
-            """ Target takes damage. Attacker wins """
-            winner = attacker
-            loser = target
+            if target_announcer is not None:
+                target_announcer.damage_applied(attack_info=attack_info,
+                                                attacker=target)
+
+            if attacker_announcer is not None:
+                attacker_announcer.damage_dealt(attack_info=attack_info,
+                                                target=target)
+
+            target.apply_damage(attack_info["damage"])
         else:
             """
             If the attacker did not strike the target, this could
@@ -433,20 +447,83 @@ class SpiffyBattle:
                                        target=attacker)
 
                 attack_info = target.get_attack(target=attacker,
-                                                attacker=target)
+                                                attacker=attacker)
+
+                if attacker_announcer is not None:
+                    attacker_announcer.damage_applied(attack_info=attack_info,
+                                                      attacker=target)
+
+                if target_announcer is not None:
+                    target_announcer.damage_dealt(attack_info=attack_info,
+                                                  target=target)
 
                 attacker.apply_damage(attack_info["damage"])
 
-                """ Attacker takes damage, target wins """
-                winner = target
-                loser = attacker
+        """
+        Increment rounds if we have a hit
+        """
+        if not hit_info["is_draw"]:
+            is_last_round_attacker = False
+            is_last_round_target = False
 
-        self.on_battle_completed(winner=winner,
-                                 loser=loser,
-                                 hit_info=hit_info,
-                                 attack_info=attack_info)
+            if not target.is_last_round(combatant=attacker):
+                target.add_battle_round(combatant=attacker,
+                                        hit_info=hit_info)
+            else:
+                is_last_round_target = True
 
-    
+            if not attacker.is_last_round(combatant=target):
+                attacker.add_battle_round(combatant=target,
+                                          hit_info=hit_info)
+            else:
+                is_last_round_attacker = True
+
+            if is_last_round_attacker and is_last_round_target:
+                battle = attacker.get_last_battle_by_combatant(combatant=target)
+                total_rounds = battle["total_rounds"]
+
+                attacker_rounds_won = attacker.get_rounds_won(combatant=target)
+                target_rounds_won = target.get_rounds_won(combatant=attacker)
+
+                params = (attacker.name, attacker_rounds_won, total_rounds, 
+                target.name, target_rounds_won, total_rounds)
+
+                log.info("SpiffyWorld: %s won %s/%s and target won %s/%s" % params)
+
+                if attacker_rounds_won == total_rounds:
+                    winner = attacker
+                    loser = target
+
+                if target_rounds_won == total_rounds:
+                    winner = target
+                    loser = attacker
+
+                battle_completed = True
+        else:
+            if attacker_announcer is not None:
+                attacker_announcer.attack_miss(hit_info=hit_info,
+                                               target=target)
+
+            if target_announcer is not None:
+                target_announcer.attack_miss(hit_info=hit_info,
+                                             target=attacker)
+
+        if not attacker.is_alive():
+            winner = target
+            loser = attacker
+            battle_completed = True
+
+        if not target.is_alive():
+            winner = attacker
+            loser = target
+            battle_completed = True
+
+        if battle_completed:
+            self.on_battle_completed(winner=winner,
+                                     loser=loser,
+                                     hit_info=hit_info,
+                                     attack_info=attack_info)
+
     def on_battle_completed(self, **kwargs):
         """
         After the battle has completed, iterate rounds
@@ -734,7 +811,7 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
             return
 
         bold_title = self._get_unit_title(unit)
-        dialogue_text = dialogue["dialogue"]
+        dialogue_text = dialogue
         orange_dialogue = self._c(dialogue_text, "orange")
         padded_level = str(unit.level).zfill(2)
         bold_level = self._b(padded_level)
@@ -1760,8 +1837,9 @@ class SpiffyDungeon:
 
         for unit in self.units:
             unit_name_match = unit.name.lower() == lower_name
+            nick_match = unit.nick.lower() == lower_name
 
-            if unit.is_alive() and unit_name_match:
+            if unit.is_alive() and (unit_name_match or nick_match):
                 return unit
 
     def get_dead_unit_by_name(self, name):
@@ -1783,7 +1861,7 @@ class SpiffyDungeon:
         hostiles = []
 
         for unit in self.units:
-            is_hostile = not unit.is_player and unit.is_hostile
+            is_hostile = not unit.is_player and unit.is_hostile()
             alive = unit.is_alive()
             same_stage = unit.get_stage_by_level(level=unit.level) == stage
 
@@ -1798,7 +1876,7 @@ class SpiffyDungeon:
         player_level = kwargs["level"]
         
         for unit in self.units:
-            is_hostile = not unit.is_player and unit.is_hostile
+            is_hostile = not unit.is_player and unit.is_hostile()
             alive = unit.is_alive()
             near_level = unit.level <= (player_level+near)
 
@@ -1908,7 +1986,7 @@ class SpiffyDungeon:
                 else:
                     dist["players"]["dead"] += 1
             else:
-                if unit.is_hostile:
+                if unit.is_hostile():
                     if unit.is_alive():
                         if unit.is_undead():
                             dist["npc"]["hostile"]["undead"] += 1
@@ -2265,6 +2343,7 @@ class SpiffyDungeonUnitCollection:
                           u.name AS unit_name,
                           utypes.name AS unit_type_name,
                           u.experience,
+                          u.combat_status,
                           u.limnoria_user_id AS user_id,
                           du.unit_id,
                           du.dungeon_id
@@ -2492,7 +2571,9 @@ class SpiffyUnitEffectsCollection:
                 if not unit_id in lookup:
                     lookup[unit_id] = []
 
-                lookup[unit_id].append(effect)
+                objectified_effect = SpiffyEffect(effect=effect)
+
+                lookup[unit_id].append(objectified_effect)
 
         return lookup
 
@@ -2744,7 +2825,8 @@ class SpiffyNPCUnitCollection:
                    u.name AS unit_name,
                    utypes.name AS unit_type_name,
                    u.experience,
-                   u.limnoria_user_id AS user_id
+                   u.limnoria_user_id AS user_id,
+                   u.combat_status
                    FROM spiffyrpg_units u
                    JOIN spiffyrpg_unit_types utypes ON utypes.id = u.unit_type_id
                    WHERE 1=1
@@ -2806,7 +2888,8 @@ class SpiffyPlayerUnitCollection:
                    u.name AS unit_name,
                    utypes.name AS unit_type_name,
                    u.experience,
-                   u.limnoria_user_id AS user_id
+                   u.limnoria_user_id AS user_id,
+                   u.combat_status
                    FROM spiffyrpg_units u
                    JOIN spiffyrpg_unit_types utypes ON utypes.id = u.unit_type_id
                    WHERE 1=1
@@ -2922,6 +3005,9 @@ class SpiffyUnit:
         self.slain_foes = []
         self.winning_streak = []
         self.raised_units = []
+        self.hostile_combatants = {}
+        self.battles = []
+
         unit = kwargs["unit"]
 
         self.id = unit["id"]
@@ -2934,7 +3020,7 @@ class SpiffyUnit:
         self.dialogue = dialogue_collection.get_dialogue_by_unit_id(unit_id=self.id)
         self.experience = unit["experience"]
         self.level = self.unit_level.get_level_by_xp(self.experience)
-        self.is_hostile = True
+        self.combat_status = unit["combat_status"]
 
         """ When unit is an NPC then use the unit name """
         self.name = unit["unit_name"]
@@ -2949,9 +3035,6 @@ class SpiffyUnit:
         self.is_player = self.user_id > 0
 
         if self.is_player:
-            self.is_hostile = False
-            self.is_player = True
-
             user_id_lookup = kwargs["user_lookup"]["look_up_user_ids"]
 
             if self.user_id in user_id_lookup:
@@ -2978,6 +3061,173 @@ class SpiffyUnit:
         self.hp = self.calculate_hp()
 
         log.info("SpiffyRPG: %s has %s dialogues" % (self.name, len(self.dialogue)))
+
+    def add_battle(self, **kwargs):
+        """
+        Each battle consists of three rounds.
+        """
+        combatant = kwargs["combatant"]
+        total_rounds = kwargs["rounds"]
+
+        last_battle = self.get_last_battle_by_combatant(combatant=combatant)
+
+        if last_battle is None:
+            self.battles.append({
+                "combatant": combatant,
+                "rounds": [],
+                "total_rounds": total_rounds
+            })
+
+            log.info("SpiffyRPG: %s battles: %s" % (self.name, self.battles))
+
+            return self.battles[-1]
+
+    def is_last_round(self, **kwargs):
+        combatant = kwargs["combatant"]
+        total_rounds = kwargs["rounds"]
+
+        last_battle = self.get_last_battle_by_combatant(combatant=combatant)
+
+        if last_battle is not None:
+            return len(last_battle["rounds"]) == last_battle["total_rounds"]
+
+    def add_battle_round(self, **kwargs):
+        combatant = kwargs["combatant"]
+        hit_info = kwargs["hit_info"]
+
+        last_battle = self.get_last_battle_by_combatant(combatant=combatant)
+
+        if last_battle is not None:
+            rounds = last_battle["rounds"]
+
+            if len(rounds) < last_battle["total_rounds"]:
+                rounds.append({
+                    "hit_info": hit_info
+                })
+
+            return last_battle
+        else:
+            last_battle = self.add_battle(combatant=combatant,
+                                          rounds=3)
+            last_battle["rounds"].append({
+                "hit_info": hit_info
+            })
+
+            return last_battle
+
+    def get_rounds_won(self, **kwargs):
+        """
+        Gets rounds won when this unit is the attacker
+        """
+        combatant = kwargs["combatant"]
+        rounds_won = 0
+        last_battle = self.get_last_battle_by_combatant(combatant=combatant)
+
+        if last_battle is not None:
+            rounds = last_battle["rounds"]
+
+            for battle_round in rounds:
+                if battle_round["hit_info"]["is_hit"]:
+                    rounds_won += 1
+
+            return rounds_won
+
+    def is_last_round(self, **kwargs):
+        combatant = kwargs["combatant"]
+
+        last_battle = self.get_last_battle_by_combatant(combatant=combatant)
+
+        if last_battle is not None:
+            if last_battle["rounds"] == last_battle["total_rounds"]:
+                return True
+
+    def increment_battle_rounds(self, **kwargs):
+        combatant = kwargs["combatant"]
+
+        last_battle = self.get_last_battle_by_combatant(combatant=combatant)
+
+        if last_battle is not None:
+            if last_battle["rounds"] < last_battle["total_rounds"]:
+                last_battle["rounds"] += 1
+
+    def get_last_battle_by_combatant(self, **kwargs):
+        combatant = kwargs["combatant"]
+        battles = list(reversed(self.battles))
+
+        log.info("SpiffyRPG: finding last battle for %s. %s battles for %s" % \
+        (combatant.name, len(battles), self.name))
+
+        for battle in battles:
+            if battle["combatant"].id == combatant.id:
+                return battle
+
+    def is_hostile_combatant(self, **kwargs):
+        """
+        After the agreed upon number of rounds has expired,
+        the combatant is no longer hostile
+        """
+        combatant = kwargs["combatant"]
+
+        is_combatant = combatant.user_id in self.hostile_combatants
+
+        if is_combatant:
+            combat_info = self.hostile_combatants[combatant.user_id]
+            rounds = combat_info["rounds"]
+
+            log.info("SpiffyRPG: %s rounds left between %s and %s" % (rounds, combatant.name, self.name))
+
+            if rounds > 0:
+                return True
+        else:
+            log.info("SpiffyRPG: %s is not a combatant of %s" % (combatant.name, self.name))
+
+    def add_hostile_combatant(self, **kwargs):
+        rounds = kwargs["rounds"]
+        combatant = kwargs["combatant"]
+        combatant_user_id = combatant.user_id
+
+        if not self.is_hostile_combatant(combatant=combatant):
+            self.hostile_combatants[combatant_user_id] = {
+                "unit": combatant,
+                "rounds": rounds
+            }
+
+    def get_battle_against_combatant(self, **kwargs):
+        combatant = kwargs["combatant"]
+
+        if self.is_hostile_combatant(combatant=combatant):
+            return self.hostile_combatants[combatant.user_id]
+
+    def has_rounds_left(self, **kwargs):
+        combatant = kwargs["combatant"]
+
+        if self.is_hostile_combatant(combatant=combatant):
+            return self.hostile_combatants[combatant.user_id]["rounds"] > 0
+
+    def reset_hostile_combatant_rounds(self, **kwargs):
+        combatant = kwargs["combatant"]
+
+        if self.is_hostile_combatant(combatant=combatant):
+            self.hostile_combatants[combatant.user_id]["rounds"] = 0
+
+    def decrement_hostile_combatant_rounds(self, **kwargs):
+        combatant = kwargs["combatant"]
+        user_id = combatant.user_id
+
+        if self.is_hostile_combatant(combatant=combatant):
+            log.info("SpiffyRPG: %s decrementing rounds for %s" % (self.name, combatant.name))
+
+            self.hostile_combatants[user_id]["rounds"] -= 1
+
+            """
+            Only players need announcements!
+            """
+            if self.is_player:
+                self.announcer.battle_round(combatant=combatant,
+                                            player=self,
+                                            rounds_remaining=self.hostile_combatants[user_id]["rounds"])
+        else:
+            log.info("SpiffyRPG: user id %s not in combatants for %s" % (user_id, self.name))
 
     def get_effects_list(self):
         """
@@ -3040,26 +3290,33 @@ class SpiffyUnit:
 
         return title
 
+    def is_hostile(self):
+        return self.combat_status == "hostile"
+
+    def is_friendly(self):
+        return self.combat_status == "friendly"
+
     def can_battle_unit(self, **kwargs):
         """
         As a balancing measure, units in certain stages
         cannot battle each other.
         """
         unit = kwargs["unit"]
+        can_battle = False
+        reason = "That target is friendly"
 
         if unit is not None:
-            this_unit_stage = self.get_stage_by_level(level=self.level)
-            target_unit_stage = self.get_stage_by_level(level=unit.level)
-            can_battle = False
-            reason = "You are in the same stage"
-
-            if target_unit_stage == this_unit_stage:
-                can_battle = True
-            elif target_unit_stage > this_unit_stage:
-                reason = "That target is too powerful! Try using .look to find monsters your level."
-            elif target_unit_stage < this_unit_stage:
-                reason = "That target is not worth your time. Try using .look to find monsters your level."
-
+            if unit.is_hostile():
+                this_unit_stage = self.get_stage_by_level(level=self.level)
+                target_unit_stage = self.get_stage_by_level(level=unit.level)
+                
+                if target_unit_stage == this_unit_stage:
+                    can_battle = True
+                elif target_unit_stage > this_unit_stage:
+                    reason = "That target is too powerful! Try using .look to find monsters your level."
+                elif target_unit_stage < this_unit_stage:
+                    reason = "That target is not worth your time. Try using .look to find monsters your level."
+            
             return {
                 "reason": reason,
                 "can_battle": can_battle
@@ -3072,7 +3329,7 @@ class SpiffyUnit:
         if self.is_below_max_hp():
             self.hp += regen_hp
 
-            self.announcer.player_regenerates(regen_hp=regen_hp)
+            #self.announcer.player_regenerates(regen_hp=regen_hp)
 
             log.info("SpiffyRPG: unit %s gains %sHP from Regneration" % (self.name, regen_hp))
         else:
@@ -3359,7 +3616,9 @@ class SpiffyUnit:
                 dialogues.append(dialogue)
 
         if len(dialogues) > 0:
-            return random.choice(dialogues)
+            dialogue = random.choice(dialogues)
+
+            return dialogue["dialogue"]
 
     def dialogue_intro(self):
         return self.get_dialogue_by_type(dialogue_type="intro")
@@ -3557,12 +3816,17 @@ class SpiffyUnit:
         if self.hp <= 0:
             self.on_unit_death()
 
-    def on_unit_death(self):
-        """
+    def on_unit_death(self):        
         if self.is_player:
             self.announcer.unit_death()
         """
-        pass
+        Clear hostile combatants rounds when the
+        unit dies
+        """
+        log.info("SpiffyRPG: clearing hostile combatants for %s" % self.name)
+
+        for user_id in self.hostile_combatants:
+            self.hostile_combatants[user_id]["rounds"] = 0
 
     def remove_effect_by_id(self, id):
         effects = []
@@ -3589,23 +3853,61 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
                                   destination=kwargs["destination"],
                                   public=False)
 
+    def attack_miss(self, **kwargs):
+        hit_info = kwargs["hit_info"]
+        target = kwargs["target"]
+        params = (hit_info["attacker_weapon"].name, target.name)
+
+        announcement_msg = "Your %s misses %s!" % params
+
+        self.announce(announcement_msg)
+
+    def damage_dealt(self, **kwargs):
+        attack_info = kwargs["attack_info"]
+        target = kwargs["target"]
+        params = (attack_info["item"].name, target.name, attack_info["damage"])
+
+        announcement_msg = "Your %s hits %s for %s damage" % params
+
+        self.announce(announcement_msg)
+
+    def damage_applied(self, **kwargs):
+        attack_info = kwargs["attack_info"]
+        attacker = kwargs["attacker"]
+
+        params = (attack_info["damage"], attacker.name, attack_info["item"].name)
+
+        announcement_msg = "You take %s damage from %s's %s" % params
+
+        self.announce(announcement_msg)
+
+    def battle_round(self, **kwargs):
+        combatant = kwargs["combatant"]
+        player = kwargs["player"]
+        rounds_remaining = kwargs["rounds_remaining"]
+        params = (player.name, combatant.name, rounds_remaining)
+
+        announcement_msg = "%s vs. %s: %s rounds remaining" % params
+
+        self.announce(announcement_msg)
+
     def challenge_sent(self, **kwargs):
-        player_nick = kwargs["player_nick"]
+        player_nick = self._b(kwargs["player_nick"])
 
         announcement_msg = "Challenge sent to %s" % player_nick
 
         self.announce(announcement_msg)
 
     def challenge_received(self, **kwargs):
-        player_nick = kwargs["player_nick"]
+        player_nick = self._b(kwargs["player_nick"])
 
-        announcement_msg = "You have been challenged by %s. type \"challenge %s\" to battle them!" % (player_nick, player_nick)
+        announcement_msg = "You have been challenged by %s. type \"accept %s\" to allow them to attack you!" % (player_nick, player_nick)
 
         self.announce(announcement_msg)
 
     def unit_death(self):
         died = self._c("died", "red")
-        announcement_msg = "You have %s." % died
+        announcement_msg = "You have %s. Don't worry though, you'll regenerate HP automatically over time :)" % died
 
         self.announce(announcement_msg)
 
@@ -3866,7 +4168,7 @@ class SpiffyRPG(callbacks.Plugin):
         """
         Look around for anything of note nearby
         """
-        channel = msg.args[0]
+        channel = GAME_CHANNEL
         
         if ircutils.isChannel(channel):
             user_id = self._get_user_id(irc, msg.prefix)
@@ -4010,6 +4312,15 @@ class SpiffyRPG(callbacks.Plugin):
                 battle = SpiffyBattle(db=self.db,
                                       irc=irc,
                                       destination=GAME_CHANNEL)
+                
+                attacker_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                           destination=msg.nick)
+                target_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                         destination=player.nick)
+
+                battle.set_challenger_announcer(attacker_announcer)
+                battle.set_opponent_announcer(target_announcer)
+
                 return {
                     "dungeon": dungeon,
                     "player": player,
@@ -4034,10 +4345,10 @@ class SpiffyRPG(callbacks.Plugin):
                 PvP battles require prior challenge acceptance.
                 """
                 if unit.is_player:
-                    accepted_challenge = self.battle.is_challenge_accepted(challenger_user_id=player.user_id,
-                                                                           opponent_user_id=unit.user_id)
-                    if accepted_challenge is None:
-                        irc.error("That player must first accept your challenger. Use \"challenge %s\" to issue a challenge.")
+                    is_hostile_combatant = unit.is_hostile_combatant(combatant=player)
+
+                    if not is_hostile_combatant:
+                        irc.error("That player must first accept your challenge. Use \"challenge %s\" to issue a challenge." % unit.nick)
                         return
                 
                 equip_ok = player.equip_item_by_type(item_type="rock")
@@ -4049,7 +4360,8 @@ class SpiffyRPG(callbacks.Plugin):
                         """
                         The target unit of the attack now equips a weapon!
                         """
-                        unit.equip_random_weapon()
+                        if not unit.is_player:
+                            unit.equip_random_weapon()
 
                         battle = dungeon_info["battle"]
                         battle.add_party_member(player)
@@ -4077,6 +4389,16 @@ class SpiffyRPG(callbacks.Plugin):
             unit = dungeon.get_living_unit_by_name(target)
 
             if unit is not None:
+                """
+                PvP battles require prior challenge acceptance.
+                """
+                if unit.is_player:
+                    is_hostile_combatant = unit.is_hostile_combatant(combatant=player)
+
+                    if not is_hostile_combatant:
+                        irc.error("That player must first accept your challenge. Use \"challenge %s\" to issue a challenge." % unit.nick)
+                        return
+
                 equip_ok = player.equip_item_by_type(item_type="paper")
 
                 if equip_ok:
@@ -4086,7 +4408,8 @@ class SpiffyRPG(callbacks.Plugin):
                         """
                         The target unit of the attack now equips a weapon!
                         """
-                        unit.equip_random_weapon()
+                        if not unit.is_player:
+                            unit.equip_random_weapon()
 
                         battle = dungeon_info["battle"]
                         battle.add_party_member(player)
@@ -4114,6 +4437,16 @@ class SpiffyRPG(callbacks.Plugin):
             unit = dungeon.get_living_unit_by_name(target)
 
             if unit is not None:
+                """
+                PvP battles require prior challenge acceptance.
+                """
+                if unit.is_player:
+                    is_hostile_combatant = unit.is_hostile_combatant(combatant=player)
+
+                    if not is_hostile_combatant:
+                        irc.error("That player must first accept your challenge. Use \"challenge %s\" to issue a challenge." % unit.nick)
+                        return
+
                 equip_ok = player.equip_item_by_type(item_type="scissors")
 
                 if equip_ok:
@@ -4123,7 +4456,8 @@ class SpiffyRPG(callbacks.Plugin):
                         """
                         The target unit of the attack now equips a weapon!
                         """
-                        unit.equip_random_weapon()
+                        if not unit.is_player:
+                            unit.equip_random_weapon()
 
                         battle = dungeon_info["battle"]
                         battle.add_party_member(player)
@@ -4151,6 +4485,16 @@ class SpiffyRPG(callbacks.Plugin):
             unit = dungeon.get_living_unit_by_name(target)
 
             if unit is not None:
+                """
+                PvP battles require prior challenge acceptance.
+                """
+                if unit.is_player:
+                    is_hostile_combatant = unit.is_hostile_combatant(combatant=player)
+
+                    if not is_hostile_combatant:
+                        irc.error("That player must first accept your challenge. Use \"challenge %s\" to issue a challenge." % unit.nick)
+                        return
+
                 equip_ok = player.equip_item_by_type(item_type="lizard")
 
                 if equip_ok:
@@ -4160,7 +4504,8 @@ class SpiffyRPG(callbacks.Plugin):
                         """
                         The target unit of the attack now equips a weapon!
                         """
-                        unit.equip_random_weapon()
+                        if not unit.is_player:
+                            unit.equip_random_weapon()
 
                         battle = dungeon_info["battle"]
                         battle.add_party_member(player)
@@ -4197,7 +4542,8 @@ class SpiffyRPG(callbacks.Plugin):
                         """
                         The target unit of the attack now equips a weapon!
                         """
-                        unit.equip_random_weapon()
+                        if not unit.is_player:
+                            unit.equip_random_weapon()
 
                         battle = dungeon_info["battle"]
                         battle.add_party_member(player)
@@ -4212,6 +4558,32 @@ class SpiffyRPG(callbacks.Plugin):
             irc.error("That target appears to be dead or non-existent")
     
     spock = wrap(spock, ["user", "text"])
+
+    def sup(self, irc, msg, args, user, target):
+        """
+        Greet a target
+        """
+        is_channel = irc.isChannel(msg.args[0])
+
+        if is_channel:
+            user_id = self._get_user_id(irc, msg.prefix)
+            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+
+            if dungeon is not None:
+                unit = dungeon.get_unit_by_name(target)
+                player = dungeon.get_unit_by_user_id(user_id)
+
+                if player is not None and unit is not None:
+                    dialogue = unit.dialogue_sup()
+
+                    if dialogue is not None:
+                        dungeon.announcer.unit_dialogue(unit, dialogue)
+                    else:
+                        log.info("SpiffyRPG: %s has no dialogue for interaction '%s'" % (unit.name, interaction))
+                else:
+                    log.error("SpiffyRPG: interaction failed: unit is %s and player is %s" % (unit, player))
+
+    sup = wrap(sup, ["user", "text"])
 
     def attack(self, irc, msg, args, user, target_and_item_type):
         """
@@ -4292,7 +4664,7 @@ class SpiffyRPG(callbacks.Plugin):
 
     attack = wrap(attack, ["user", "text"])
 
-    def accept_challenge(self, irc, msg, user, target_nick):
+    def accept(self, irc, msg, args, user, target_nick):
         """
         accept <nick> - Accepts a PvP challenge from another player
         """
@@ -4312,28 +4684,30 @@ class SpiffyRPG(callbacks.Plugin):
             log.error("SpiffyRPG: could not find user id for nick '%s'" % target_nick)
             return
 
-        challenge_accepted = self.battle.accept_challenge(challenger_user_id=attacker_user_id,
-                                                          opponent_user_id=target_user_id)
+        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
 
-        if challenge_accepted:
-            irc.reply("Challenge accepted. You may now attack %s!" % target_nick)
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            player = dungeon_info["player"]
+            target_unit = dungeon.get_player_by_user_id(target_user_id)
 
-            """
-            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+            if target_unit is not None:
+                """
+                PvP battles require prior challenge acceptance.
+                """
+                rounds = 3
 
-            if dungeon is not None:
-                player_1 = dungeon.get_unit_by_user_id(attacker_user_id)
-                player_2 = dungeon.get_unit_by_user_id(target_user_id)
-                
-                if player_1 is not None and player_2 is not None:
-                    self.battle.add_party_member(player_1)
-                    self.battle.add_party_member(player_2)
-                    battle.start()
-            """
-        else:
-            irc.error("There is already a challenge pending for that player")
+                player.add_hostile_combatant(combatant=target_unit,
+                                             rounds=rounds)
 
-    accept_challenge = wrap(accept_challenge, ["user", "something"])
+                target_unit.add_hostile_combatant(combatant=player,
+                                                  rounds=rounds)
+
+                irc.reply("You have accepted a challenge from %s. You may now attack them in private message." % target_unit.nick)
+            else:
+                irc.error("That target seems to be dead or non-existent.")
+
+    accept = wrap(accept, ["user", "something"])
 
     def challenge(self, irc, msg, args, user, target_nick):
         """
@@ -4376,17 +4750,9 @@ class SpiffyRPG(callbacks.Plugin):
         target_announcer = SpiffyPlayerAnnouncer(irc=irc,
                                                  destination=target_nick)
 
-        self.battle.set_challenger_announcer(attacker_announcer)
-        self.battle.set_opponent_announcer(target_announcer)
-
-        challenged_successfully = self.battle.send_challenge(challenger_user_id=attacker_user_id,
-                                                             opponent_user_id=target_user_id,
-                                                             challenger_nick=msg.nick)
-
-        if challenged_successfully is not None:
-            irc.reply("Challenge sent.")
-        else:
-            irc.error("Challenge pending for that player already.")
+        """ Send announcements to both sides """
+        attacker_announcer.challenge_sent(player_nick=target_nick)
+        target_announcer.challenge_received(player_nick=msg.nick)
 
     challenge = wrap(challenge, ["user", "something"])
 
@@ -4693,7 +5059,7 @@ class SpiffyRPG(callbacks.Plugin):
             channel = GAME_CHANNEL
             dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
   
-            if dungeon is not None:                    
+            if dungeon is not None:
                 """ Add player to dungeon """
                 player = dungeon.spawn_player_unit(user_id=user_id)
 
@@ -4719,7 +5085,11 @@ class SpiffyRPG(callbacks.Plugin):
 
     sjoin = wrap(sjoin, ["user", "text"])
 
-    """ Admin-only commands """
+    """ 
+    =================================================================
+    = Admin-only commands                                           =
+    =================================================================
+    """
 
     def fspawn(self, irc, msg, args, unit_level, unit_type_name):
         """
@@ -4815,20 +5185,6 @@ class SpiffyRPG(callbacks.Plugin):
 
     fchaos = wrap(fchaos)
 
-    def fdungeoninit(self, irc, msg, args, channel):
-        """
-        fdungeoninit - force a dungeon to reinitialize
-        """
-        if not channel:
-            channel = msg.args[0]
-
-        if ircutils.isChannel(channel):
-            self._init_world(channel)
-        else:
-            irc.error("No dungeons with that channel")
-
-    fdungeoninit = wrap(fdungeoninit, ["text"])
-
     def fmove(self, irc, msg, unit, position):
         """
         fmove unitID positionID - Moves a unit to specified position
@@ -4901,7 +5257,7 @@ class SpiffyRPG(callbacks.Plugin):
             try:
                 user_id = self._get_user_id(irc, msg.prefix)
             except KeyError:
-                pass
+                log.error("SpiffyWorld: problem finding user_id for %s" % msg.nick)
 
             if user_id is not None:
                 dungeon = self.SpiffyWorld.get_dungeon_by_channel(msg.args[0])
