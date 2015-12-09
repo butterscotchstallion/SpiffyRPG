@@ -89,6 +89,15 @@ class SpiffyAnnouncer(object):
             3: "yellow"
         }
 
+        """
+        Only units >= level 30 may use obnoxious titles
+        with background colors.
+        """
+        if unit.level < 30:
+            log.info("SpiffyRPG: inserting stop char in title")
+
+            unit.name += "\x0F"
+
         bold_title = self._b(unit.name)
         indicator = self._get_unit_indicator(unit)
 
@@ -1101,7 +1110,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         announcement_msg = "%s :: %s" % params
 
-        self._irc.reply(announcement_msg)
+        kwargs["irc"].reply(announcement_msg)
 
     def unit_attack(self, **kwargs):
         danger_low_hp_threshold = 20
@@ -3607,12 +3616,47 @@ class SpiffyUnit:
         return items
 
     def equip_random_weapon(self):
+        """
+        Before each fight, NPCs equip a random weapon. However,
+        this behavior can be modified through effects!
+        """
         items = self.items
 
         if len(items) > 0:
+            """
+            By default we fetch a random item as usual.
+            """
             random_item = random.choice(items)
-            
-            self.equipped_weapon = random_item
+            equipped_item = random_item
+            pref_chance = 70
+            chance_to_equip_preferred = random.randrange(1, 100) > pref_chance
+
+            """
+            If the unit has one of the preferential weapon effects,
+            then choose one of those appropriately.
+            """
+            if self.is_archeologist():
+                if chance_to_equip_preferred:
+                    log.info("SpiffyRPG: Archeologist %s is equipping a rock!" % self.name)
+                    equipped_item = self.get_rock_weapon()
+            elif self.is_paper_enthusiast():
+                if chance_to_equip_preferred:
+                    log.info("SpiffyRPG: Paper Enthusiast %s is equipping a rock!" % self.name)
+                    equipped_item = self.get_paper_weapon()
+            elif self.is_running_with_scissors():
+                if chance_to_equip_preferred:
+                    log.info("SpiffyRPG: Running With Scissors %s is equipping a rock!" % self.name)
+                    equipped_item = self.get_scissors_weapon()
+            elif self.is_blue_tongue():
+                if chance_to_equip_preferred:
+                    log.info("SpiffyRPG: Blue Tongue %s is equipping a rock!" % self.name)
+                    equipped_item = self.get_lizard_weapon()
+            elif self.is_vulcan_embraced():
+                if chance_to_equip_preferred:
+                    log.info("SpiffyRPG: Vulcan's Embrace %s is equipping a rock!" % self.name)
+                    equipped_item = self.get_spock_weapon()
+
+            self.equipped_weapon = equipped_item
         else:
             log.error("SpiffyRPG: no items to equip!")
 
@@ -3826,6 +3870,21 @@ class SpiffyUnit:
 
     def is_undead(self):
         return self.has_effect_name(name="Undead")
+
+    def is_archeologist(self):
+        return self.has_effect_name(name="Archeologist")
+
+    def is_paper_enthusiast(self):
+        return self.has_effect_name(name="Paper Enthusiast")
+
+    def is_running_with_scissors(self):
+        return self.has_effect_name(name="Running With Scissors")
+
+    def is_blue_tongue(self):
+        return self.has_effect_name(name="Blue Tongue")
+
+    def is_vulcan_embraced(self):
+        return self.has_effect_name(name="Vulcan's Embrace")
 
     def has_effect_name(self, **kwargs):
         name = kwargs["name"]
@@ -4278,6 +4337,7 @@ class SpiffyRPG(callbacks.Plugin):
                     dungeon.announcer.look(dungeon=dungeon, 
                                            player=player,
                                            units=dead,
+                                           irc=irc,
                                            is_seance=False)
                 else:
                     dungeon.announcer.seance_failed(dungeon=dungeon,
@@ -4417,7 +4477,7 @@ class SpiffyRPG(callbacks.Plugin):
 
     def paper(self, irc, msg, args, user, target):
         """
-        paper <target> - attacks your target with a Pock type weapon
+        paper <target> - attacks your target with a Paper type weapon
         """
         dungeon_info = self._get_dungeon_and_user_id(irc, msg)
 
@@ -4465,7 +4525,7 @@ class SpiffyRPG(callbacks.Plugin):
 
     def scissors(self, irc, msg, args, user, target):
         """
-        scissors <target> - attacks your target with a Sock type weapon
+        scissors <target> - attacks your target with a Scissors type weapon
         """
         dungeon_info = self._get_dungeon_and_user_id(irc, msg)
 
@@ -4638,7 +4698,7 @@ class SpiffyRPG(callbacks.Plugin):
             if dungeon is not None:
                 player = dungeon.get_unit_by_user_id(user_id)
 
-                if player.is_alive():
+                if player is not None and player.is_alive():
                     """
                     The target name may contain spaces, so whatever
                     the last part is will be the item type.
@@ -4938,7 +4998,7 @@ class SpiffyRPG(callbacks.Plugin):
             dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
 
             if dungeon is not None:
-                dungeon.announcer.effect_info(effect=effect)
+                dungeon.announcer.effect_info(effect=effect, irc=irc)
         else:
             irc.error("The tomes hold no mention of this spell.")
 
@@ -5146,6 +5206,23 @@ class SpiffyRPG(callbacks.Plugin):
 
     fspawn = wrap(fspawn, ["something", optional("anything")])
 
+    def fhostile(self, irc, msg, args, unit_name):
+        """
+        fhostile <unit name> - changes unit's combat status to hostile
+        """
+        dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+
+        if dungeon is not None:
+            unit = dungeon.get_unit_by_name(unit_name)
+
+            if unit is not None:
+                unit.combat_status = "hostile"
+                irc.reply("%s's combat status has been set to HOSTILE" % unit.name)
+            else:
+                irc.error("Couldn't find that unit")
+
+    fhostile = wrap(fhostile, ["text"])
+
     def fkill(self, irc, msg, args, unit_name):
         """
         Kill target unit
@@ -5300,9 +5377,9 @@ class SpiffyRPG(callbacks.Plugin):
                 log.error("SpiffyWorld: problem finding user_id for %s" % msg.nick)
 
             if user_id is not None:
-                dungeon = self.SpiffyWorld.get_dungeon_by_channel(msg.args[0])
+                dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
   
-                if dungeon is not None:                    
+                if dungeon is not None:
                     """ Add player to dungeon """
                     player = dungeon.spawn_player_unit(user_id=user_id)
 
