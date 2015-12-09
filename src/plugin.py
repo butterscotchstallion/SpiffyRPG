@@ -513,10 +513,16 @@ class SpiffyBattle:
             loser = attacker
             battle_completed = True
 
+            if target_announcer is not None:
+                target_announcer.unit_slain(unit=attacker)
+
         if not target.is_alive():
             winner = attacker
             loser = target
             battle_completed = True
+
+            if attacker_announcer is not None:
+                attacker_announcer.unit_slain(unit=target)
 
         if battle_completed:
             self.on_battle_completed(winner=winner,
@@ -892,7 +898,7 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
 
         winner_title = self._get_unit_title(winner)
         loser_title = self._get_unit_title(loser)
-        attack_name = self._c(winner_attack, "light green")
+        attack_name = self._c("uses %s" % winner_attack, "light green")
         winner_hp = self._c(winner.get_hp(), "red")
         loser_hp = self._c(loser.get_hp(), "green")
         attack_word = hit_info["hit_word"]
@@ -900,15 +906,23 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         if attack["is_critical_strike"]:
             attack_word = "*%s*" % attack_word
 
-        attack_word = self._b(self._c(attack_word, "red"))
+        attack_word = self._b(attack_word)
 
         damage = self._c(attack["damage"], "red")
 
+        """
+        Bark Chudson (220) deploys pics or it didn't happen • (L poisons V) • Geek Squad Agent (100 -65: 35)
+        """
         params = (winner_title, attack_name, winner_item_type, attack_word, loser_title, 
         loser_item_type, damage, winner_title, winner_hp, pink_heart)
 
-        announcement_msg = "%s's %s [%s] %s %s [%s] for %s. %s survived with %s %s" % params
-        #announcement_msg += "%s attacked % times for %s damage." % ()
+        #announcement_msg = "%s's %s [%s] %s %s [%s] for %s. %s survived with %s %s" % params
+        hp_before_last_attack = loser.get_hp() + attack["damage"]
+
+        new_params = (winner_title, winner_hp, attack_name, winner_item_type, attack_word, \
+        loser_item_type, loser_title, hp_before_last_attack, damage, loser_hp)
+
+        announcement_msg = u"%s (%s) %s • (%s %s %s) %s (%s-%s: %s)" % new_params
 
         if winner.is_player and kwargs["xp_gained"] > 0:
             announcement_msg += " %s gains %s %s" % (winner_title, green_xp, internet_points)
@@ -989,6 +1003,16 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         announcer_parent.__init__(irc=kwargs["irc"],
                                   destination=kwargs["destination"],
                                   public=True)
+
+    def pvp_challenge(self, **kwargs):
+        attacker = kwargs["attacker"]
+        target = kwargs["target"]
+
+        params = (self._b(attacker.name), self._b(target.name))
+
+        announcement_msg = "It's on between %s and %s!" % params
+
+        self.announce(announcement_msg)
 
     def unit_death(self, **kwargs):
         """
@@ -1387,6 +1411,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         dungeon = kwargs["dungeon"]
         player = kwargs["player"]
         units = kwargs["units"]
+        irc = kwargs["irc"]
         words = ["looks around", "inspects the surroundings of", 
         "scans the area of"]
         is_seance = kwargs["is_seance"]
@@ -1418,8 +1443,8 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
             msg = "%s %s %s but sees nothing of import" % \
             (player_name, look_phrase, dungeon_name)
 
-        #self._irc.reply(msg, notice=True)
-        self.announce(msg)
+        irc.reply(msg, notice=True)
+        #self.announce(msg)
 
     def inspect_target(self, **kwargs):
         """
@@ -3708,7 +3733,12 @@ class SpiffyUnit:
         return gained_level
 
     def calculate_hp(self):
-        base_hp = self.level * 20
+        base_factor = 15
+
+        if self.is_player:
+            base_factor += 5
+
+        base_hp = self.level * base_factor
         
         return base_hp
 
@@ -3738,7 +3768,7 @@ class SpiffyUnit:
         log.info("SpiffyRPG: %s has been turned! setting HP to %s (%s total)" % params)
 
     def get_attack_damage(self):
-        return random.randrange(5, 10) * self.level
+        return random.randrange(5, 7) * self.level
 
     def is_counterpart(self, **kwargs):
         target_unit = kwargs["target_unit"]
@@ -3852,6 +3882,13 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
         announcer_parent.__init__(irc=kwargs["irc"],
                                   destination=kwargs["destination"],
                                   public=False)
+
+    def unit_slain(self, **kwargs):
+        unit = kwargs["unit"]
+
+        announcement_msg = "You have slain %s!" % self._b(unit.name)
+
+        self.announce(announcement_msg)
 
     def attack_miss(self, **kwargs):
         hit_info = kwargs["hit_info"]
@@ -4185,6 +4222,7 @@ class SpiffyRPG(callbacks.Plugin):
                         dungeon.announcer.look(dungeon=dungeon, 
                                                player=player,
                                                units=units,
+                                               irc=irc,
                                                is_seance=False)
                     else:
                         log.info("SpiffyRPG: %s does not seem to be registered %s" % (msg.nick, user_id))
@@ -4704,6 +4742,9 @@ class SpiffyRPG(callbacks.Plugin):
                                                   rounds=rounds)
 
                 irc.reply("You have accepted a challenge from %s. You may now attack them in private message." % target_unit.nick)
+                
+                dungeon.announcer.pvp_challenge(attacker=player,
+                                                target=target_unit)
             else:
                 irc.error("That target seems to be dead or non-existent.")
 
@@ -4961,7 +5002,6 @@ class SpiffyRPG(callbacks.Plugin):
             irc.error("I don't see that nick here")
             return
 
-        channel = msg.args[0]
         info_target = msg.nick
         user_id = None
 
@@ -4972,7 +5012,7 @@ class SpiffyRPG(callbacks.Plugin):
             pass
 
         if user_id is not None:
-            dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
+            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
 
             if dungeon is not None:
                 log.info("SpiffyRPG: looking up nick %s with user_id %s" % (target_nick, user_id))
