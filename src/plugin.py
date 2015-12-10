@@ -815,7 +815,7 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         elif streak_count == 6:
             announcement_msg = "%s is GOD-LIKE!" % unit_name
         elif streak_count == 7:
-            announcement_msg = "BOOMSHAKALAKA! %s is DOMINATING!"
+            announcement_msg = "BOOMSHAKALAKA! %s is DOMINATING!" % unit_name
 
         announcement_msg = self._c(announcement_msg, "light green")
 
