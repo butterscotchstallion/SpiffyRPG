@@ -816,6 +816,12 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
             announcement_msg = "%s is GOD-LIKE!" % unit_name
         elif streak_count == 7:
             announcement_msg = "BOOMSHAKALAKA! %s is DOMINATING!" % unit_name
+        elif streak_count == 8:
+            announcement_msg = "%s is OMNIPOTENT!" % unit_name
+        elif streak_count == 9:
+            announcement_msg = "%s is killin' errrbody out here!" % unit_name
+        elif streak_count == 10:
+            announcement_msg = "%s has hax0red the game and cannot be stopped" % unit_name
 
         announcement_msg = self._c(announcement_msg, "light green")
 
@@ -3117,7 +3123,7 @@ class SpiffyUnit:
 
     def get_slain_units(self):
         return self.slain_units
-    
+
     def add_slain_unit(self, unit):
         self.slain_units.append(unit)
 
