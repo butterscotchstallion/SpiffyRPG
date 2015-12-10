@@ -522,6 +522,8 @@ class SpiffyBattle:
             loser = attacker
             battle_completed = True
 
+            winner.add_slain_unit(loser)
+
             if target_announcer is not None:
                 target_announcer.unit_slain(unit=attacker)
 
@@ -529,6 +531,8 @@ class SpiffyBattle:
             winner = attacker
             loser = target
             battle_completed = True
+
+            winner.add_slain_unit(loser)
 
             if attacker_announcer is not None:
                 attacker_announcer.unit_slain(unit=target)
@@ -1199,6 +1203,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         """
         %s is a level %s with %s %s and has existed in %s for %s seconds.
         """
+        irc = kwargs["irc"]
         unit = kwargs["unit"]
         dungeon = kwargs["dungeon"]
         seconds = int(time.time() - unit.created_at)
@@ -1215,7 +1220,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         colored_hp = self._b(hp)
 
-        body_count = len(unit.slain_foes)
+        body_count = len(unit.get_slain_units())
         unit_slain_count = self._c(body_count, "red")
         dungeon_name = self._get_dungeon_title(dungeon)
         foe_word = "foes"
@@ -1243,12 +1248,13 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         if hot_streak is not None:
             msg += " Hot streak: %s" % self._b(hot_streak)
 
-        self.announce(msg)
+        irc.reply(msg)
 
     def player_info(self, **kwargs):
         """
         %s is a level %s %s. %s XP remains until %s
         """
+        irc = kwargs["irc"]
         player = kwargs["player"]
         bold_title = self._get_unit_title(player)
         bold_class = self._get_player_role(player)
@@ -1323,10 +1329,20 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         hot_streak = player.is_on_hot_streak()
 
         if hot_streak is not None:
-            announcement_msg += " Hot streak: %s" % self._b(hot_streak)
+            announcement_msg += " :: Hot streak: %s" % self._b(hot_streak)
 
-        #self._irc.reply(announcement_msg)
-        self._send_channel_notice(announcement_msg)
+        body_count = len(player.get_slain_units())
+        unit_slain_count = self._c(body_count, "red")
+        foes_word = "foes"
+
+        if body_count > 0:
+            if body_count == 1:
+                foes_word = "foe"
+
+            params = (bold_title, unit_slain_count, foes_word)
+            announcement_msg += " :: %s has slain %s %s" % params
+
+        irc.reply(announcement_msg)
 
     def new_player(self, char_name, char_class):
         """
@@ -1463,24 +1479,28 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         dungeon = kwargs["dungeon"]
         player = kwargs["player"]
         search = kwargs["target"]
-
+        irc = kwargs["irc"]
         unit = dungeon.get_unit_by_name(search)
 
         if unit is not None:
             log.info("SpiffyRPG: inspecting %s" % unit.name)
 
             if unit.is_player:
-                self.player_info(player=unit)
+                self.player_info(player=unit,
+                                 irc=irc)
             else:
                 """ TODO: account for difference between NPCs and items """
                 self.unit_info(unit=unit,
                                player=player,
-                               dungeon=dungeon)
+                               dungeon=dungeon,
+                               irc=irc)
         else:
             self.look_failure(player=player,
-                              dungeon=dungeon)
+                              dungeon=dungeon,
+                              irc=irc)
 
     def look_failure(self, **kwargs):
+        irc = kwargs["irc"]
         words = ["looks around", "inspects the surroundings", 
         "scans the area of"]
         look_phrase = random.choice(words)
@@ -1490,7 +1510,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         msg = "%s %s %s but sees nothing of import" % \
         (player_name, look_phrase, dungeon_name)
 
-        self.announce(msg)
+        irc.reply(msg)
 
     def unit_spawned(self, unit):
         """
@@ -1857,7 +1877,6 @@ class SpiffyDungeon:
         lower_name = name.lower()
 
         for unit in self.units:
-            #if unit.name.lower() == lower_name or unit.nick.lower() == lower_name:
             if unit.name.lower() == lower_name:
                 return unit
 
@@ -3036,7 +3055,7 @@ class SpiffyUnit:
         Start by initializing the unit as if it is an NPC,
         since for the most part, a player is identical to a NPC.
         """
-        self.slain_foes = []
+        self.slain_units = []
         self.winning_streak = []
         self.raised_units = []
         self.hostile_combatants = {}
@@ -3095,6 +3114,12 @@ class SpiffyUnit:
         self.hp = self.calculate_hp()
 
         log.info("SpiffyRPG: %s has %s dialogues" % (self.name, len(self.dialogue)))
+
+    def get_slain_units(self):
+        return self.slain_units
+    
+    def add_slain_unit(self, unit):
+        self.slain_units.append(unit)
 
     def add_battle(self, **kwargs):
         """
@@ -3812,7 +3837,7 @@ class SpiffyUnit:
         log.info("SpiffyRPG: %s has been turned! setting HP to %s (%s total)" % params)
 
     def get_attack_damage(self):
-        return random.randrange(5, 7) * self.level
+        return random.randrange(5, 10) * self.level
 
     def is_counterpart(self, **kwargs):
         target_unit = kwargs["target_unit"]
@@ -3903,6 +3928,12 @@ class SpiffyUnit:
         (self.name, hp, self.get_hp()))
 
         if self.hp <= 0:
+            """
+            Ensure that HP is never negative so players
+            don't have to wait a long time to regenerate.
+            """
+            self.hp = 0
+
             self.on_unit_death()
 
     def on_unit_death(self):        
@@ -4243,20 +4274,18 @@ class SpiffyRPG(callbacks.Plugin):
         """
         Inspects a unit or item
         """
-        channel = msg.args[0]
-        
-        if ircutils.isChannel(channel):
-            user_id = self._get_user_id(irc, msg.prefix)
+        user_id = self._get_user_id(irc, msg.prefix)
 
-            if user_id:
-                dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
+        if user_id:
+            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
 
-                if dungeon is not None:
-                    player = dungeon.get_unit_by_user_id(user_id)
+            if dungeon is not None:
+                player = dungeon.get_unit_by_user_id(user_id)
 
-                    dungeon.announcer.inspect_target(dungeon=dungeon,
-                                                     target=target,
-                                                     player=player)
+                dungeon.announcer.inspect_target(dungeon=dungeon,
+                                                 target=target,
+                                                 player=player,
+                                                 irc=irc)
 
     inspect = wrap(inspect, ["user", "text"])
 
@@ -4390,7 +4419,7 @@ class SpiffyRPG(callbacks.Plugin):
 
                 player.set_title(title[0:16])
 
-                dungeon.announcer.player_info(player=player)
+                dungeon.announcer.player_info(player=player, irc=irc)
 
     title = wrap(title, ["user", "text"])
 
@@ -5079,7 +5108,7 @@ class SpiffyRPG(callbacks.Plugin):
                 player = dungeon.get_unit_by_user_id(user_id)
 
                 if player is not None:
-                    dungeon.announcer.player_info(player=player)
+                    dungeon.announcer.player_info(player=player, irc=irc)
                 else:
                     irc.error("You peer into the dungeon, but see no one by that name.")
             else:
@@ -5264,7 +5293,7 @@ class SpiffyRPG(callbacks.Plugin):
                 unit.level = self.unit_level.get_level_by_xp(unit.experience)
                 unit.on_unit_level()
 
-                dungeon.announcer.player_info(player=unit)
+                dungeon.announcer.player_info(player=unit, irc=irc)
         else:
             log.error("SpiffyRPG: could not find dungeon %s" % msg.args[0])
 
@@ -5393,7 +5422,7 @@ class SpiffyRPG(callbacks.Plugin):
                             last_welcome = time.time() - self.welcome_message_cooldown_in_seconds
                         
                         if last_welcome > self.welcome_message_cooldown_in_seconds:
-                            dungeon.announcer.player_info(player=player)
+                            dungeon.announcer.player_info(player=player, irc=irc)
                             self.welcome_messages[player.id] = time.time()
                         else:
                             log.info("SpiffyRPG: not welcoming %s because cooldown" % player.name)
