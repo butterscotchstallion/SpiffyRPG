@@ -2213,7 +2213,7 @@ class SpiffyUnitDB:
                           experience,
                           created_at)
                           VALUES (?, ?, ?, 0, ?)""", params)
-        db.commit()
+        self.db.commit()
         cursor.close()
 
     def get_top_players_by_xp(self):
@@ -2889,6 +2889,7 @@ class SpiffyItemCollection:
                           item_id,
                           created_at)
                           VALUES(?, ?, ?)""", params)
+        self.db.commit()
         cursor.close()
 
     def _get_items(self, **kwargs):
@@ -3322,8 +3323,6 @@ class SpiffyUnit:
                 "rounds": [],
                 "total_rounds": total_rounds
             })
-
-            log.info("SpiffyRPG: %s battles: %s" % (self.name, self.battles))
 
             return self.battles[-1]
 
@@ -3850,23 +3849,23 @@ class SpiffyUnit:
             """
             if self.is_archeologist():
                 if chance_to_equip_preferred:
-                    log.info("SpiffyRPG: Archeologist %s is equipping a rock!" % self.name)
+                    log.info("SpiffyRPG: Archeologist %s is equipping rock!" % self.name)
                     equipped_item = self.get_rock_weapon()
             elif self.is_paper_enthusiast():
                 if chance_to_equip_preferred:
-                    log.info("SpiffyRPG: Paper Enthusiast %s is equipping a rock!" % self.name)
+                    log.info("SpiffyRPG: Paper Enthusiast %s is equipping paper!" % self.name)
                     equipped_item = self.get_paper_weapon()
             elif self.is_running_with_scissors():
                 if chance_to_equip_preferred:
-                    log.info("SpiffyRPG: Running With Scissors %s is equipping a rock!" % self.name)
+                    log.info("SpiffyRPG: Running With Scissors %s is equipping scissors!" % self.name)
                     equipped_item = self.get_scissors_weapon()
             elif self.is_blue_tongue():
                 if chance_to_equip_preferred:
-                    log.info("SpiffyRPG: Blue Tongue %s is equipping a rock!" % self.name)
+                    log.info("SpiffyRPG: Blue Tongue %s is equipping lizard!" % self.name)
                     equipped_item = self.get_lizard_weapon()
             elif self.is_vulcan_embraced():
                 if chance_to_equip_preferred:
-                    log.info("SpiffyRPG: Vulcan's Embrace %s is equipping a rock!" % self.name)
+                    log.info("SpiffyRPG: Vulcan's Embrace %s is equipping spock!" % self.name)
                     equipped_item = self.get_spock_weapon()
 
             self.equipped_weapon = equipped_item
@@ -3941,6 +3940,7 @@ class SpiffyUnit:
                           is_persistent,
                           created_at)
                           VALUES(?, ?, ?, ?)""", params)
+        self.db.commit()
         cursor.close()
     
     def get_xp_required_for_next_level(self):
@@ -5555,7 +5555,7 @@ class SpiffyRPG(callbacks.Plugin):
                 announcer = SpiffyPlayerAnnouncer(irc=irc,
                                                   destination=msg.nick)
 
-                announcer.inventory(player=unit)
+                announcer.inventory(player=unit, irc=irc)
         else:
             log.error("SpiffyRPG: could not find dungeon %s" % msg.args[0])
 
@@ -5584,10 +5584,10 @@ class SpiffyRPG(callbacks.Plugin):
 
     def doQuit(self, irc, msg):
         user_id = None
-        nick = None
+        nick = msg.nick
         
         try:
-            hostmask = irc.state.nickToHostmask(msg.nick)
+            hostmask = irc.state.nickToHostmask(nick)
             user_id = ircdb.users.getUserId(hostmask)
         except KeyError:
             log.info("SpiffyRPG: error getting hostmask for %s" % nick)
