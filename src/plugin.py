@@ -568,7 +568,9 @@ class SpiffyBattle:
                 item from that unit, if it's not something they already have.
                 """
                 for struck_unit in dead_unit.units_that_have_struck_me:
-                    if loot_item not in struck_unit.items:
+                    struck_unit_item_ids = [item.id for item in struck_unit.items]
+
+                    if loot_item.id not in struck_unit_item_ids:
                         units_receiving_loot.append(struck_unit)
                         item_name = loot_item.name
 
@@ -704,27 +706,28 @@ class SpiffyBattle:
             """
             Chance to spawn bosses after each battle
             """
-            boss_spawn_chance = random.randrange(1, 100) < 20
+            boss_spawn_chance = random.randrange(1, 100) < 35
 
             if boss_spawn_chance:
                 self.spawn_bosses()
 
     def spawn_bosses(self):
-        boss_units = dungeon.get_boss_units()
+        boss_units = self.dungeon.get_boss_units()
 
         boss_count = len(boss_units)
-        log.info("SpiffyRPG: there are %s bosses in %s" % (boss_count, self.dungeon.name))
+
+        if boss_count > 0:
+            log.info("SpiffyRPG: there are %s bosses in %s" % (boss_count, self.dungeon.name))
+        else:
+            log.error("SpiffyRPG: no boss units in %s!" % self.dungeon.name)
+
+        chance_to_raise = random.randrange(1, 100) < 30
 
         for unit in boss_units:
-            """
-            Raise dead units
-            """
-            if not unit.is_alive():
+            if unit.is_alive() or chance_to_raise:
                 unit.hp = unit.calculate_hp()
-
-            unit.make_hostile()
-
-            self.announcer.boss_spawned(unit=unit)
+                unit.make_hostile()
+                self.announcer.boss_spawned(unit=unit)
 
     def get_xp_for_battle(self, **kwargs):
         loser = kwargs["loser"]
@@ -871,10 +874,10 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         unit = kwargs["unit"]
         verbs = ("holding a glowing satchel", "wielding a mysterious artifact",
         "grasping an arcane curio")
-        doing_something = self._b(random.choice(verbs))
-        unit_name = self._b(unit.name)
+        doing_something = random.choice(verbs)
+        unit_name = unit.name
 
-        announcement_msg = "%s appears, %s!" % (unit.name, doing_something)
+        announcement_msg = self._b(self._c("%s appears, %s!", "light green")) % (unit_name, doing_something)
 
         self.announce(announcement_msg)
 
@@ -1362,6 +1365,9 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         if hot_streak is not None:
             msg += " Hot streak: %s" % self._b(hot_streak)
+
+        if unit.is_boss:
+            msg += " :: This is a %s" % self._b("boss")
 
         irc.reply(msg)
 
@@ -3231,7 +3237,7 @@ class SpiffyUnit:
         unit = kwargs["unit"]
 
         self.id = unit["id"]
-        self.is_boss = unit["is_boss"] == "1"
+        self.is_boss = unit["is_boss"] == 1
         self.user_id = unit["user_id"]
         self.created_at = time.time()
         self.unit_type_name = unit["unit_type_name"]
@@ -4389,8 +4395,8 @@ class SpiffyUnitLevel:
                 (36, 70000),
                 (37, 73000),
                 (38, 76000),
-                (39, 78000),
-                (40, 80500),
+                (39, 79000),
+                (40, 76000),
                 (41, 82000),
                 (42, 85000),
                 (43, 88000),
