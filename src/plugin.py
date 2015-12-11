@@ -446,6 +446,7 @@ class SpiffyBattle:
                                                 target=target)
 
             target.apply_damage(attack_info["damage"])
+            target.add_struck_unit(attacker)
         else:
             """
             If the attacker did not strike the target, this could
@@ -467,6 +468,7 @@ class SpiffyBattle:
                                                   target=target)
 
                 attacker.apply_damage(attack_info["damage"])
+                attacker.add_struck_unit(target)
 
         """
         Increment rounds if we have a hit
@@ -592,8 +594,9 @@ class SpiffyBattle:
 
                 dialogue = winner.dialogue_win()
 
-                self.announcer.unit_dialogue(winner,
-                                             dialogue)
+                if dialogue is not None:
+                    self.announcer.unit_dialogue(winner,
+                                                 dialogue)
 
                 self.remove_challenges_by_user_id(loser.user_id)
 
@@ -809,17 +812,17 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         if streak_count == 3:
             announcement_msg = "%s is on fire!" % unit_name
         elif streak_count == 4:
-            announcement_msg = "%s is unstoppable!" % unit_name
+            announcement_msg = "%s is killin' it!" % unit_name
         elif streak_count == 5:
-            announcement_msg = "%s is CLEARLY wall hacking" % unit_name
-        elif streak_count == 6:
-            announcement_msg = "%s is GOD-LIKE!" % unit_name
-        elif streak_count == 7:
             announcement_msg = "BOOMSHAKALAKA! %s is DOMINATING!" % unit_name
+        elif streak_count == 6:
+            announcement_msg = "%s is killin' errrbody out here!" % unit_name
+        elif streak_count == 7:
+            announcement_msg = "%s is CLEARLY wall hacking" % unit_name
         elif streak_count == 8:
             announcement_msg = "%s is OMNIPOTENT!" % unit_name
         elif streak_count == 9:
-            announcement_msg = "%s is killin' errrbody out here!" % unit_name
+            announcement_msg = "%s is GOD-LIKE!" % unit_name
         elif streak_count == 10:
             announcement_msg = "%s has hax0red the game and cannot be stopped" % unit_name
 
@@ -1095,22 +1098,27 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
     def item_info(self, **kwargs):
         item = kwargs["item"]
         player = kwargs["player"]
+        irc = kwargs["irc"]
         item_name = self._b(item.name)
         rarity_indicator = self.get_rarity_indicator(rarity=item.rarity)
-        bold_item_type_label = self._b("Item type")
+        item_type_indicator = self._get_item_type_indicator(item.item_type)
         params = (rarity_indicator, 
                   item_name,
-                  item.min_level,
-                  bold_item_type_label,
-                  item.item_type)
+                  item_type_indicator)
 
-        announcement_msg = "%s %s (%s) :: %s: %s" % params
+        announcement_msg = "%s %s [%s]" % params
+
+        if item.description is not None:
+            announcement_msg += " :: %s" % item.description
 
         if player is not None:
             if player.get_equipped_weapon().id == item.id:
                 announcement_msg += ". This item is currently equipped."
 
-        self._irc.reply(announcement_msg)
+        if item.is_permanent:
+            announcement_msg += " :: This item cannot be traded/dropped."
+
+        irc.reply(announcement_msg)
 
     def effect_info(self, **kwargs):
         effect = kwargs["effect"]
@@ -1818,7 +1826,11 @@ class SpiffyDungeon:
             if nick in ignoreMe:
                 continue
 
-            hostmask = self.irc.state.nickToHostmask(nick)
+            try:
+                hostmask = self.irc.state.nickToHostmask(nick)
+            except KeyError:
+                hostmask = None
+
             user_id = None
 
             if hostmask is None:
@@ -2678,7 +2690,7 @@ class SpiffyItem:
         self.rarity = item["rarity"]
         self.equipment_slot = item["equipment_slot"]
         self.item_type = item["item_type"].lower()
-        self.is_permanent = item["is_permanent"]
+        self.is_permanent = item["is_permanent"] == "1"
         self.unit_type_id = item["unit_type_id"]
         self.created_at = item["created_at"]
 
@@ -2752,6 +2764,18 @@ class SpiffyItemCollection:
                 base_items.append(item)
 
         return base_items
+
+    def add_unit_item(self, **kwargs):
+        item_id = kwargs["item_id"]
+        unit_id = kwargs["unit_id"]
+        cursor = self.db.cursor()
+        params = (unit_id, item_id, time.time())
+        cursor.execute("""INSERT INTO spiffyrpg_unit_items(
+                          unit_id,
+                          item_id,
+                          created_at)
+                          VALUES(?, ?, ?)""", params)
+        cursor.close()
 
     def _get_items(self, **kwargs):
         cursor = self.db.cursor()
@@ -2833,6 +2857,17 @@ class SpiffyItemCollection:
         cursor = self.db.cursor()
         
         cursor.execute("""SELECT
+                          i.id,
+                          i.name,
+                          i.description,
+                          i.min_level,
+                          i.max_level,
+                          i.item_type,
+                          i.rarity,
+                          i.equipment_slot,
+                          i.is_permanent,
+                          i.unit_type_id,
+                          i.created_at,
                           ui.item_id,
                           ui.unit_id
                           FROM spiffyrpg_unit_items ui
@@ -2853,7 +2888,16 @@ class SpiffyItemCollection:
                 if not unit_id in lookup:
                     lookup[unit_id] = []
 
-                lookup[unit_id].append(item)
+                effects = []
+
+                if item_id in self.item_effects:
+                    effects = self.item_effects[item_id]
+
+                item["effects"] = effects
+
+                objectified_item = SpiffyItem(item=item)
+
+                lookup[unit_id].append(objectified_item)
 
         return lookup
 
@@ -3045,7 +3089,8 @@ class SpiffyUnit:
         self.db = kwargs["db"]
         self.unit_level = SpiffyUnitLevel()
         collections = kwargs["collections"]
-        
+        self.irc = collections["irc"]
+
         """
         Title is set initially and when the unit gains a level
         """
@@ -3056,6 +3101,7 @@ class SpiffyUnit:
         dialogue_collection = collections["dialogue_collection"]
 
         self.base_items = item_collection.get_base_items()
+        self.item_collection = item_collection
 
         """
         Start by initializing the unit as if it is an NPC,
@@ -3066,6 +3112,7 @@ class SpiffyUnit:
         self.raised_units = []
         self.hostile_combatants = {}
         self.battles = []
+        self.units_that_have_struck_me = []
 
         unit = kwargs["unit"]
 
@@ -3120,6 +3167,10 @@ class SpiffyUnit:
         self.hp = self.calculate_hp()
 
         log.info("SpiffyRPG: %s has %s dialogues" % (self.name, len(self.dialogue)))
+
+    def add_struck_unit(self, unit):
+        if unit not in self.units_that_have_struck_me:
+            self.units_that_have_struck_me.append(unit)
 
     def get_slain_units(self):
         return self.slain_units
@@ -3660,7 +3711,7 @@ class SpiffyUnit:
             random_item = random.choice(items)
             equipped_item = random_item
             pref_chance = 70
-            chance_to_equip_preferred = random.randrange(1, 100) > pref_chance
+            chance_to_equip_preferred = random.randrange(1, 100) < pref_chance
 
             """
             If the unit has one of the preferential weapon effects,
@@ -3759,6 +3810,7 @@ class SpiffyUnit:
                           is_persistent,
                           created_at)
                           VALUES(?, ?, ?, ?)""", params)
+        cursor.close()
     
     def get_xp_required_for_next_level(self):
         return self.unit_level.get_xp_for_next_level(self.level)
@@ -3942,9 +3994,20 @@ class SpiffyUnit:
 
             self.on_unit_death()
 
-    def on_unit_death(self):        
+    def get_random_lootable_item(self):
+        lootable = []
+
+        for item in self.items:
+            if item.is_permanent == 0:
+                lootable.append(item)
+
+        if len(lootable) > 0:
+            return random.choice(lootable)
+
+    def on_unit_death(self):
         if self.is_player:
             self.announcer.unit_death()
+
         """
         Clear hostile combatants rounds when the
         unit dies
@@ -3953,6 +4016,45 @@ class SpiffyUnit:
 
         for user_id in self.hostile_combatants:
             self.hostile_combatants[user_id]["rounds"] = 0
+
+        """
+        Drop phat loot. Maybe chance here too!
+        """
+        if len(self.units_that_have_struck_me) > 0 and len(self.items) > 0:
+            random_inventory_item = self.get_random_lootable_item()
+
+            if random_inventory_item is None:
+                log.info("SpiffyRPG: %s has no lootable items" % self.name)
+                return
+
+            """
+            Any unit that has struck this unit gets a random inventory
+            item from that unit, if it's not something they already have.
+            """
+            for struck_unit in self.units_that_have_struck_me:
+                if random_inventory_item not in struck_unit.items:
+                    item_name = random_inventory_item.name
+
+                    log.info("SpiffyRPG: adding %s to %s's inventory" % (item_name, struck_unit.name))
+
+                    """
+                    Add item to inventory.
+                    """
+                    struck_unit.items.append(random_inventory_item)
+
+                    """
+                    Persist unit item relationship.
+                    """
+                    self.item_collection.add_unit_item(item_id=random_inventory_item.id,
+                                                       unit_id=struck_unit.id)
+
+                    if struck_unit.is_player:
+                        announcer = SpiffyPlayerAnnouncer(irc=self.irc,
+                                                          destination=struck_unit.nick)
+
+                        announcer.found_loot(player=struck_unit,
+                                             unit=self,
+                                             item=random_inventory_item)
 
     def remove_effect_by_id(self, id):
         effects = []
@@ -3978,6 +4080,18 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
         announcer_parent.__init__(irc=kwargs["irc"],
                                   destination=kwargs["destination"],
                                   public=False)
+
+    def found_loot(self, **kwargs):
+        player = kwargs["player"]
+        slain_unit = kwargs["unit"]
+        item = kwargs["item"]
+        unit_name = self._b(slain_unit.name)
+        item_name = self._b(item.name)
+
+        announcement_msg = "You inspect %s and " % unit_name
+        announcement_msg += "find a %s! It has been added to your inventory." % item_name
+
+        self.announce(announcement_msg)
 
     def unit_slain(self, **kwargs):
         unit = kwargs["unit"]
@@ -4064,24 +4178,22 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
 
     def inventory(self, **kwargs):
         player = kwargs["player"]
+        irc = kwargs["irc"]
         items = player.items
 
         if len(items) > 0:
             item_name_list = []
-            equipped_item = player.get_equipped_weapon()
 
             for item in player.items:
                 item_type = self._get_item_type_indicator(item.item_type)
-                item_name = "%s [%s]" % (self._b(item.name), item_type)
-                is_equipped = item.id == equipped_item.id                
-
+                item_name = "%s [%s]" % (self._b(item.name), item_type)                
                 item_name_list.append(item_name)
 
             announcement_msg = ", ".join(item_name_list)
         else:
-            announcement_msg = "Your bags seem empty."
+            announcement_msg = "Your bags appear empty."
 
-        self.announce(announcement_msg)
+        irc.reply(announcement_msg)
 
     def item_equip(self, **kwargs):
         item = kwargs["item"]
@@ -5017,7 +5129,8 @@ class SpiffyRPG(callbacks.Plugin):
                 user_id = self._get_user_id(irc, msg.prefix)
                 player = dungeon.get_unit_by_user_id(user_id)
                 dungeon.announcer.item_info(item=item,
-                                            player=player)
+                                            player=player,
+                                            irc=irc)
         else:
             irc.error("The tomes hold no mention of this artifact.")
 
@@ -5064,7 +5177,7 @@ class SpiffyRPG(callbacks.Plugin):
 
     equip = wrap(equip, ["user", "text"])
 
-    def inventory(self, irc, msg, args):
+    def inventory(self, irc, msg, args, user):
         """
         Items in your inventory.
         """
@@ -5079,12 +5192,16 @@ class SpiffyRPG(callbacks.Plugin):
         
         if dungeon is not None:
             player = dungeon.get_unit_by_user_id(user_id)
-            announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                              destination=msg.nick)
 
-            announcer.inventory(player=player)
+            if player is not None:
+                announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                  destination=msg.nick)
+
+                announcer.inventory(player=player, irc=irc)
         else:
             irc.error("Your bags explode, blanketing you in flames!")
+
+    inventory = wrap(inventory, ["user"])
 
     def sinfo(self, irc, msg, args, target_nick):
         """
@@ -5257,6 +5374,31 @@ class SpiffyRPG(callbacks.Plugin):
                 irc.error("Couldn't find that unit")
 
     fhostile = wrap(fhostile, ["text"])
+
+    def fitem(self, irc, msg, args, item_name):
+        """
+        fitem <item name> - add this item to your inventory
+        """
+        dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+
+        if dungeon is not None:
+            item = self.SpiffyWorld.item_collection.get_item_by_item_name(item_name=item_name)
+
+            if item is None:
+                irc.error("Could not find that item!")
+                return
+
+            user_id = self._get_user_id(irc, msg.prefix)
+            unit = dungeon.get_unit_by_user_id(user_id)
+
+            if unit is not None:
+                unit.items.append(item)
+
+                irc.reply("%s has been added to your inventory" % item.name)
+            else:
+                irc.error("Couldn't find that unit")
+
+    fitem = wrap(fitem, ["text"])
 
     def fkill(self, irc, msg, args, unit_name):
         """
