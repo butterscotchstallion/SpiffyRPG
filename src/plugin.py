@@ -519,11 +519,14 @@ class SpiffyBattle:
                 target_announcer.attack_miss(hit_info=hit_info,
                                              target=attacker)
 
+        dead_units = []
+
         if not attacker.is_alive():
             winner = target
             loser = attacker
             battle_completed = True
 
+            dead_units.append(attacker)
             winner.add_slain_unit(loser)
 
             if target_announcer is not None:
@@ -534,6 +537,7 @@ class SpiffyBattle:
             loser = target
             battle_completed = True
 
+            dead_units.append(target)
             winner.add_slain_unit(loser)
 
             if attacker_announcer is not None:
@@ -544,6 +548,57 @@ class SpiffyBattle:
                                      loser=loser,
                                      hit_info=hit_info,
                                      attack_info=attack_info)
+            self.distribute_loot(dead_units)
+
+    def distribute_loot(self, dead_units):
+        units_receiving_loot = []
+
+        for dead_unit in dead_units:
+            """
+            Drop phat loot. Maybe chance here too!
+            """
+            if len(dead_unit.units_that_have_struck_me) > 0 and len(dead_unit.items) > 0:
+                loot_item = dead_unit.get_random_lootable_item()
+
+                if loot_item is None:
+                    log.info("SpiffyRPG: %s has no lootable items" % dead_unit.name)
+                    return
+
+                """
+                Any unit that has struck this unit gets a random inventory
+                item from that unit, if it's not something they already have.
+                """
+                for struck_unit in dead_unit.units_that_have_struck_me:
+                    if loot_item not in struck_unit.items:
+                        units_receiving_loot.append(struck_unit)
+                        item_name = loot_item.name
+
+                        log.info("SpiffyRPG: adding %s to %s's inventory" % (item_name, struck_unit.name))
+
+                        """
+                        Add item to inventory. TODO: integrate permanent item
+                        addition to SPiffyUnit
+                        """
+                        struck_unit.items.append(loot_item)
+
+                        """
+                        Persist unit item relationship.
+                        """
+                        struck_unit.item_collection.add_unit_item(item_id=loot_item.id,
+                                                                  unit_id=struck_unit.id)
+
+                        if struck_unit.is_player:
+                            announcer = SpiffyPlayerAnnouncer(irc=self.irc,
+                                                              destination=struck_unit.nick)
+
+                            announcer.found_loot(player=struck_unit,
+                                                 unit=dead_unit,
+                                                 item=loot_item)
+
+                        if len(units_receiving_loot) > 0:
+                            self.announcer.units_found_loot(item=loot_item,
+                                                            unit=dead_unit,
+                                                            units=units_receiving_loot)
 
     def on_battle_completed(self, **kwargs):
         """
@@ -787,6 +842,17 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         announcer_parent.__init__(irc=kwargs["irc"],
                                   destination=kwargs["destination"],
                                   public=True)
+
+    def units_found_loot(self, **kwargs):
+        units = kwargs["units"]
+        dead_unit = kwargs["unit"]
+        loot = kwargs["item"]
+        unit_names = ", ".join([self._b(unit.name) for unit in units])
+        params = (unit_names, self._b(dead_unit.name), self._b(loot.name))
+        
+        announcement_msg = "%s inspects %s and finds %s!" % params
+
+        self.announce(announcement_msg)
 
     def hot_streak_ended(self, **kwargs):
         unit = kwargs["unit"]
@@ -1822,6 +1888,10 @@ class SpiffyDungeon:
             if not nick:
                 continue
 
+            """ Skip bot nick """
+            if nick == self.irc.nick:
+                continue
+
             """ Skip ignored nicks """
             if nick in ignoreMe:
                 continue
@@ -1839,7 +1909,7 @@ class SpiffyDungeon:
             try:
                 user_id = ircdb.users.getUserId(hostmask)
             except KeyError:
-                log.info("SpiffyRPG: error getting hostmask for %s" % nick)
+                log.info("SpiffyRPG: %s is not registered." % nick)
             
             """ Registered users only """
             if user_id is None:
@@ -3112,7 +3182,7 @@ class SpiffyUnit:
         self.raised_units = []
         self.hostile_combatants = {}
         self.battles = []
-        self.units_that_have_struck_me = []
+        self.units_that_have_struck_me = []        
 
         unit = kwargs["unit"]
 
@@ -3123,6 +3193,7 @@ class SpiffyUnit:
         self.unit_type_id = unit["unit_type_id"]
         self.effects = unit_effects_collection.get_effects_by_unit_id(unit_id=self.id)
         self.items = item_collection.get_items_by_unit_id(unit_id=self.id)
+        self.lootable_items = [item for item in self.items if item.is_permanent == 0]
         self.dialogue = dialogue_collection.get_dialogue_by_unit_id(unit_id=self.id)
         self.experience = unit["experience"]
         self.level = self.unit_level.get_level_by_xp(self.experience)
@@ -3167,6 +3238,10 @@ class SpiffyUnit:
         self.hp = self.calculate_hp()
 
         log.info("SpiffyRPG: %s has %s dialogues" % (self.name, len(self.dialogue)))
+
+    def get_random_lootable_item(self):
+        if len(self.lootable_items):
+            return random.choice(self.lootable_items)
 
     def add_struck_unit(self, unit):
         if unit not in self.units_that_have_struck_me:
@@ -4016,45 +4091,6 @@ class SpiffyUnit:
 
         for user_id in self.hostile_combatants:
             self.hostile_combatants[user_id]["rounds"] = 0
-
-        """
-        Drop phat loot. Maybe chance here too!
-        """
-        if len(self.units_that_have_struck_me) > 0 and len(self.items) > 0:
-            random_inventory_item = self.get_random_lootable_item()
-
-            if random_inventory_item is None:
-                log.info("SpiffyRPG: %s has no lootable items" % self.name)
-                return
-
-            """
-            Any unit that has struck this unit gets a random inventory
-            item from that unit, if it's not something they already have.
-            """
-            for struck_unit in self.units_that_have_struck_me:
-                if random_inventory_item not in struck_unit.items:
-                    item_name = random_inventory_item.name
-
-                    log.info("SpiffyRPG: adding %s to %s's inventory" % (item_name, struck_unit.name))
-
-                    """
-                    Add item to inventory.
-                    """
-                    struck_unit.items.append(random_inventory_item)
-
-                    """
-                    Persist unit item relationship.
-                    """
-                    self.item_collection.add_unit_item(item_id=random_inventory_item.id,
-                                                       unit_id=struck_unit.id)
-
-                    if struck_unit.is_player:
-                        announcer = SpiffyPlayerAnnouncer(irc=self.irc,
-                                                          destination=struck_unit.nick)
-
-                        announcer.found_loot(player=struck_unit,
-                                             unit=self,
-                                             item=random_inventory_item)
 
     def remove_effect_by_id(self, id):
         effects = []
