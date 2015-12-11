@@ -193,6 +193,7 @@ class SpiffyBattle:
         self.party = []
         self.db = kwargs["db"]
         self.irc = kwargs["irc"]
+        self.dungeon = kwargs["dungeon"]
         self.announcer = SpiffyBattleAnnouncer(irc=kwargs["irc"],
                                                destination=kwargs["destination"],
                                                public=True)
@@ -700,10 +701,30 @@ class SpiffyBattle:
             else:
                 log.info("SpiffyRPG: %s won but they ain't no not a playa!" % winner.name)
 
-            self.spawn_bosses_maybe()
+            """
+            Chance to spawn bosses after each battle
+            """
+            boss_spawn_chance = random.randrange(1, 100) < 20
 
-    def spawn_bosses_maybe(self):
-        pass
+            if boss_spawn_chance:
+                self.spawn_bosses()
+
+    def spawn_bosses(self):
+        boss_units = dungeon.get_boss_units()
+
+        boss_count = len(boss_units)
+        log.info("SpiffyRPG: there are %s bosses in %s" % (boss_count, self.dungeon.name))
+
+        for unit in boss_units:
+            """
+            Raise dead units
+            """
+            if not unit.is_alive():
+                unit.hp = unit.calculate_hp()
+
+            unit.make_hostile()
+
+            self.announcer.boss_spawned(unit=unit)
 
     def get_xp_for_battle(self, **kwargs):
         loser = kwargs["loser"]
@@ -845,6 +866,17 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         announcer_parent.__init__(irc=kwargs["irc"],
                                   destination=kwargs["destination"],
                                   public=True)
+
+    def boss_spawned(self, **kwargs):
+        unit = kwargs["unit"]
+        verbs = ("holding a glowing satchel", "wielding a mysterious artifact",
+        "grasping an arcane curio")
+        doing_something = self._b(random.choice(verbs))
+        unit_name = self._b(unit.name)
+
+        announcement_msg = "%s appears, %s!" % (unit.name, doing_something)
+
+        self.announce(announcement_msg)
 
     def units_found_loot(self, **kwargs):
         units = kwargs["units"]
@@ -1559,28 +1591,22 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         Inspects a target in the dungeon. This will
         show player info it the target is not a NPC.
         """
-        dungeon = kwargs["dungeon"]
         player = kwargs["player"]
-        search = kwargs["target"]
         irc = kwargs["irc"]
-        unit = dungeon.get_unit_by_name(search)
+        unit = kwargs["unit"]
+        dungeon = kwargs["dungeon"]
 
-        if unit is not None:
-            log.info("SpiffyRPG: inspecting %s" % unit.name)
+        log.info("SpiffyRPG: inspecting %s" % unit.name)
 
-            if unit.is_player:
-                self.player_info(player=unit,
-                                 irc=irc)
-            else:
-                """ TODO: account for difference between NPCs and items """
-                self.unit_info(unit=unit,
-                               player=player,
-                               dungeon=dungeon,
-                               irc=irc)
+        if unit.is_player:
+            self.player_info(player=unit,
+                             irc=irc)
         else:
-            self.look_failure(player=player,
-                              dungeon=dungeon,
-                              irc=irc)
+            """ TODO: account for difference between NPCs and items """
+            self.unit_info(unit=unit,
+                           player=player,
+                           dungeon=dungeon,
+                           irc=irc)
 
     def look_failure(self, **kwargs):
         irc = kwargs["irc"]
@@ -1641,6 +1667,7 @@ class SpiffyDungeon:
 
         self.battle = SpiffyBattle(db=self.db,
                                    irc=self.irc,
+                                   dungeon=self,
                                    destination=self.channel)
 
         """ Remove all timers on initialization """
@@ -1662,6 +1689,9 @@ class SpiffyDungeon:
             self.max_level = kwargs["max_level"]
 
             log.info("SpiffyRPG: creating dungeon with max level %s" % self.max_level)
+
+    def get_boss_units(self):
+        return [unit for unit in self.units if unit.is_boss]
 
     def check_dungeon_cleared(self, player):
         units = self.get_living_units()
@@ -2490,11 +2520,16 @@ class SpiffyDungeonUnitCollection:
                           u.combat_status,
                           u.limnoria_user_id AS user_id,
                           du.unit_id,
-                          du.dungeon_id
+                          du.dungeon_id,
+                          CASE WHEN b.unit_id IS NULL
+                          THEN 0
+                          ELSE 1
+                          END AS is_boss
                           FROM spiffyrpg_dungeon_units du
                           JOIN spiffyrpg_units u ON u.id = du.unit_id
                           JOIN spiffyrpg_unit_types utypes ON utypes.id = u.unit_type_id
-                          JOIN spiffyrpg_dungeons d ON d.id = du.dungeon_id""")
+                          JOIN spiffyrpg_dungeons d ON d.id = du.dungeon_id
+                          LEFT JOIN spiffyrpg_dungeon_boss_units b ON b.unit_id = u.id""")
 
         tmp_units = cursor.fetchall()
         
@@ -3002,9 +3037,14 @@ class SpiffyNPCUnitCollection:
                    utypes.name AS unit_type_name,
                    u.experience,
                    u.limnoria_user_id AS user_id,
-                   u.combat_status
+                   u.combat_status,
+                   CASE WHEN b.unit_id IS NULL
+                   THEN 0
+                   ELSE 1
+                   END AS is_boss
                    FROM spiffyrpg_units u
                    JOIN spiffyrpg_unit_types utypes ON utypes.id = u.unit_type_id
+                   LEFT JOIN spiffyrpg_dungeon_boss_units b ON b.unit_id = u.id
                    WHERE 1=1
                    AND u.limnoria_user_id = 0
                    GROUP BY u.id"""
@@ -3065,7 +3105,8 @@ class SpiffyPlayerUnitCollection:
                    utypes.name AS unit_type_name,
                    u.experience,
                    u.limnoria_user_id AS user_id,
-                   u.combat_status
+                   u.combat_status,
+                   0 AS is_boss
                    FROM spiffyrpg_units u
                    JOIN spiffyrpg_unit_types utypes ON utypes.id = u.unit_type_id
                    WHERE 1=1
@@ -3190,6 +3231,7 @@ class SpiffyUnit:
         unit = kwargs["unit"]
 
         self.id = unit["id"]
+        self.is_boss = unit["is_boss"] == "1"
         self.user_id = unit["user_id"]
         self.created_at = time.time()
         self.unit_type_name = unit["unit_type_name"]
@@ -3241,6 +3283,9 @@ class SpiffyUnit:
         self.hp = self.calculate_hp()
 
         log.info("SpiffyRPG: %s has %s dialogues" % (self.name, len(self.dialogue)))
+
+    def make_hostile(self):
+        self.combat_status = "hostile"
 
     def get_random_lootable_item(self):
         if len(self.lootable_items):
@@ -4377,10 +4422,6 @@ class SpiffyRPG(callbacks.Plugin):
 
         ignore_nicks = self.registryValue("ignoreNicks")
 
-        self.battle = SpiffyBattle(db=self.db,
-                                   irc=irc,
-                                   destination=GAME_CHANNEL)
-
         self.SpiffyWorld = SpiffyWorld(irc=self.irc,
                                        db=self.db,
                                        ignore_nicks=ignore_nicks,
@@ -4440,11 +4481,17 @@ class SpiffyRPG(callbacks.Plugin):
 
             if dungeon is not None:
                 player = dungeon.get_unit_by_user_id(user_id)
+                unit = dungeon.get_unit_by_name(target)
 
-                dungeon.announcer.inspect_target(dungeon=dungeon,
-                                                 target=target,
-                                                 player=player,
-                                                 irc=irc)
+                if unit is not None:
+                    dungeon.announcer.inspect_target(player=player,
+                                                     unit=unit,
+                                                     dungeon=dungeon,
+                                                     irc=irc)
+                else: 
+                    dungeon.announcer.look_failure(player=player,
+                                                   dungeon=dungeon,
+                                                   irc=irc)
 
     inspect = wrap(inspect, ["user", "text"])
 
@@ -4597,7 +4644,8 @@ class SpiffyRPG(callbacks.Plugin):
             if player.is_alive():
                 battle = SpiffyBattle(db=self.db,
                                       irc=irc,
-                                      destination=GAME_CHANNEL)
+                                      destination=GAME_CHANNEL,
+                                      dungeon=dungeon)
                 
                 attacker_announcer = SpiffyPlayerAnnouncer(irc=irc,
                                                            destination=msg.nick)
