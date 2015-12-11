@@ -94,8 +94,6 @@ class SpiffyAnnouncer(object):
         with background colors.
         """
         if unit.level < 30:
-            log.info("SpiffyRPG: inserting stop char in title")
-
             unit.name += "\x0F"
 
         bold_title = self._b(unit.name)
@@ -702,6 +700,11 @@ class SpiffyBattle:
             else:
                 log.info("SpiffyRPG: %s won but they ain't no not a playa!" % winner.name)
 
+            self.spawn_bosses_maybe()
+
+    def spawn_bosses_maybe(self):
+        pass
+
     def get_xp_for_battle(self, **kwargs):
         loser = kwargs["loser"]
         winner = kwargs["winner"]
@@ -849,8 +852,8 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         loot = kwargs["item"]
         unit_names = ", ".join([self._b(unit.name) for unit in units])
         params = (unit_names, self._b(dead_unit.name), self._b(loot.name))
-        
-        announcement_msg = "%s inspects %s and finds %s!" % params
+
+        announcement_msg = "%s inspects the remains of %s and finds %s!" % params
 
         self.announce(announcement_msg)
 
@@ -3669,7 +3672,9 @@ class SpiffyUnit:
         equip_ok = False
 
         if inventory_item is not None:
-            self.equip_item(item=inventory_item)
+            if self.equipped_weapon.item_type != inventory_item.item_type:
+                self.equip_item(item=inventory_item)
+
             equip_ok = True
         else:
             self.announcer.item_equip_failed(player=self)
