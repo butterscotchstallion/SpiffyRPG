@@ -596,10 +596,10 @@ class SpiffyBattle:
                                                  unit=dead_unit,
                                                  item=loot_item)
 
-                        if len(units_receiving_loot) > 0:
-                            self.announcer.units_found_loot(item=loot_item,
-                                                            unit=dead_unit,
-                                                            units=units_receiving_loot)
+            if len(units_receiving_loot) > 0:
+                self.announcer.units_found_loot(item=loot_item,
+                                                unit=dead_unit,
+                                                units=units_receiving_loot)
 
     def on_battle_completed(self, **kwargs):
         """
@@ -885,10 +885,20 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         units = kwargs["units"]
         dead_unit = kwargs["unit"]
         loot = kwargs["item"]
-        unit_names = ", ".join([self._b(unit.name) for unit in units])
-        params = (unit_names, self._b(dead_unit.name), self._b(loot.name))
+        unit_names = [self._b(unit.name) for unit in units]
+        unit_len = len(unit_names)
+        params = (self._b(dead_unit.name), self._b(loot.name))
+        announcement_msg = ""
 
-        announcement_msg = "%s inspects the remains of %s and finds %s!" % params
+        if unit_len == 1:
+            announcement_msg += "%s inspects" % unit_names[0]
+        elif unit_len == 2:
+            announcement_msg += "%s and %s inspect" % (unit_names[0], unit_names[1])
+        else:
+            csv_names = ", ".join(unit_names)
+            announcement_msg += "%s inspect" % csv_names
+
+        announcement_msg += " the remains of %s and finds %s!" % params
 
         self.announce(announcement_msg)
 
@@ -4180,8 +4190,7 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
         unit_name = self._b(slain_unit.name)
         item_name = self._b(item.name)
 
-        announcement_msg = "You inspect %s and " % unit_name
-        announcement_msg += "find a %s! It has been added to your inventory." % item_name
+        announcement_msg = "%s has been added to your inventory" % item_name
 
         self.announce(announcement_msg)
 
@@ -4924,85 +4933,6 @@ class SpiffyRPG(callbacks.Plugin):
                     log.error("SpiffyRPG: interaction failed: unit is %s and player is %s" % (unit, player))
 
     sup = wrap(sup, ["user", "text"])
-
-    def attack(self, irc, msg, args, user, target_and_item_type):
-        """
-        attack <target> <rock|paper|scissors|lizard|spock>
-        """
-        #is_channel = irc.isChannel(msg.args[0])
-        is_channel = irc.isChannel(GAME_CHANNEL)
-
-        if is_channel:
-            user_id = self._get_user_id(irc, msg.prefix)          
-            channel = GAME_CHANNEL
-            dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
-
-            if dungeon is not None:
-                player = dungeon.get_unit_by_user_id(user_id)
-
-                if player is not None and player.is_alive():
-                    """
-                    The target name may contain spaces, so whatever
-                    the last part is will be the item type.
-                    """
-                    target_parts = target_and_item_type.split(" ")
-                    item_type = target_parts[-1]
-                    
-                    """ Remove item type """
-                    target_parts.pop()
-
-                    target = " ".join(target_parts)
-
-                    unit = dungeon.get_living_unit_by_name(target)
-
-                    if unit is not None and player is not None:
-                        log.info("SpiffyRPG: found unit with name %s" % unit.name)
-
-                        battle = SpiffyBattle(db=self.db,
-                                              irc=irc,
-                                              destination=msg.args[0])
-
-                        """
-                        In order to facilitate the player choosing
-                        their attack, we equip the weapon by the 
-                        type they choose.
-                        """
-                        equip_ok = player.equip_item_by_type(item_type=item_type)
-
-                        """
-                        If the player tries to equip an invalid weapon type,
-                        they DIE. If all is well, the battle begins!
-                        """
-                        if equip_ok:
-                            can_battle_info = player.can_battle_unit(unit=unit)
-
-                            if can_battle_info["can_battle"]:
-                                """
-                                The target unit of the attack now equips a weapon!
-                                """
-                                unit.equip_random_weapon()
-
-                                battle.add_party_member(player)
-                                battle.add_party_member(unit)
-                                battle.start()
-
-                                dungeon.check_dungeon_cleared(player)
-                            else:
-                                reason = can_battle_info["reason"]
-                                irc.error("You can't attack that. %s" % reason)
-                        else:
-                            dungeon.announcer.unit_death(unit=player)
-                    else:
-                        irc.error("You try to attack %s, but realize nothing is there" % ircutils.bold(target))
-                else:
-                    irc.error("You are dead.")
-            else:
-                irc.error("The dungeon collapses!")
-        else:
-            """ TODO: allow attacking players in PM """
-            irc.error("You must attack channels in the channel.")
-
-    attack = wrap(attack, ["user", "text"])
 
     def accept(self, irc, msg, args, user, target_nick):
         """
