@@ -1411,10 +1411,6 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         self.announce(announcement_msg)
 
-    def top_players(self, top_players):
-        for player in top_players:
-            self.unit_info(unit=player)
-
     def dialogue_intro(self, unit, intro):
         colored_intro = ircutils.mircColor(intro, fg="orange")
         bold_title = ircutils.bold(unit.title)
@@ -1495,11 +1491,11 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         xp_req_for_this_level = unit.get_xp_required_for_next_level() + 1
         xp_req_for_previous_level = unit.get_xp_required_for_previous_level() + 1
         
-        """ If this is one, they're max level """
-        if xp_req_for_this_level == 1 or unit.level not in self.levels:
+        """ Unit is above max level """
+        if unit_xp >= xp_req_for_this_level:
             xp_req_for_this_level = self.levels[-1][1]
 
-        percent_xp = round(((float(unit_xp - xp_req_for_previous_level) / (float(xp_req_for_this_level - xp_req_for_previous_level))) * 100),1)
+        percent_xp = round(((float(unit_xp - xp_req_for_previous_level) / (float(xp_req_for_this_level - xp_req_for_previous_level))) * 100), 1)
 
         if percent_xp <= 20:
             xp_color = "yellow"
@@ -1507,6 +1503,9 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
             xp_color = "white"
         elif percent_xp >= 75:
             xp_color = "green"
+        elif percent_xp < 0:
+            xp_color = "purple"
+            percent_xp = "100"
 
         colored_xp = self._c(percent_xp, xp_color)
 
@@ -2262,32 +2261,6 @@ class SpiffyUnitDB:
                           VALUES (?, ?, ?, 0, ?)""", params)
         self.db.commit()
         cursor.close()
-
-    def get_top_players_by_xp(self):
-        """
-        Players are units that have a limnoria_user_id > 0
-        """
-        cursor = self.db.cursor()
-
-        cursor.execute("""SELECT p.id,
-                          ut.id AS unit_type_id,
-                          ut.name AS unit_type_name,
-                          u.name,
-                          u.created_at,
-                          u.limnoria_user_id AS user_id,
-                          u.experience_gained
-                          FROM spiffyrpg_units u
-                          JOIN spiffyrpg_unit_types ut ON ut.id = u.unit_type_id
-                          WHERE 1=1
-                          AND u.limnoria_user_id > 0
-                          ORDER BY p.experience_gained DESC
-                          LIMIT 3""")
-
-        top_players = cursor.fetchall()
-
-        cursor.close
-
-        return top_players
 
     def update_player_role(self, player_id, unit_type_id):
         cursor = self.db.cursor()
@@ -3159,6 +3132,11 @@ class SpiffyPlayerUnitCollection:
         for player in self.players:
             if player.user_id == user_id:
                 return player
+
+    def get_top_players_by_xp(self):
+        top_players = sorted(self.players, key=lambda x: x.experience, reverse=True)
+
+        return top_players[0:3]
 
     def _get_players(self, **kwargs):
         """
@@ -4194,7 +4172,7 @@ class SpiffyUnit:
         raised from the dead
         """
         self.created_at = time.time()
-        
+
         params = (self.name, total_hp)
         log.info("SpiffyRPG: %s has been turned! setting HP to %s" % params)
 
@@ -5281,28 +5259,20 @@ class SpiffyRPG(callbacks.Plugin):
 
     sbattle = wrap(sbattle, ["user", "something"])
 
-    def srank(self, irc, msg, args):
+    def topplayers(self, irc, msg, args, user):
         """
         Shows top 3 players by experience gained
         """
-        channel = msg.args[0]
-        tmp_players = self.db.get_top_players_by_xp()
-        top_players = []
-        dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
+        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
 
-        if dungeon is not None:
-            if len(tmp_players) > 0:
-                for p in tmp_players:
-                    d_p = dict(p)
-                    
-                    player = dungeon.get_unit_by_user_id(d_p["user_id"])
-                    top_players.append(player)
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            players = dungeon.player_unit_collection.get_top_players_by_xp()
 
-                self.announcer.top_players(top_players)
-            else:
-                irc.error("There are no players yet!")
+            for player in players:
+                dungeon.announcer.unit_info(unit=player, irc=irc, dungeon=dungeon)
 
-    srank = wrap(srank)
+    topplayers = wrap(topplayers, ["user"])
     
     def srole(self, irc, msg, args, user, role):
         """
@@ -5436,7 +5406,6 @@ class SpiffyRPG(callbacks.Plugin):
                                                     unit=unit)
 
                 dungeon.announcer.unit_info(unit=unit,
-                                            player=player,
                                             dungeon=dungeon)
 
                 player.add_raised_unit(unit=unit)
