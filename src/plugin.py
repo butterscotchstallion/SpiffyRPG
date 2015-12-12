@@ -93,8 +93,8 @@ class SpiffyAnnouncer(object):
         Only units >= level 30 may use obnoxious titles
         with background colors.
         """
-        if unit.level < 30:
-            unit.name += "\x0F"
+        #if unit.level < 30:
+        #    unit.name += "\x0F"
 
         bold_title = self._b(unit.name)
         indicator = self._get_unit_indicator(unit)
