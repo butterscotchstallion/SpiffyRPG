@@ -124,9 +124,7 @@ class SpiffyAnnouncer(object):
         if unit.is_player:
             indicator = self._c(indicator, "dark blue") 
         else:
-            log.info("#%s %s is not a player " % (unit.id, unit.get_title()))
-
-        """ Add NPC here """
+            indicator = self._c(indicator, "light green")
 
         return indicator
 
@@ -798,7 +796,10 @@ class SpiffyBattle:
         xp = int(5 * loser.level)
 
         if not loser.is_player:
-            xp *= 3
+            if loser.is_boss:
+                xp *= 4
+            else:
+                xp *= 3
 
         if winner.level > (loser.level+3):
             level_diff = winner.level - loser.level
@@ -1426,36 +1427,34 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         dungeon = kwargs["dungeon"]
         seconds = int(time.time() - unit.created_at)
         duration = self._get_duration(seconds)
-        existed = self._b(duration)
+        existed = duration
 
         pink_heart = self._c(u"♥", "pink")
-        unit_title = self._b(unit.name)
-        level = self._b(unit.level)
+        unit_title = self._get_unit_title(unit)
+        level = unit.level
         hp = unit.get_hp()
 
         if not unit.is_alive():
             hp = self._c(hp, "red")
 
-        colored_hp = self._b(hp)
+        colored_hp = hp
 
         body_count = len(unit.get_slain_units())
         unit_slain_count = self._c(body_count, "red")
         dungeon_name = self._get_dungeon_title(dungeon)
         foe_word = "foes"
-        life_status = ""
         stage = unit.get_stage_by_level(level=unit.level)
 
         if body_count == 1:
             foe_word = "foe"
 
-        if not unit.is_alive() and not unit.is_undead():
-            life_status = self._c("dead ", "red")
-
         cname = self._c(unit.get_title(), "light green")
-        msg = "%s is a %slevel %s %s [%s] with %s %s and has " % \
-        (unit_title, life_status, level, cname, stage, hp, pink_heart)
-        msg += "existed in %s for %s. %s has slain %s %s." % \
-        (dungeon_name, existed, unit_title, unit_slain_count, foe_word)
+
+        msg = "[%s] %s %s [%s] %s %s " % \
+        (level, unit_title, cname, stage, hp, pink_heart)
+
+        msg += "Alive %s. Slain: %s %s." % \
+        (existed, unit_slain_count, foe_word)
 
         if len(unit.effects) > 0:
             msg += " %s: " % self._b("Effects")
@@ -1468,6 +1467,19 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         if unit.is_boss:
             msg += " :: This is a %s" % self._b("boss")
+
+        """
+        Color combat status according to hostility
+        """
+        combat_status = self._c(unit.combat_status, "yellow")
+
+        if unit.combat_status == "hostile":
+            combat_status = self._c(unit.combat_status, "red")
+
+        if unit.combat_status == "friendly":
+            combat_status = self._c(unit.combat_status, "green")
+
+        msg += " :: %s" % combat_status.title()
 
         irc.reply(msg)
 
