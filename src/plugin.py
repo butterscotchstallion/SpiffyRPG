@@ -1015,12 +1015,10 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         bold_title = self._get_unit_title(unit)
         dialogue_text = dialogue
         orange_dialogue = self._c(dialogue_text, "orange")
-        padded_level = str(unit.level).zfill(2)
-        bold_level = self._b(padded_level)
+        
+        params = (bold_title, orange_dialogue)
 
-        params = (bold_level, bold_title, orange_dialogue)
-
-        announcement_msg = "[%s] %s says %s" % params
+        announcement_msg = "%s: %s" % params
 
         self.announce(announcement_msg)
 
@@ -2120,7 +2118,10 @@ class SpiffyDungeon:
         lower_name = name.lower()
 
         for unit in self.units:
-            if unit.name.lower() == lower_name:
+            unit_name_match = unit.name.lower() == lower_name
+            nick_match = unit.nick.lower() == lower_name
+
+            if unit_name_match or nick_match:
                 return unit
 
     def get_player_by_player_id(self, player_id):
@@ -3475,9 +3476,15 @@ class SpiffyUnit:
             log.info("SpiffyRPG: %s raises %s from the dead!" % \
             (self.name, dead_unit.name))
 
+            """ Reset HP """
             dead_unit.hp = dead_unit.calculate_hp()
+
+            """ Apply Undead effect """
             undead_effect = self.effects_collection.get_effect_by_name(name="Undead")
             dead_unit.apply_effect(undead_effect)
+
+            """ Make this unit hostile """
+            dead_unit.combat_status = "hostile"
 
             return True
 
@@ -4247,12 +4254,11 @@ class SpiffyUnit:
 
     def on_effect_undead_applied(self):
         total_hp = self.calculate_hp()
-        #reduced_hp = total_hp * .30
-        reduced_hp = total_hp
-        self.hp = reduced_hp
-        params = (self.name, reduced_hp, total_hp)
+        self.hp = total_hp
 
-        log.info("SpiffyRPG: %s has been turned! setting HP to %s (%s total)" % params)
+        params = (self.name, total_hp)
+
+        log.info("SpiffyRPG: %s has been turned! setting HP to %s" % params)
 
     def get_attack_damage(self):
         return random.randrange(5, 10) * self.level
