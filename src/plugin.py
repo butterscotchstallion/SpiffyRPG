@@ -96,13 +96,16 @@ class SpiffyAnnouncer(object):
         #if unit.level < 30:
         #    unit.name += "\x0F"
 
-        bold_title = self._b(unit.name)
+        bold_title = self._b(unit.get_name())
         indicator = self._get_unit_indicator(unit)
 
         if unit.is_player and unit.unit_type_id in role_colors:
             role_color = role_colors[unit.unit_type_id]
             bold_title = self._c(bold_title, role_color)
 
+        if unit.is_undead():
+            bold_title = self._c(bold_title, "light blue")
+        
         title = "%s %s" % (indicator, bold_title)
 
         return title
@@ -570,7 +573,7 @@ class SpiffyBattle:
                 loot_item = dead_unit.get_random_lootable_item()
 
                 if loot_item is None:
-                    log.info("SpiffyRPG: %s has no lootable items" % dead_unit.name)
+                    log.info("SpiffyRPG: %s has no lootable items" % dead_unit.get_name())
                     return
 
                 """
@@ -581,7 +584,7 @@ class SpiffyBattle:
                     item_name = loot_item.name
 
                     if struck_unit.has_item(item=loot_item):
-                        log.info("SpiffyRPG: %s already has %s" % (struck_unit.name, loot_item.name))
+                        log.info("SpiffyRPG: %s already has %s" % (struck_unit.get_name(), loot_item.name))
                         continue
 
                     """
@@ -593,7 +596,7 @@ class SpiffyBattle:
 
                     if struck_unit.is_player:
                         log.info("SpiffyRPG: adding %s to %s's inventory" % \
-                        (item_name, struck_unit.name))
+                        (item_name, struck_unit.get_name()))
 
                         """ Tell user they received loot """
                         announcer = SpiffyPlayerAnnouncer(irc=self.irc,
@@ -770,8 +773,10 @@ class SpiffyBattle:
         anything
         """
         if raised_successfully is not None:
+            """
             self.dungeon.announcer.necromancer_raised_dead(dead_unit=dead_unit,
                                                            necro=necro)
+            """
             spawn_dialogue = dead_unit.dialogue_zombie()
 
             if spawn_dialogue is not None:
@@ -825,7 +830,7 @@ class SpiffyBattle:
     def add_party_member(self, unit):
         if unit not in self.party:
             if unit.is_alive():
-                log.info("SpiffyRPG: adding %s to party" % unit.name)
+                log.info("SpiffyRPG: adding %s to party" % unit.get_name())
 
                 self.party.append(unit)
             else:
@@ -944,7 +949,7 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         verbs = ("holding a glowing satchel", "wielding a mysterious artifact",
         "grasping an arcane curio")
         doing_something = random.choice(verbs)
-        unit_name = unit.name
+        unit_name = unit.get_name()
 
         announcement_msg = self._b(self._c("%s appears, %s!", "light green")) % (unit_name, doing_something)
 
@@ -954,9 +959,9 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         units = kwargs["units"]
         dead_unit = kwargs["unit"]
         loot = kwargs["item"]
-        unit_names = [self._b(unit.name) for unit in units]
+        unit_names = [self._b(unit.get_name()) for unit in units]
         unit_len = len(unit_names)
-        params = (self._b(dead_unit.name), self._b(loot.name))
+        params = (self._b(dead_unit.get_name()), self._b(loot.name))
         announcement_msg = ""
 
         if unit_len == 1:
@@ -974,8 +979,8 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
     def hot_streak_ended(self, **kwargs):
         unit = kwargs["unit"]
         ended_by = kwargs["ended_by"]
-        unit_name = self._b(unit.name)
-        ended_by_name = self._b(ended_by.name)
+        unit_name = self._b(unit.get_name())
+        ended_by_name = self._b(ended_by.get_name())
 
         announcement_msg = "%s's hot streak was ended by %s" % \
         (unit_name, ended_by_name)
@@ -990,7 +995,7 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         """
         unit = kwargs["unit"]
         streak_count = kwargs["streak_count"]
-        unit_name = self._b(unit.name)
+        unit_name = self._b(unit.get_name())
 
         if streak_count == 3:
             announcement_msg = "%s is on fire!" % unit_name
@@ -1018,7 +1023,7 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         %s: %s
         """
         if dialogue is None:
-            log.error("SpiffyWorld: dialogue error for unit %s" % unit.name)
+            log.error("SpiffyWorld: dialogue error for unit %s" % unit.get_name())
             return
 
         bold_title = self._get_unit_title(unit)
@@ -1034,9 +1039,9 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
     def unit_death(self, **kwargs):
         unit = kwargs["unit"]
         slain_by = kwargs["slain_by"]
-        slain_by_name = self._b(slain_by.name)
+        slain_by_name = self._b(slain_by.get_name())
 
-        name = self._b(unit.name)
+        name = self._b(unit.get_name())
         slain = self._c("slain", "red")
 
         announcement_msg = "%s was %s by %s." % (name, slain, slain_by_name)
@@ -1272,7 +1277,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         %s: %s
         """
         if dialogue is None:
-            log.error("SpiffyWorld: no dialogue for %s" % unit.name)
+            log.error("SpiffyWorld: no dialogue for %s" % unit.get_name())
             return
 
         bold_title = self._get_unit_title(unit)
@@ -1391,7 +1396,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         player = kwargs["player"]
         unit = kwargs["unit"]
         ptitle = self._get_unit_title(player)
-        utitle = self._b(unit.name)
+        utitle = self._b(unit.get_name())
 
         announcement_msg = "%s raises %s from the dead!" % \
         (ptitle, utitle)
@@ -1622,10 +1627,13 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
                 (player_name, look_phrase, dungeon_name)
             
             for unit in units:
-                unit_name = self._b(unit.name)
+                unit_name = self._b(unit.get_name())
 
                 if is_seance:
                     unit_name = self._c(unit_name, "red")
+
+                if unit.is_undead():
+                    unit_name = self._c(unit_name, "light blue")
 
                 unit_level = self._c(unit.level, "green")
                 unit_titles.append("%s (%s)" % (unit_name, unit_level))
@@ -1643,7 +1651,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         unit = kwargs["unit"]
         dungeon = kwargs["dungeon"]
 
-        log.info("SpiffyRPG: inspecting %s" % unit.name)
+        log.info("SpiffyRPG: inspecting %s" % unit.get_name())
 
         self.unit_info(unit=unit,
                        player=player,
@@ -2021,14 +2029,14 @@ class SpiffyDungeon:
 
             if unit.is_player:
                 log.info("SpiffyRPG: spawning a level %s player %s (%s) with %s HP in %s" % \
-                    (unit.level, unit.name, unit.get_title(), unit.get_hp(), self.name))
+                    (unit.level, unit.get_name(), unit.get_title(), unit.get_hp(), self.name))
             else:
                 log.info("SpiffyRPG: spawning a level %s NPC: %s (%s) with %s HP in %s" % \
-                    (unit.level, unit.name, unit.get_title(), unit.get_hp(), self.name))
+                    (unit.level, unit.get_name(), unit.get_title(), unit.get_hp(), self.name))
             
             self.units.append(unit)
         else:
-            log.info("SpiffyRPG: not adding duplicate unit %s" % (unit.name))
+            log.info("SpiffyRPG: not adding duplicate unit %s" % (unit.get_name()))
 
     def remove_unit(self, unit):
         units = []
@@ -2055,7 +2063,7 @@ class SpiffyDungeon:
         lower_name = name.lower()
 
         for unit in self.units:
-            unit_name_match = unit.name.lower() == lower_name
+            unit_name_match = unit.get_name().lower() == lower_name
             nick_match = unit.nick.lower() == lower_name
 
             if unit_name_match or nick_match:
@@ -2070,7 +2078,7 @@ class SpiffyDungeon:
         lower_name = name.lower()
 
         for unit in self.units:
-            unit_name_match = unit.name.lower() == lower_name
+            unit_name_match = unit.get_name().lower() == lower_name
             nick_match = unit.nick.lower() == lower_name
 
             if unit.is_alive() and (unit_name_match or nick_match):
@@ -2078,7 +2086,7 @@ class SpiffyDungeon:
 
     def get_dead_unit_by_name(self, name):
         for unit in self.units:
-            if not unit.is_alive() and unit.name.lower() == name.lower():
+            if not unit.is_alive() and unit.get_name().lower() == name.lower():
                 return unit
 
     def get_living_players(self):
@@ -3382,7 +3390,7 @@ class SpiffyUnit:
 
         if self.is_casting_spell:
             log.info("SpiffyRPG: %s raises %s from the dead!" % \
-            (self.name, dead_unit.name))
+            (self.name, dead_unit.get_name()))
 
             """ Reset HP """
             dead_unit.hp = dead_unit.calculate_hp()
@@ -4153,6 +4161,14 @@ class SpiffyUnit:
 
         return int(hp)
 
+    def get_name(self):
+        unit_name = self.name
+
+        if self.is_undead():
+            unit_name = "Undead %s" % unit_name
+
+        return unit_name
+
     def apply_effect(self, effect):
         if effect not in self.effects:
             if effect.name == "Undead":
@@ -4341,9 +4357,6 @@ class SpiffyUnit:
     def is_alive(self):
         return self.get_hp() > 0
 
-    def is_undead(self):
-        return False
-
 class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
     """
     Announcements sent to a player - their IRC nick
@@ -4358,7 +4371,7 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
         player = kwargs["player"]
         slain_unit = kwargs["unit"]
         item = kwargs["item"]
-        unit_name = self._b(slain_unit.name)
+        unit_name = self._b(slain_unit.get_name())
         item_name = self._b(item.name)
 
         announcement_msg = "%s has been added to your inventory" % item_name
@@ -4368,7 +4381,7 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
     def unit_slain(self, **kwargs):
         unit = kwargs["unit"]
 
-        announcement_msg = "You have slain %s!" % self._b(unit.name)
+        announcement_msg = "You have slain %s!" % self._b(unit.get_name())
 
         self.announce(announcement_msg)
 
@@ -5406,7 +5419,8 @@ class SpiffyRPG(callbacks.Plugin):
                                                     unit=unit)
 
                 dungeon.announcer.unit_info(unit=unit,
-                                            dungeon=dungeon)
+                                            dungeon=dungeon,
+                                            irc=irc)
 
                 player.add_raised_unit(unit=unit)
             else:
@@ -5512,7 +5526,7 @@ class SpiffyRPG(callbacks.Plugin):
 
             if unit is not None:
                 unit.combat_status = "hostile"
-                irc.reply("%s's combat status has been set to HOSTILE" % unit.name)
+                irc.reply("%s's combat status has been set to HOSTILE" % unit.get_name())
             else:
                 irc.error("Couldn't find that unit")
 
@@ -5579,7 +5593,7 @@ class SpiffyRPG(callbacks.Plugin):
                 int_level = int(level)
                 xp_for_level = self.unit_level.get_xp_for_level(int_level) + 1
 
-                log.info("SpiffyRPG: setting xp for %s to %s (level %s)" % (unit.name, xp_for_level, int_level))
+                log.info("SpiffyRPG: setting xp for %s to %s (level %s)" % (unit.get_name(), xp_for_level, int_level))
 
                 unit.experience = xp_for_level
                 unit.level = self.unit_level.get_level_by_xp(unit.experience)
@@ -5650,7 +5664,7 @@ class SpiffyRPG(callbacks.Plugin):
                 unit = dungeon.get_unit_by_user_id(user_id)
 
                 if unit is not None:
-                    log.info("SpiffyRPG: removing %s from dungeon" % unit.name)
+                    log.info("SpiffyRPG: removing %s from dungeon" % unit.get_name())
 
                     dungeon.remove_unit(unit)
 
@@ -5682,7 +5696,7 @@ class SpiffyRPG(callbacks.Plugin):
                     unit.nick = new_nick
 
                     log.info("SpiffyRPG: nick change: %s is now known as %s, updating unit %s" % \
-                    (old_nick, new_nick, unit.name))
+                    (old_nick, new_nick, unit.get_name()))
 
     def doJoin(self, irc, msg):
         """
@@ -5712,7 +5726,7 @@ class SpiffyRPG(callbacks.Plugin):
                             last_welcome = time.time() - self.welcome_message_cooldown_in_seconds
                         
                         if last_welcome > self.welcome_message_cooldown_in_seconds:
-                            dungeon.announcer.unit_info(unit=player, irc=irc)
+                            dungeon.announcer.unit_info(unit=player, dungeon=dungeon, irc=irc)
                             self.welcome_messages[player.id] = time.time()
                         else:
                             log.info("SpiffyRPG: not welcoming %s because cooldown" % player.name)
