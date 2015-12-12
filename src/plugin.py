@@ -1468,21 +1468,21 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         percent_xp = self._get_level_xp_percentage(unit=unit)
 
         msg = "[%s] %s%% %s %s [%s] %s %s " % \
-        (level, percent_xp, unit_title, cname, stage, hp, pink_heart)
+        (level, percent_xp, unit_title, cname, stage, pink_heart, hp)
 
-        msg += " :: %s %s. " % (self._b("Alive"), existed)
+        msg += " :: %s %s" % (self._b("Alive"), existed)
 
         if body_count > 0:
             msg += " :: %s slain" % unit_slain_count
 
         if len(unit.effects) > 0:
-            msg += " %s: " % self._b("Effects")
+            msg += " :: %s " % self._b("Effects")
             msg += self._c(unit.get_effects_list(), "light blue")
 
         hot_streak = unit.is_on_hot_streak()
 
         if hot_streak is not None:
-            msg += " Hot streak: %s" % self._b(hot_streak)
+            msg += " Hot Streak: %s" % self._b(hot_streak)
 
         if unit.is_boss:
             msg += " :: This is a %s" % self._b("boss")
