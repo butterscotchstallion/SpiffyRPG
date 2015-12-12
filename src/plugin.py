@@ -1408,7 +1408,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
     def top_players(self, top_players):
         for player in top_players:
-            self.player_info(player)
+            self.unit_info(player)
 
     def dialogue_intro(self, unit, intro):
         colored_intro = ircutils.mircColor(intro, fg="orange")
@@ -1420,7 +1420,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
     def unit_info(self, **kwargs):
         """
-        %s is a level %s with %s %s and has existed in %s for %s seconds.
+        Shows information about a dungeon unit
         """
         irc = kwargs["irc"]
         unit = kwargs["unit"]
@@ -1432,6 +1432,21 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         pink_heart = self._c(u"♥", "pink")
         unit_title = self._get_unit_title(unit)
         level = unit.level
+
+        """
+        Color level according to hostility
+        """
+        combat_status = self._c(unit.combat_status, "yellow")
+
+        if unit.combat_status == "hostile":
+            level = self._c(level, "red")
+
+        if unit.combat_status == "friendly":
+            level = self._c(level, "green")
+
+        """
+        Color HP accordingly
+        """
         hp = unit.get_hp()
 
         if not unit.is_alive():
@@ -1442,20 +1457,15 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         body_count = len(unit.get_slain_units())
         unit_slain_count = self._c(body_count, "red")
         dungeon_name = self._get_dungeon_title(dungeon)
-        foe_word = "foes"
         stage = unit.get_stage_by_level(level=unit.level)
-
-        if body_count == 1:
-            foe_word = "foe"
-
         cname = self._c(unit.get_title(), "light green")
         percent_xp = self._get_level_xp_percentage(unit=unit)
 
         msg = "[%s] %s%% %s %s [%s] %s %s " % \
         (level, percent_xp, unit_title, cname, stage, hp, pink_heart)
 
-        msg += "Alive %s. Slain: %s %s." % \
-        (existed, unit_slain_count, foe_word)
+        msg += "Alive %s. %s slain" % \
+        (existed, unit_slain_count)
 
         if len(unit.effects) > 0:
             msg += " %s: " % self._b("Effects")
@@ -1468,19 +1478,6 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         if unit.is_boss:
             msg += " :: This is a %s" % self._b("boss")
-
-        """
-        Color combat status according to hostility
-        """
-        combat_status = self._c(unit.combat_status, "yellow")
-
-        if unit.combat_status == "hostile":
-            combat_status = self._c(unit.combat_status, "red")
-
-        if unit.combat_status == "friendly":
-            combat_status = self._c(unit.combat_status, "green")
-
-        msg += " :: %s" % combat_status.title()
 
         irc.reply(msg)
 
@@ -1507,100 +1504,6 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         colored_xp = self._c(percent_xp, xp_color)
 
         return colored_xp
-
-    def player_info(self, **kwargs):
-        """
-        %s is a level %s %s. %s XP remains until %s
-        """
-        irc = kwargs["irc"]
-        player = kwargs["player"]
-        bold_title = self._get_unit_title(player)
-        bold_class = self._get_player_role(player)
-
-        player_xp = player.experience
-        
-        xp_req_for_this_level = player.get_xp_required_for_next_level() + 1
-        xp_req_for_previous_level = player.get_xp_required_for_previous_level() + 1
-        
-        """ If this is one, they're max level """
-        if xp_req_for_this_level == 1:
-            xp_req_for_this_level = self.levels[-1][1]
-
-        percent_xp = round(((float(player_xp - xp_req_for_previous_level) / (float(xp_req_for_this_level - xp_req_for_previous_level))) * 100),1)
-
-        if percent_xp <= 20:
-            xp_color = "yellow"
-        elif percent_xp > 20 and percent_xp < 75:
-            xp_color = "white"
-        elif percent_xp >= 75:
-            xp_color = "green"
-
-        colored_xp = self._c(percent_xp, xp_color)
-
-        player_hp = player.get_hp()
-        hp_color = "green"
-
-        if player_hp <= 75:
-            hp_color = "white"
-
-        if player_hp <= 50:
-            hp_color = "yellow"
-
-        if player_hp <= 0:
-            hp_color = "red"
-
-        colored_hp = self._c(player_hp, hp_color)
-        heart = self._c(u"♥", hp_color)
-
-        # + 1 xp because you don't level until you breach the limit
-        formatted_xp = "{:,}".format(xp_req_for_this_level)
-        bold_xp_needed_this_level = self._b(formatted_xp)
-        bold_next_level = self._b(player.get_level() + 1)
-        bold_hp = self._b(colored_hp)
-        bold_level = self._b(player.get_level())
-
-        # xp gained
-        formatted_xp_gained = "{:,}".format(player_xp)
-        bold_cur_xp = self._b(formatted_xp_gained)
-
-        # X/X (x%)
-        xp_combo = "/".join([bold_cur_xp, bold_xp_needed_this_level])
-        xp_combo += " (%s%%)" % (colored_xp)
-
-        stage = player.get_stage_by_level(level=player.level)
-
-        params = (bold_title, bold_level, bold_class, stage, bold_hp, heart)
-        announcement_msg = "%s is a level %s %s [%s] with %s %s" % params
-        announcement_msg += " %s to level %s" % \
-        (xp_combo, bold_next_level)
-
-        # Effects!
-        if len(player.effects):
-            announcement_msg += " :: %s: " % self._b("Effects")
-            announcement_msg += self._c(player.get_effects_list(), "light blue")
-
-        num_raised_units = len(player.raised_units)
-
-        if num_raised_units > 0:
-            announcement_msg += " :: %s has raised %s dead." % (bold_title, num_raised_units)
-
-        hot_streak = player.is_on_hot_streak()
-
-        if hot_streak is not None:
-            announcement_msg += " :: Hot streak: %s" % self._b(hot_streak)
-
-        body_count = len(player.get_slain_units())
-        unit_slain_count = self._c(body_count, "red")
-        foes_word = "foes"
-
-        if body_count > 0:
-            if body_count == 1:
-                foes_word = "foe"
-
-            params = (bold_title, unit_slain_count, foes_word)
-            announcement_msg += " :: %s has slain %s %s" % params
-
-        irc.reply(announcement_msg)
 
     def new_player(self, char_name, char_class):
         """
@@ -4937,7 +4840,7 @@ class SpiffyRPG(callbacks.Plugin):
 
                 player.set_title(title[0:16])
 
-                dungeon.announcer.player_info(player=player, irc=irc)
+                dungeon.announcer.unit_info(player=player, irc=irc)
 
     title = wrap(title, ["user", "text"])
 
@@ -5729,7 +5632,7 @@ class SpiffyRPG(callbacks.Plugin):
                 unit.level = self.unit_level.get_level_by_xp(unit.experience)
                 unit.on_unit_level()
 
-                dungeon.announcer.player_info(player=unit, irc=irc)
+                dungeon.announcer.unit_info(player=unit, irc=irc)
         else:
             log.error("SpiffyRPG: could not find dungeon %s" % msg.args[0])
 
@@ -5854,7 +5757,7 @@ class SpiffyRPG(callbacks.Plugin):
                             last_welcome = time.time() - self.welcome_message_cooldown_in_seconds
                         
                         if last_welcome > self.welcome_message_cooldown_in_seconds:
-                            dungeon.announcer.player_info(player=player, irc=irc)
+                            dungeon.announcer.unit_info(player=player, irc=irc)
                             self.welcome_messages[player.id] = time.time()
                         else:
                             log.info("SpiffyRPG: not welcoming %s because cooldown" % player.name)
