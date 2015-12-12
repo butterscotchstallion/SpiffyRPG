@@ -551,7 +551,10 @@ class SpiffyBattle:
                                      hit_info=hit_info,
                                      attack_info=attack_info)
             
-            self.call_necromancers()
+            chance_to_raise_dead = random.randrange(1, 100) < 30
+
+            if chance_to_raise_dead:
+                self.call_necromancers()
 
     def distribute_loot(self, dead_units):
         units_receiving_loot = []
@@ -744,7 +747,7 @@ class SpiffyBattle:
                               time.time() + resurrection_cast_time,
                               name="necro_resurrect")
         else:
-            log.info("SpiffyWorld: %s has no living necromancers")
+            log.info("SpiffyWorld: %s has no living necromancers" % self.dungeon.name)
 
     def on_unit_spell_interrupted(self, **kwargs):
         unit = kwargs["unit"]
@@ -1214,7 +1217,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         unit_name = self._get_unit_title(unit)
         attacker_name = self._get_unit_title(attacker)
 
-        announcement_msg = "%s interrupts %'s spell!" % (unit_name, attacker_name)
+        announcement_msg = "%s interrupts %s's spell!" % (attacker_name, unit_name)
 
         self.announce(announcement_msg)
 
@@ -1225,7 +1228,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         unit_name = self._get_unit_title(dead_unit)
 
         announcement_msg = "%s begins raising %s from the dead!" % (necro_name, unit_name)
-        announcement_msg += " Attack it to interrupt the spell!"
+        #announcement_msg += " Attack it to interrupt the spell!"
 
         self.announce(announcement_msg)
 
@@ -1268,12 +1271,10 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         bold_title = self._get_unit_title(unit)
         orange_dialogue = self._c(dialogue, "orange")
-        padded_level = str(unit.level).zfill(2)
-        bold_level = self._b(padded_level)
+        
+        params = (bold_title, orange_dialogue)
 
-        params = (bold_level, bold_title, orange_dialogue)
-
-        announcement_msg = "[%s] %s says %s" % params
+        announcement_msg = "%s: %s" % params
 
         self.announce(announcement_msg)
 
@@ -4365,8 +4366,6 @@ class SpiffyUnit:
                         decimal_adjustment = float(inc_dmg_adjustment) / float(100)
                         damage_amount = float(damage * decimal_adjustment)
                         adjusted_damage -= damage_amount
-
-                        log.info("SpiffyRPG: %s - %s! decimal is %s" % (damage, damage_amount, decimal_adjustment))
 
         return adjusted_damage
 
