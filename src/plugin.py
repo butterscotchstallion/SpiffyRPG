@@ -1449,9 +1449,10 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
             foe_word = "foe"
 
         cname = self._c(unit.get_title(), "light green")
+        percent_xp = self._get_level_xp_percentage(unit=unit)
 
-        msg = "[%s] %s %s [%s] %s %s " % \
-        (level, unit_title, cname, stage, hp, pink_heart)
+        msg = "[%s] %s%% %s %s [%s] %s %s " % \
+        (level, percent_xp, unit_title, cname, stage, hp, pink_heart)
 
         msg += "Alive %s. Slain: %s %s." % \
         (existed, unit_slain_count, foe_word)
@@ -1482,6 +1483,30 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         msg += " :: %s" % combat_status.title()
 
         irc.reply(msg)
+
+    def _get_level_xp_percentage(self, **kwargs):
+        unit = kwargs["unit"]
+        unit_xp = unit.experience
+
+        xp_req_for_this_level = unit.get_xp_required_for_next_level() + 1
+        xp_req_for_previous_level = unit.get_xp_required_for_previous_level() + 1
+        
+        """ If this is one, they're max level """
+        if xp_req_for_this_level == 1 or unit.level not in self.levels:
+            xp_req_for_this_level = self.levels[-1][1]
+
+        percent_xp = round(((float(unit_xp - xp_req_for_previous_level) / (float(xp_req_for_this_level - xp_req_for_previous_level))) * 100),1)
+
+        if percent_xp <= 20:
+            xp_color = "yellow"
+        elif percent_xp > 20 and percent_xp < 75:
+            xp_color = "white"
+        elif percent_xp >= 75:
+            xp_color = "green"
+
+        colored_xp = self._c(percent_xp, xp_color)
+
+        return colored_xp
 
     def player_info(self, **kwargs):
         """
@@ -1705,10 +1730,6 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         #self.announce(msg)
 
     def inspect_target(self, **kwargs):
-        """
-        Inspects a target in the dungeon. This will
-        show player info it the target is not a NPC.
-        """
         player = kwargs["player"]
         irc = kwargs["irc"]
         unit = kwargs["unit"]
@@ -1716,15 +1737,10 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         log.info("SpiffyRPG: inspecting %s" % unit.name)
 
-        if unit.is_player:
-            self.player_info(player=unit,
-                             irc=irc)
-        else:
-            """ TODO: account for difference between NPCs and items """
-            self.unit_info(unit=unit,
-                           player=player,
-                           dungeon=dungeon,
-                           irc=irc)
+        self.unit_info(unit=unit,
+                       player=player,
+                       dungeon=dungeon,
+                       irc=irc)
 
     def look_failure(self, **kwargs):
         irc = kwargs["irc"]
@@ -4773,6 +4789,10 @@ class SpiffyRPG(callbacks.Plugin):
         if dungeon_info is not None:
             player = dungeon_info["player"]
             dungeon = dungeon_info["dungeon"]
+
+            if not target:
+                target = msg.nick
+
             unit = dungeon.get_unit_by_name(target)
 
             if unit is not None:
@@ -4785,7 +4805,7 @@ class SpiffyRPG(callbacks.Plugin):
                                                dungeon=dungeon,
                                                irc=irc)
 
-    inspect = wrap(inspect, ["user", "text"])
+    inspect = wrap(inspect, ["user", optional("text")])
 
     def look(self, irc, msg, args, user):
         """
@@ -5508,45 +5528,6 @@ class SpiffyRPG(callbacks.Plugin):
             irc.error("Your bags explode, blanketing you in flames!")
 
     inventory = wrap(inventory, ["user"])
-
-    def sinfo(self, irc, msg, args, target_nick):
-        """
-        Shows information about a player
-        """
-        if not target_nick:
-            target_nick = msg.nick
-
-        if not self._is_nick_in_channel(irc, target_nick):
-            irc.error("I don't see that nick here")
-            return
-
-        info_target = msg.nick
-        user_id = None
-
-        try:
-            target_hostmask = irc.state.nickToHostmask(target_nick)
-            user_id = self._get_user_id(irc, target_hostmask)
-        except KeyError:
-            pass
-
-        if user_id is not None:
-            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
-
-            if dungeon is not None:
-                log.info("SpiffyRPG: looking up nick %s with user_id %s" % (target_nick, user_id))
-                player = dungeon.get_unit_by_user_id(user_id)
-
-                if player is not None:
-                    dungeon.announcer.player_info(player=player, irc=irc)
-                else:
-                    irc.error("You peer into the dungeon, but see no one by that name.")
-            else:
-                """ TODO: this could probably be done outside of a dungeon """
-                irc.error("The dungeon collapses!")
-        else:
-            irc.error("I could not find anything on that user.")
-
-    sinfo = wrap(sinfo, [optional("text")])
 
     def raisedead(self, irc, msg, args, user, target):
         """
