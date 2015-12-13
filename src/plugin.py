@@ -131,23 +131,6 @@ class SpiffyAnnouncer(object):
 
         return indicator
 
-    def _get_item_type_indicator(self, item_type):
-        indicator = ""
-        lower_item_type = item_type.lower()
-
-        if lower_item_type == "rock":
-            indicator = "R"
-        elif lower_item_type == "paper":
-            indicator = "P"
-        elif lower_item_type == "scissors":
-            indicator = "S"
-        elif lower_item_type == "lizard":
-            indicator = "L"
-        elif lower_item_type == "spock":
-            indicator = "V"
-
-        return self._b(indicator)
-
     def get_pink_heart(self):
         return self._c(u"♥", "pink")
 
@@ -720,6 +703,11 @@ class SpiffyBattle:
             if boss_spawn_chance:
                 self.spawn_bosses()
 
+            """
+            Winner gets charges for one of their potions
+            """
+            winner.add_charge_to_random_potion()
+
     def call_necromancers(self):
         necromancers = self.dungeon.get_living_necromancer_units()
         dead_units = self.dungeon.get_dead_units()
@@ -1096,8 +1084,8 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         winner_weapon = hit_info["attacker_weapon"]
         loser_weapon = hit_info["target_weapon"]
         winner_attack = winner_weapon.name
-        winner_item_type = self._get_item_type_indicator(winner_weapon.item_type)
-        loser_item_type = self._get_item_type_indicator(loser_weapon.item_type)
+        winner_item_type = winner_weapon.get_indicator()
+        loser_item_type = loser_weapon.get_indicator()
 
         green_xp = self._c("{:,}".format(kwargs["xp_gained"]), "green")
         bonus_xp = ""
@@ -1316,7 +1304,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         irc = kwargs["irc"]
         item_name = self._b(item.name)
         rarity_indicator = self.get_rarity_indicator(rarity=item.rarity)
-        item_type_indicator = self._get_item_type_indicator(item.item_type)
+        item_type_indicator = item.get_indicator()
         params = (rarity_indicator, 
                   item_name,
                   item_type_indicator)
@@ -1332,6 +1320,14 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         if item.is_permanent:
             announcement_msg += " :: This item cannot be traded/dropped."
+
+        if item.is_usable():
+            charges_word = "charges"
+
+            if item.charges == 1:
+                charges_word = "charge"
+
+            announcement_msg += " :: %s %s" % (self._b(item.charges), charges_word)
 
         irc.reply(announcement_msg)
 
@@ -1431,9 +1427,22 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         irc = kwargs["irc"]
         unit = kwargs["unit"]
         dungeon = kwargs["dungeon"]
-        seconds = int(time.time() - unit.created_at)
-        duration = self._get_duration(seconds)
-        existed = duration
+        
+        """
+        Units start alive
+        """
+        seconds_alive = int(time.time() - unit.created_at)
+        alive_duration = self._get_duration(seconds_alive)
+        
+        """
+        Also track how long the unit has been dead
+        """
+        seconds_dead = 0
+        dead_duration = 0
+
+        if not unit.is_alive() and unit.slain_at is not None:
+            seconds_dead = int(time.time() - unit.slain_at)
+            dead_duration = self._get_duration(seconds_dead)
 
         pink_heart = self._c(u"♥", "pink")
         unit_title = self._get_unit_title(unit)
@@ -1467,10 +1476,13 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         cname = self._c(unit.get_title(), "light green")
         percent_xp = self._get_level_xp_percentage(unit=unit)
 
-        msg = "[%s] %s%% %s %s [%s] %s %s " % \
+        msg = "[%s] %s%% %s %s [%s] %s %s" % \
         (level, percent_xp, unit_title, cname, stage, pink_heart, hp)
 
-        msg += " :: %s %s" % (self._b("Alive"), existed)
+        if unit.is_alive():
+            msg += " :: %s %s" % (self._c("Alive", "green"), alive_duration)
+        else:
+            msg += " :: %s %s" % (self._c("Dead", "red"), dead_duration)
 
         if body_count > 0:
             msg += " :: %s slain" % unit_slain_count
@@ -2318,35 +2330,6 @@ class SpiffyUnitDB:
         if effect is not None:
             return dict(effect)
 
-    def get_item_by_name(self, **kwargs):
-        item_name = kwargs["item_name"]
-        cursor = self.db.cursor()
-        wildcard_item_name = "%%%s%%" % item_name
-
-        cursor.execute("""SELECT
-                          i.id,
-                          i.name,
-                          i.description,
-                          i.min_level,
-                          i.max_level,
-                          i.item_type,
-                          i.rarity,
-                          i.equipment_slot,
-                          i.is_permanent,
-                          i.unit_type_id,
-                          i.created_at
-                          FROM spiffyrpg_items i
-                          WHERE 1=1
-                          AND i.name LIKE ?
-                          ORDER BY i.name
-                          LIMIT 1""", (wildcard_item_name,))
-
-        item = cursor.fetchone()
-        cursor.close()
-
-        if item is not None:
-            return dict(item)
-
     def get_realm_king_player_id(self):
         cursor = self.db.cursor()
 
@@ -2839,12 +2822,23 @@ class SpiffyItem:
         self.is_permanent = item["is_permanent"] == "1"
         self.unit_type_id = item["unit_type_id"]
         self.created_at = item["created_at"]
+        self.charges = int(item["charges"])
+        self.can_use = item["can_use"] == 1
+
+    def is_usable(self):
+        return self.can_use
+
+    def is_potion(self):
+        return self.item_type == "potion"
 
     def get_indicator(self):
         indicator = self.item_type[0].upper()
 
         if self.item_type == "spock":
             indicator = "V"
+
+        if self.is_potion():
+            indicator = "i"
 
         return indicator
 
@@ -2938,6 +2932,8 @@ class SpiffyItemCollection:
                           i.equipment_slot,
                           i.is_permanent,
                           i.unit_type_id,
+                          i.can_use,
+                          i.charges,
                           i.created_at
                           FROM spiffyrpg_items i""")
 
@@ -3026,6 +3022,8 @@ class SpiffyItemCollection:
                           i.is_permanent,
                           i.unit_type_id,
                           i.created_at,
+                          i.charges,
+                          i.can_use,
                           ui.item_id,
                           ui.unit_id
                           FROM spiffyrpg_unit_items ui
@@ -3301,6 +3299,7 @@ class SpiffyUnit:
         self.is_boss = unit["is_boss"] == 1
         self.user_id = unit["user_id"]
         self.created_at = time.time()
+        self.slain_at = None
         self.unit_type_name = unit["unit_type_name"]
         self.unit_type_id = unit["unit_type_id"]
         self.effects = unit_effects_collection.get_effects_by_unit_id(unit_id=self.id)
@@ -3355,6 +3354,61 @@ class SpiffyUnit:
         Some items have an effect on possession!
         """
         self.apply_item_effects()
+
+    def add_charge_to_random_potion(self):
+        potion = self.get_random_potion_without_charges()
+
+        if potion is not None:
+            self.add_charge_to_item(item=potion)
+
+    def get_random_potion_without_charges(self):
+        potions = []
+
+        for item in self.items:
+            is_potion = item.is_potion()
+            has_charges = item.charges > 0
+
+            if item.is_usable() and is_potion and not has_charges:
+                potions.append(item)
+
+        if len(potions) > 0:
+            return random.choice(potions)
+
+    def add_charge_to_item(self, **kwargs):
+        item = kwargs["item"]
+
+        if item.is_usable():
+            item.charges += 1
+
+            log.info("SpiffyRPG: added charge to %s" % item.name)
+        else:
+            log.error("SpiffyRPG: cannot add charges to %s because it is not usable" % item.name)
+
+    def use_item(self, **kwargs):
+        item = kwargs["item"]
+
+        if item in self.items:
+            if not item.can_use or item.charges == 0:
+                return
+
+            """
+            Decrement charges each time an item is used
+            """
+            item.charges -= 1
+
+            if len(item.effects) > 0:
+                """
+                Apply item effects
+                """
+                for effect in item.effects:
+                    self.apply_effect(effect)
+
+                return True
+            else:
+                log.info("SpiffyRPG: attempting to use item %s but it has no effects!" % item.name)
+        else:
+            log.error("SpiffyRPG: attempting to use %s but it is not in %s's bags" % \
+            (item.name, self.name))
 
     def begin_casting_raise_dead(self):
         self.begin_casting_spell()
@@ -3726,6 +3780,12 @@ class SpiffyUnit:
 
             log.info("SpiffyRPG: unit %s gains %sHP from Regneration" % (self.name, regen_hp))
         else:
+            """
+            If regeneration has brought this unit back to life,
+            reset created_at
+            """
+            self.created_at = time.time()
+
             log.info("SpiffyRPG: unit %s is not rengerating because max HP (%s/%s)" % (self.name, current_hp, max_hp))
 
     def is_below_max_hp(self):
@@ -3981,7 +4041,8 @@ class SpiffyUnit:
         Before each fight, NPCs equip a random weapon. However,
         this behavior can be modified through effects!
         """
-        items = self.items
+        weapon_types = ("rock", "paper", "scissors", "lizard", "spock")
+        items = [item for item in self.items if item.item_type in weapon_types]
 
         if len(items) > 0:
             """
@@ -4169,12 +4230,33 @@ class SpiffyUnit:
 
         return unit_name
 
+    def adjust_hp(self, effect):
+        total_hp = self.calculate_hp()
+        adjustment = float(total_hp * (float(effect.hp_adjustment) / float(100)))
+
+        if effect.operator == "+":
+            self.hp += adjustment
+
+            log.info("SpiffyRPG: added %s HP from %s" % (adjustment, effect.name))
+        elif effect.operator == "-":
+            self.hp -= adjustment
+
+            log.info("SpiffyRPG: subtracted %s HP from %s" % (adjustment, effect.name))
+
     def apply_effect(self, effect):
         if effect not in self.effects:
-            if effect.name == "Undead":
-                self.on_effect_undead_applied()
+            """
+            hp_adjustment is an instant effect that
+            adjusts HP based on a percentage of the unit's
+            total HP
+            """
+            if effect.hp_adjustment is not None:
+                self.adjust_hp(effect)
+            else:
+                if effect.name == "Undead":
+                    self.on_effect_undead_applied()
 
-            self.effects.append(effect)
+                self.effects.append(effect)
 
     def on_effect_undead_applied(self):
         """
@@ -4337,6 +4419,13 @@ class SpiffyUnit:
             self.announcer.unit_death()
 
         """
+        This is used in unit_info as an alternative
+        to displaying the time the unit has been alive,
+        since it's dead now.
+        """
+        self.slain_at = time.time()
+
+        """
         Clear hostile combatants rounds when the
         unit dies
         """
@@ -4366,6 +4455,16 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
         announcer_parent.__init__(irc=kwargs["irc"],
                                   destination=kwargs["destination"],
                                   public=False)
+
+    def use_item(self, **kwargs):
+        item = kwargs["item"]
+        irc = kwargs["irc"]
+        item_name = self._b(item.name)
+
+        announcement_msg = "%s glows intensely for a moment " % item_name
+        announcement_msg += "and then fades, still warm in your hands"
+
+        irc.reply(announcement_msg)
 
     def found_loot(self, **kwargs):
         player = kwargs["player"]
@@ -4470,13 +4569,21 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
             item_name_list = []
 
             for item in player.items:
-                item_type = self._get_item_type_indicator(item.item_type)
-                item_name = "%s [%s]" % (self._b(item.name), item_type)                
+                item_type = item.get_indicator()
+                item_name = self._b(item.name)
+
+                """
+                Display usable items differently
+                """
+                if item.can_use:
+                    item_name = self._c(item_name, "light blue")
+
+                item_name = "%s [%s]" % (item_name, item_type)
                 item_name_list.append(item_name)
 
             announcement_msg = ", ".join(item_name_list)
         else:
-            announcement_msg = "Your bags appear empty."
+            announcement_msg = "Your inventory appear empty."
 
         irc.reply(announcement_msg)
 
@@ -4728,29 +4835,32 @@ class SpiffyRPG(callbacks.Plugin):
     
     look = wrap(look, ["user"])
 
-    def find(self, irc, msg, args, user, name):
+    def use(self, irc, msg, args, user, item_name):
         """
-        Searchs for a unit
+        use <item name> - Use an item in your inventory. 
         """
-        channel = msg.args[0]
-        
-        if ircutils.isChannel(channel):
-            user_id = self._get_user_id(irc, msg.prefix)
+        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
 
-            if user_id:
-                p = self.unit_db.get_units(unit_ids=[user_id])
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            player = dungeon_info["player"]
 
-                if p is not None:
-                    dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
+            inventory_item = player.get_item_from_inventory_by_name(item_name=item_name)
 
-                    if dungeon is not None:
-                        player = dungeon.get_player_by_player_id(p["id"])
-                        units = dungeon.search_living_units_by_name(name)
-                        dungeon.announcer.look(dungeon=dungeon, 
-                                               player=player,
-                                               units=units,
-                                               is_seance=False)
-    find = wrap(find, ["user", "text"])
+            if inventory_item is not None:
+                item_used_successfully = player.use_item(item=inventory_item)
+                player_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                         destination=player.nick)
+
+                if item_used_successfully is not None:
+                    player_announcer.use_item(item=inventory_item,
+                                              irc=irc)
+                else:
+                    irc.error("That item is not usable or has no charges left.")
+            else:
+                irc.error("Item not found!")
+    
+    use = wrap(use, ["user", "text"])
 
     def seance(self, irc, msg, args, user):
         """
@@ -5324,6 +5434,16 @@ class SpiffyRPG(callbacks.Plugin):
             if dungeon is not None:
                 user_id = self._get_user_id(irc, msg.prefix)
                 player = dungeon.get_unit_by_user_id(user_id)
+
+                """
+                In order to provide information about items in a
+                unit's inventory, we use the one in their inventory
+                if they have it. This facilitates proper representation
+                of item properties like Charges
+                """
+                if player.has_item(item=item):
+                    item = player.get_item_from_inventory_by_name(item_name=item.name)
+
                 dungeon.announcer.item_info(item=item,
                                             player=player,
                                             irc=irc)
