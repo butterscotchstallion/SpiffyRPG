@@ -1302,7 +1302,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         item = kwargs["item"]
         player = kwargs["player"]
         irc = kwargs["irc"]
-        item_name = self._b(item.name)
+        item_name = self._b(self._c(item.name, "light blue"))
         rarity_indicator = self.get_rarity_indicator(rarity=item.rarity)
         item_type_indicator = item.get_indicator()
         params = (rarity_indicator, 
@@ -1312,7 +1312,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         announcement_msg = "%s %s [%s]" % params
 
         if item.description is not None:
-            announcement_msg += " :: %s" % item.description
+            announcement_msg += " %s" % item.description
 
         if player is not None:
             if player.get_equipped_weapon().id == item.id:
@@ -4085,7 +4085,7 @@ class SpiffyUnit:
     def set_title(self, title):
         self.name = title
 
-        log.info("Player %s sets title to %s" % (self.id, self.title))
+        log.info("Player %s sets title to %s" % (self.id, self.name))
 
         cursor = self.db.cursor()
         params = (title, self.id)
@@ -4890,25 +4890,16 @@ class SpiffyRPG(callbacks.Plugin):
         """
         Examine your map to see where you are
         """
-        channel = msg.args[0]
-        
-        if ircutils.isChannel(channel):
-            user_id = self._get_user_id(irc, msg.prefix)
+        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
 
-            dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
-            
-            if dungeon is not None:
-                player = dungeon.get_unit_by_user_id(user_id)
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            player = dungeon_info["player"]
 
-                if player is not None:
-                    dungeon.announcer.open_map(dungeon=dungeon, 
-                                               player=player)
-                else:
-                    irc.error("You are not in a dungeon.")
-            else:
-                irc.error("You seem to have misplaced your map.")
+            dungeon.announcer.open_map(dungeon=dungeon, 
+                                       player=player)
         else:
-          irc.error("You are not in a dungeon.")
+            irc.error("You seem to have misplaced your map.")
     
     smap = wrap(smap, ["user"])
 
@@ -4916,18 +4907,15 @@ class SpiffyRPG(callbacks.Plugin):
         """
         title <new title> - sets a new title for your character. Maximum 16 characters
         """
-        is_channel = irc.isChannel(msg.args[0])
+        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
 
-        if is_channel:
-            user_id = self._get_user_id(irc, msg.prefix)
-            dungeon = self.SpiffyWorld.get_dungeon_by_channel(msg.args[0])
-            
-            if dungeon is not None:
-                player = dungeon.get_unit_by_user_id(user_id)
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            player = dungeon_info["player"]
 
-                player.set_title(title[0:16])
+            player.set_title(title[0:16])
 
-                dungeon.announcer.unit_info(unit=player, irc=irc)
+            dungeon.announcer.unit_info(unit=player, irc=irc, dungeon=dungeon)
 
     title = wrap(title, ["user", "text"])
 
