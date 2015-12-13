@@ -5386,6 +5386,16 @@ class SpiffyRPG(callbacks.Plugin):
 
     topplayers = wrap(topplayers, ["user"])
     
+    def help(self, irc, msg, args):
+        """
+        help - shows basic commands
+        """
+        help_msg = "Basic commands: .look, .rock, .paper, .scissors, .lizard, .spock (Read more: http://git.io/vR8f1)"
+        
+        irc.reply(help_msg, notice=True)
+
+    help = wrap(help)
+
     def srole(self, irc, msg, args, user, role):
         """
         Changes your role to something else
