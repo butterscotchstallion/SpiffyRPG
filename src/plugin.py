@@ -1329,7 +1329,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
             announcement_msg += " :: %s %s" % (self._b(item.charges), charges_word)
 
-        irc.reply(announcement_msg)
+        irc.reply(announcement_msg, notice=True)
 
     def effect_info(self, **kwargs):
         effect = kwargs["effect"]
@@ -1499,7 +1499,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         if unit.is_boss:
             msg += " :: This is a %s" % self._b("boss")
 
-        irc.reply(msg)
+        irc.reply(msg, notice=True)
 
     def _get_level_xp_percentage(self, **kwargs):
         unit = kwargs["unit"]
@@ -1681,7 +1681,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         msg = "%s %s %s but sees nothing of import" % \
         (player_name, look_phrase, dungeon_name)
 
-        irc.reply(msg)
+        irc.reply(msg, notice=True)
 
     def unit_spawned(self, unit):
         """
@@ -4083,9 +4083,10 @@ class SpiffyUnit:
             log.error("SpiffyRPG: no items to equip!")
 
     def set_title(self, title):
+        old_name = self.name
         self.name = title
 
-        log.info("Player %s sets title to %s" % (self.id, self.name))
+        log.info("SpiffyRPG: %s sets title to %s" % (old_name, self.name))
 
         cursor = self.db.cursor()
         params = (title, self.id)
@@ -4462,9 +4463,9 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
         item_name = self._b(item.name)
 
         announcement_msg = "%s glows intensely for a moment " % item_name
-        announcement_msg += "and then fades, still warm in your hands"
+        announcement_msg += "and fades. You feel invigorated."
 
-        irc.reply(announcement_msg)
+        irc.reply(announcement_msg, notice=True)
 
     def found_loot(self, **kwargs):
         player = kwargs["player"]
@@ -4585,7 +4586,7 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
         else:
             announcement_msg = "Your inventory appear empty."
 
-        irc.reply(announcement_msg)
+        irc.reply(announcement_msg, notice=True)
 
     def item_equip(self, **kwargs):
         item = kwargs["item"]
@@ -5250,7 +5251,7 @@ class SpiffyRPG(callbacks.Plugin):
                 target_unit.add_hostile_combatant(combatant=player,
                                                   rounds=rounds)
 
-                irc.reply("You have accepted a challenge from %s. You may now attack them in private message." % target_unit.nick)
+                irc.reply("You have accepted a challenge from %s. You may now attack them in private message." % target_unit.nick, notice=True)
                 
                 dungeon.announcer.pvp_challenge(attacker=player,
                                                 target=target_unit)
@@ -5327,7 +5328,7 @@ class SpiffyRPG(callbacks.Plugin):
         is_target_same_as_attacker = msg.nick.lower() == target_nick.lower()
 
         if is_target_same_as_attacker:
-            irc.reply("You attempt to attack yourself, but fail because you love yourself too much.")
+            irc.reply("You attempt to attack yourself, but fail because you love yourself too much.", notice=True)
             return
 
         # Get attacker user id
@@ -5596,7 +5597,7 @@ class SpiffyRPG(callbacks.Plugin):
                             log.error("SpiffyRPG: error determining class id from '%s'" % character_class)
                     else:
                         classes = self._get_unit_type_list()
-                        irc.reply("Please choose one of the following classes: %s" % classes)
+                        irc.reply("Please choose one of the following classes: %s" % classes, notice=True)
         else:
             log.info("SpiffyRPG: %s is trying to join but is not registered" % msg.nick)
 
@@ -5634,7 +5635,7 @@ class SpiffyRPG(callbacks.Plugin):
 
             if unit is not None:
                 unit.combat_status = "hostile"
-                irc.reply("%s's combat status has been set to HOSTILE" % unit.get_name())
+                irc.reply("%s's combat status has been set to HOSTILE" % unit.get_name(), notice=True)
             else:
                 irc.error("Couldn't find that unit")
 
@@ -5659,7 +5660,7 @@ class SpiffyRPG(callbacks.Plugin):
             if unit is not None:
                 unit.items.append(item)
 
-                irc.reply("%s has been added to your inventory" % item.name)
+                irc.reply("%s has been added to your inventory" % item.name, notice=True)
             else:
                 irc.error("Couldn't find that unit")
 
