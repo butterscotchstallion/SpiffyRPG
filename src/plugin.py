@@ -182,94 +182,12 @@ class SpiffyBattle:
                                                destination=kwargs["destination"],
                                                public=True)
         self.unit_level = SpiffyUnitLevel()
-        self.challenges = []
     
     def set_challenger_announcer(self, announcer):
         self.challenger_announcer = announcer
 
     def set_opponent_announcer(self, announcer):
         self.opponent_announcer = announcer
-
-    def send_challenge(self, **kwargs):
-        """
-        Sends a PvP challenge to a user in the channel. The challenge
-        contains the following:
-        - challenger user id
-        - opponent user id
-        - time of challenge
-        - default state of accepted: False
-        """
-        challenger_nick = kwargs["challenger_nick"]
-        challenger_id = kwargs["challenger_user_id"]
-        opponent_id = kwargs["opponent_user_id"]
-        pending_challenge = self.is_challenge_pending(challenger=challenger_id,
-                                                      opponent=opponent_id)
-
-        if pending_challenge:
-            #return pending_challenge
-            return
-
-        challenge = {
-            "challenger_user_id": challenger_id,
-            "opponent_user_id": opponent_id,
-            "challenged_at": time.time(),
-            "accepted": False
-        }
-
-        if challenge not in self.challenges:
-            self.challenges.append(challenge)
-            self.opponent_announcer.challenge_received(player_nick=challenger_nick)
-            return True
-    
-    def remove_challenges_by_user_id(self, user_id):
-        for index, challenge in self.challenges:
-            if challenge["challenger_user_id"] == user_id or \
-            challenge["opponent_user_id"] == user_id:
-                del self.challenges[index]
-
-    def accept_challenge(self, **kwargs):
-        """
-        Returns True if challenge is accepted, None if there is
-        currently a challenge pending
-        """
-        challenger = kwargs["challenger_user_id"]
-        opponent = kwargs["opponent_user_id"]
-        pending = self.is_challenge_pending(challenger=challenger,
-                                            opponent=opponent)
-
-        if pending is not None:
-            for index, challenge in self.challenges:
-                challenger_match = challenge["challenger_user_id"] == challenger
-                opponent_match = challenge["opponent_user_id"] == opponent
-                inverse_match = challenger ==  challenge["opponent_user_id"]
-
-                if challenger_match and opponent_match or inverse_match and \
-                not challenge["accepted"]:
-                    self.challenges[index]["accepted"] = True
-        else:
-            log.info("SpiffyRPG: challenge pending for %s vs %s" % ())
-
-    def is_challenge_accepted(self, **kwargs):
-        challenger_user_id = kwargs["challenger_user_id"]
-        opponent_user_id = kwargs["opponent_user_id"]
-
-        log.info("SpiffyRPG: challenges=%s" % self.challenges)
-
-        for challenge in self.challenges:
-            if challenge["challenger_user_id"] == challenger_user_id and \
-            challenge["opponent_user_id"] == opponent_user_id and \
-            challenge["accepted"]:
-                return True
-
-    def is_challenge_pending(self, **kwargs):
-        challenger_user_id = kwargs["challenger"]
-        opponent_user_id = kwargs["opponent"]
-
-        for challenge in self.challenges:
-            if challenge["challenger_user_id"] == challenger_user_id and \
-            challenge["opponent_user_id"] == opponent_user_id and \
-            not challenge["accepted"]:
-                return challenge
 
     def is_hit(self, **kwargs):
         """
@@ -415,6 +333,8 @@ class SpiffyBattle:
         attack_hit_target = hit_info["is_hit"]
 
         if attack_hit_target:
+            last_battle = attacker.get_last_battle_by_combatant(combatant=target)
+
             """
             Target takes damage from attacker but only 
             if they hit. Whether or not the hit lands
@@ -427,11 +347,13 @@ class SpiffyBattle:
 
             if target_announcer is not None:
                 target_announcer.damage_applied(attack_info=attack_info,
-                                                attacker=target)
+                                                attacker=target,
+                                                battle=last_battle)
 
             if attacker_announcer is not None:
                 attacker_announcer.damage_dealt(attack_info=attack_info,
-                                                target=target)
+                                                target=target,
+                                                battle=last_battle)
 
             target.apply_damage(damage=attack_info["damage"],
                                 attacker=attacker)
@@ -441,6 +363,8 @@ class SpiffyBattle:
             be a draw. The target may only strike if it's not a draw.
             """
             if not hit_info["is_draw"]:
+                last_battle = attacker.get_last_battle_by_combatant(combatant=target)
+
                 hit_info = self.is_hit(attacker=target,
                                        target=attacker)
 
@@ -449,11 +373,13 @@ class SpiffyBattle:
 
                 if attacker_announcer is not None:
                     attacker_announcer.damage_applied(attack_info=attack_info,
-                                                      attacker=target)
+                                                      attacker=target,
+                                                      battle=last_battle)
 
                 if target_announcer is not None:
                     target_announcer.damage_dealt(attack_info=attack_info,
-                                                  target=target)
+                                                  target=target,
+                                                  battle=last_battle)
 
                 attacker.apply_damage(damage=attack_info["damage"],
                                       attacker=target)
@@ -468,8 +394,6 @@ class SpiffyBattle:
             battle_round = target.add_battle_round(combatant=attacker, hit_info=hit_info)
             battle_round = attacker.add_battle_round(combatant=target, hit_info=hit_info)
             
-            is_last_round = battle_round is None
-
             last_battle = attacker.get_last_battle_by_combatant(combatant=target)
             total_rounds = last_battle["total_rounds"]
 
@@ -652,8 +576,6 @@ class SpiffyBattle:
                     self.announcer.unit_dialogue(winner,
                                                  dialogue)
 
-                self.remove_challenges_by_user_id(loser.user_id)
-
             """
             Check if the winner is on a hot streak and announce it
             if so.
@@ -828,7 +750,8 @@ class SpiffyBattle:
 
                 self.party.append(unit)
             else:
-                log.error("SpiffyRPG: cannot add dead unit %s" % unit)
+                log.error("SpiffyRPG: cannot add dead unit %s (%s HP)" % \
+                (unit.get_name(), unit.get_hp()))
 
 class SpiffyWorld:
     """
@@ -1113,15 +1036,16 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
 
         damage = self._c(attack["damage"], "red")
 
-        params = (winner_title, attack_name, winner_item_type, attack_word, loser_title, 
-        loser_item_type, damage, winner_title, winner_hp, pink_heart)
-
         hp_before_last_attack = loser.get_hp() + attack["damage"]
 
-        new_params = (winner_title, winner_hp, attack_name, winner_item_type, attack_word, \
-        loser_item_type, loser_title, hp_before_last_attack, damage, loser_hp)
+        rounds_won = winner.get_rounds_won(combatant=loser)
+        total_rounds = battle["total_rounds"]
 
-        announcement_msg = u"%s (%s) %s • (%s %s %s) %s (%s-%s: %s)" % new_params
+        params = (rounds_won, total_rounds, winner_title, winner_hp, attack_name, \
+        winner_item_type, attack_word, loser_item_type, loser_title, hp_before_last_attack, \
+        damage, loser_hp)
+
+        announcement_msg = u"[%s/%s] %s (%s) %s • (%s %s %s) %s (%s-%s: %s)" % params
 
         if winner.is_player and kwargs["xp_gained"] > 0:
             announcement_msg += " %s gains %s %s" % (winner_title, green_xp, internet_points)
@@ -1515,7 +1439,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         if unit_xp >= xp_req_for_this_level:
             xp_req_for_this_level = self.levels[-1][1]
 
-        percent_xp = round(((float(unit_xp - xp_req_for_previous_level) / (float(xp_req_for_this_level - xp_req_for_previous_level))) * 100), 1)
+        percent_xp = int(((float(unit_xp - xp_req_for_previous_level) / (float(xp_req_for_this_level - xp_req_for_previous_level))) * 100))
 
         if percent_xp <= 20:
             xp_color = "yellow"
@@ -4492,19 +4416,27 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
     def damage_dealt(self, **kwargs):
         attack_info = kwargs["attack_info"]
         target = kwargs["target"]
-        params = (attack_info["item"].name, target.name, attack_info["damage"])
+        battle = kwargs["battle"]
+        bround = len(battle["rounds"]) + 1
+        total_rounds = battle["total_rounds"]
 
-        announcement_msg = "Your %s hits %s for %s damage" % params
+        params = (bround, total_rounds, attack_info["item"].name, \
+        target.name, attack_info["damage"])
+
+        announcement_msg = "[%s/%s] Your %s hits %s for %s damage" % params
 
         self.announce(announcement_msg)
 
     def damage_applied(self, **kwargs):
         attack_info = kwargs["attack_info"]
         attacker = kwargs["attacker"]
+        battle = kwargs["battle"]
+        bround = len(battle["rounds"]) + 1
+        total_rounds = battle["total_rounds"]
 
-        params = (attack_info["damage"], attacker.name, attack_info["item"].name)
+        params = (bround, total_rounds, attack_info["damage"], attacker.name, attack_info["item"].name)
 
-        announcement_msg = "You take %s damage from %s's %s" % params
+        announcement_msg = "[%s/%s] You take %s damage from %s's %s" % params
 
         self.announce(announcement_msg)
 
