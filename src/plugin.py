@@ -333,7 +333,7 @@ class SpiffyBattle:
         attack_hit_target = hit_info["is_hit"]
 
         if attack_hit_target:
-            last_battle = attacker.get_last_battle_by_combatant(combatant=target)
+            last_battle = attacker.get_last_incomplete_battle(combatant=target)
 
             """
             Target takes damage from attacker but only 
@@ -472,54 +472,6 @@ class SpiffyBattle:
 
             if chance_to_raise_dead:
                 self.call_necromancers()
-
-    def distribute_loot(self, dead_units):
-        units_receiving_loot = []
-
-        for dead_unit in dead_units:
-            """
-            Drop phat loot. Maybe chance here too!
-            """
-            if len(dead_unit.units_that_have_struck_me) > 0 and len(dead_unit.items) > 0:
-                loot_item = dead_unit.get_random_lootable_item()
-
-                if loot_item is None:
-                    log.info("SpiffyRPG: %s has no lootable items" % dead_unit.get_name())
-                    return
-
-                """
-                Any unit that has struck this unit gets a random inventory
-                item from that unit, if it's not something they already have.
-                """
-                for struck_unit in dead_unit.units_that_have_struck_me:                    
-                    item_name = loot_item.name
-
-                    if struck_unit.has_item(item=loot_item):
-                        log.info("SpiffyRPG: %s already has %s" % (struck_unit.get_name(), loot_item.name))
-                        continue
-
-                    """
-                    Add item to inventory
-                    """
-                    struck_unit.add_inventory_item(item=loot_item)
-
-                    units_receiving_loot.append(struck_unit)
-
-                    if struck_unit.is_player:
-                        log.info("SpiffyRPG: adding %s to %s's inventory" % \
-                        (item_name, struck_unit.get_name()))
-
-                        """ Tell user they received loot """
-                        announcer = SpiffyPlayerAnnouncer(irc=self.irc,
-                                                          destination=struck_unit.nick)
-                        announcer.found_loot(player=struck_unit,
-                                             unit=dead_unit,
-                                             item=loot_item)
-
-            if len(units_receiving_loot) > 0:
-                self.announcer.units_found_loot(item=loot_item,
-                                                unit=dead_unit,
-                                                units=units_receiving_loot)
 
     def on_battle_completed(self, **kwargs):
         """
@@ -670,6 +622,54 @@ class SpiffyBattle:
                               name="necro_resurrect")
         else:
             log.info("SpiffyWorld: %s has no living necromancers" % self.dungeon.name)
+
+    def distribute_loot(self, dead_units):
+        units_receiving_loot = []
+
+        for dead_unit in dead_units:
+            """
+            Drop phat loot. Maybe chance here too!
+            """
+            if len(dead_unit.units_that_have_struck_me) > 0 and len(dead_unit.items) > 0:
+                loot_item = dead_unit.get_random_lootable_item()
+
+                if loot_item is None:
+                    log.info("SpiffyRPG: %s has no lootable items" % dead_unit.get_name())
+                    return
+
+                """
+                Any unit that has struck this unit gets a random inventory
+                item from that unit, if it's not something they already have.
+                """
+                for struck_unit in dead_unit.units_that_have_struck_me:                    
+                    item_name = loot_item.name
+
+                    if struck_unit.has_item(item=loot_item):
+                        log.info("SpiffyRPG: %s already has %s" % (struck_unit.get_name(), loot_item.name))
+                        continue
+
+                    """
+                    Add item to inventory
+                    """
+                    struck_unit.add_inventory_item(item=loot_item)
+
+                    units_receiving_loot.append(struck_unit)
+
+                    if struck_unit.is_player:
+                        log.info("SpiffyRPG: adding %s to %s's inventory" % \
+                        (item_name, struck_unit.get_name()))
+
+                        """ Tell user they received loot """
+                        announcer = SpiffyPlayerAnnouncer(irc=self.irc,
+                                                          destination=struck_unit.nick)
+                        announcer.found_loot(player=struck_unit,
+                                             unit=dead_unit,
+                                             item=loot_item)
+
+            if len(units_receiving_loot) > 0:
+                self.announcer.units_found_loot(item=loot_item,
+                                                unit=dead_unit,
+                                                units=units_receiving_loot)
 
     def on_unit_spell_interrupted(self, **kwargs):
         unit = kwargs["unit"]
@@ -1389,7 +1389,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
         """
         Color HP accordingly
         """
-        hp = unit.get_hp()
+        hp = "{:,}".format(unit.get_hp())
 
         if not unit.is_alive():
             hp = self._c(hp, "red")
@@ -1412,7 +1412,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
             msg += " :: %s %s" % (self._c("Dead", "red"), dead_duration)
 
         if body_count > 0:
-            msg += " :: %s slain" % unit_slain_count
+            msg += " :: %s slain" % "{:,}".format(unit_slain_count)
 
         if len(unit.effects) > 0:
             msg += " :: %s " % self._b("Effects")
@@ -3281,9 +3281,18 @@ class SpiffyUnit:
         self.hp = self.calculate_hp()
 
         """
+        Apply unit effects
+        """
+        self.apply_unit_effects()
+
+        """
         Some items have an effect on possession!
         """
         self.apply_item_effects()
+
+    def apply_unit_effects(self):
+        for effect in self.effects:
+            self.apply_effect(effect)
 
     def add_charge_to_random_potion(self):
         potion = self.get_random_potion_without_charges()
@@ -3456,20 +3465,17 @@ class SpiffyUnit:
         combatant = kwargs["combatant"]
         total_rounds = kwargs["rounds"]
 
-        last_battle = self.get_last_battle_by_combatant(combatant=combatant)
+        battle_info = {
+            "combatant": combatant,
+            "rounds": [],
+            "total_rounds": total_rounds,
+            "created_at": time.time(),
+            "slain": None
+        }
 
-        if last_battle is None:
-            battle_info = {
-                "combatant": combatant,
-                "rounds": [],
-                "total_rounds": total_rounds,
-                "created_at": time.time(),
-                "slain": None
-            }
+        self.battles.append(battle_info)
 
-            self.battles.append(battle_info)
-
-            return battle_info
+        return battle_info
 
     def is_last_round(self, **kwargs):
         combatant = kwargs["combatant"]
@@ -3632,6 +3638,14 @@ class SpiffyUnit:
     def is_friendly(self):
         return self.combat_status == "friendly"
 
+    def is_unit_same_stage(self, **kwargs):
+        unit = kwargs["unit"]
+
+        this_unit_stage = self.get_stage_by_level(level=self.level)
+        target_unit_stage = self.get_stage_by_level(level=unit.level)
+
+        return target_unit_stage == this_unit_stage
+
     def can_battle_unit(self, **kwargs):
         """
         As a balancing measure, units in certain stages
@@ -3643,9 +3657,9 @@ class SpiffyUnit:
 
         if unit is not None:
             if unit.is_hostile():
+                combatants_are_same_stage = self.is_unit_same_stage(unit=unit)
                 this_unit_stage = self.get_stage_by_level(level=self.level)
                 target_unit_stage = self.get_stage_by_level(level=unit.level)
-                combatants_are_same_stage = target_unit_stage == this_unit_stage
 
                 if target_unit_stage > this_unit_stage:
                     reason = "That target is too powerful! Try using .look to find monsters your level."
@@ -4169,21 +4183,25 @@ class SpiffyUnit:
             self.hp -= adjustment
 
             log.info("SpiffyRPG: subtracted %s HP from %s" % (adjustment, effect.name))
+        elif effect.operator == "*":
+            self.hp *= adjustment
+
+            log.info("SpiffyRPG: multiplying %s HP from %s" % (adjustment, effect.name))
 
     def apply_effect(self, effect):
+        """
+        hp_adjustment is an instant effect that
+        adjusts HP based on a percentage of the unit's
+        total HP
+        """
         if effect not in self.effects:
-            """
-            hp_adjustment is an instant effect that
-            adjusts HP based on a percentage of the unit's
-            total HP
-            """
-            if effect.hp_adjustment is not None:
-                self.adjust_hp(effect)
-            else:
-                if effect.name == "Undead":
-                    self.on_effect_undead_applied()
+            self.effects.append(effect)
 
-                self.effects.append(effect)
+        if effect.hp_adjustment is not None:
+            self.adjust_hp(effect)
+        
+        if effect.name == "Undead":
+            self.on_effect_undead_applied()
 
     def on_effect_undead_applied(self):
         """
@@ -4375,6 +4393,13 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
         announcer_parent.__init__(irc=kwargs["irc"],
                                   destination=kwargs["destination"],
                                   public=False)
+
+    def challenge_accepted(self, **kwargs):
+        combatant = kwargs["combatant"]
+
+        announcement_msg = "Challenge accepted! You may now attack %s" % combatant.nick
+
+        self.announce(announcement_msg)
 
     def use_item(self, **kwargs):
         item = kwargs["item"]
@@ -5105,16 +5130,16 @@ class SpiffyRPG(callbacks.Plugin):
         if dungeon_info is not None:
             dungeon = dungeon_info["dungeon"]
             player = dungeon_info["player"]
-            combatant = dungeon.get_unit_by_name(unit_name)
+            combatant = dungeon.get_living_unit_by_name(target_nick)
 
             if combatant is not None:
                 player.add_battle(combatant=combatant, rounds=3)
                 combatant.add_battle(combatant=player, rounds=3)
 
-                combatant_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                            destination=combatant.nick)
                 player_announcer = SpiffyPlayerAnnouncer(irc=irc,
                                                          destination=player.nick)
+
+                player_announcer.challenge_accepted(combatant=combatant)
 
                 dungeon.announcer.challenge_accepted(attacker=player,
                                                      target=combatant)
@@ -5144,6 +5169,12 @@ class SpiffyRPG(callbacks.Plugin):
             combatant = dungeon.get_living_unit_by_name(unit_name)
 
             if combatant is not None:
+                combatants_are_same_stage = player.is_unit_same_stage(unit=combatant)
+
+                if not combatants_are_same_stage:
+                    irc.error("That target is not the same stage as you. Use .look to find opponents in the same stage.")
+                    return
+
                 target_same_as_attacker = combatant.id == player.id
 
                 if not target_same_as_attacker:
@@ -5173,7 +5204,7 @@ class SpiffyRPG(callbacks.Plugin):
                             dungeon.announcer.challenge_accepted(attacker=player,
                                                                  target=combatant)
 
-                            irc.reply("Challenge accepted! You may now attack %s" % combatant.nick)
+                            player_announcer.challenge_accepted(combatant=combatant)
                         else:
                             """
                             We don't really need to tell players that their challenge
