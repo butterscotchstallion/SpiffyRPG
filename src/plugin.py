@@ -333,7 +333,7 @@ class SpiffyBattle:
         attack_hit_target = hit_info["is_hit"]
 
         if attack_hit_target:
-            last_battle = attacker.get_last_incomplete_battle(combatant=target)
+            last_battle = attacker.get_last_battle_by_combatant(combatant=target)
 
             """
             Target takes damage from attacker but only 
@@ -431,7 +431,7 @@ class SpiffyBattle:
             loser = attacker
             battle_completed = True
 
-            last_battle = winner.get_last_incomplete_battle(combatant=attacker)
+            last_battle = winner.get_last_battle_by_combatant(combatant=attacker)
 
             if last_battle is not None:
                 last_battle["slain"] = attacker
@@ -446,15 +446,10 @@ class SpiffyBattle:
             loser = target
             battle_completed = True
 
-            last_battle = winner.get_last_incomplete_battle(combatant=target)
+            last_battle = winner.get_last_battle_by_combatant(combatant=target)
 
             if last_battle is not None:
                 last_battle["slain"] = target
-
-            """
-            Loot is only distributed from dead people
-            """
-            self.distribute_loot([target])
 
             winner.add_slain_unit(loser)
 
@@ -503,7 +498,8 @@ class SpiffyBattle:
             The winner gains HP upon victory, whether they
             are player or NPC
             """
-            hp_bonus = winner.add_victory_hp_bonus()
+            #hp_bonus = winner.add_victory_hp_bonus()
+            hp_bonus = 0
 
             self.announcer.unit_victory(winner=winner,
                                         loser=loser,
@@ -518,6 +514,12 @@ class SpiffyBattle:
                                          attacker.get_win_dialogue(),
                                          GAME_CHANNEL)
             """
+
+            """
+            Distribute loot from loser of battle
+            """
+            self.distribute_loot([loser])
+
             if not loser.is_alive():
                 self.announcer.unit_death(unit=loser,
                                           slain_by=winner)
@@ -572,9 +574,7 @@ class SpiffyBattle:
 
                 if player_gained_level:
                     self.announcer.player_gained_level(winner)
-            else:
-                log.info("SpiffyRPG: %s won but they ain't no not a playa!" % winner.name)
-
+            
             """
             Chance to spawn bosses after each battle
             """
@@ -616,32 +616,32 @@ class SpiffyBattle:
                 self.necromancer_raises_dead(dead_unit=random_dead_unit,
                                              necro=random_necromancer)
 
-            resurrection_cast_time = 10
+            resurrection_cast_time = 600
             schedule.addEvent(necro_resurrect,
                               time.time() + resurrection_cast_time,
                               name="necro_resurrect")
         else:
             log.info("SpiffyWorld: %s has no living necromancers" % self.dungeon.name)
 
-    def distribute_loot(self, dead_units):
+    def distribute_loot(self, losers):
         units_receiving_loot = []
 
-        for dead_unit in dead_units:
+        for loser in losers:
             """
             Drop phat loot. Maybe chance here too!
             """
-            if len(dead_unit.units_that_have_struck_me) > 0 and len(dead_unit.items) > 0:
-                loot_item = dead_unit.get_random_lootable_item()
+            if len(loser.units_that_have_struck_me) > 0 and len(loser.items) > 0:
+                loot_item = loser.get_random_lootable_item()
 
                 if loot_item is None:
-                    log.info("SpiffyRPG: %s has no lootable items" % dead_unit.get_name())
+                    log.info("SpiffyRPG: %s has no lootable items" % loser.get_name())
                     return
 
                 """
                 Any unit that has struck this unit gets a random inventory
                 item from that unit, if it's not something they already have.
                 """
-                for struck_unit in dead_unit.units_that_have_struck_me:                    
+                for struck_unit in loser.units_that_have_struck_me:                    
                     item_name = loot_item.name
 
                     if struck_unit.has_item(item=loot_item):
@@ -663,12 +663,12 @@ class SpiffyBattle:
                         announcer = SpiffyPlayerAnnouncer(irc=self.irc,
                                                           destination=struck_unit.nick)
                         announcer.found_loot(player=struck_unit,
-                                             unit=dead_unit,
+                                             unit=loser,
                                              item=loot_item)
 
             if len(units_receiving_loot) > 0:
                 self.announcer.units_found_loot(item=loot_item,
-                                                unit=dead_unit,
+                                                unit=loser,
                                                 units=units_receiving_loot)
 
     def on_unit_spell_interrupted(self, **kwargs):
@@ -1045,13 +1045,12 @@ class SpiffyBattleAnnouncer(SpiffyAnnouncer):
         winner_item_type, attack_word, loser_item_type, loser_title, hp_before_last_attack, \
         damage, loser_hp)
 
-        announcement_msg = u"[%s/%s] %s (%s) %s • (%s %s %s) %s (%s-%s: %s)" % params
+        #announcement_msg = u"[%s/%s] %s (%s) %s • (%s %s %s) %s (%s-%s: %s)" % params
+        new_params = (winner_title, rounds_won, total_rounds, loser_title)
+        announcement_msg = u"%s won %s/%s rounds against %s" % new_params
 
         if winner.is_player and kwargs["xp_gained"] > 0:
-            announcement_msg += " %s gains %s %s" % (winner_title, green_xp, internet_points)
-
-        if hp_gained > 0:
-            announcement_msg += " and gained %s %s for winning" % (self._b(hp_gained), pink_heart)
+            announcement_msg += " %s gained %s %s" % (winner_title, green_xp, internet_points)
 
         self._send_channel_notice(announcement_msg)
 
@@ -1246,9 +1245,19 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
                 announcement_msg += ". This item is currently equipped."
 
         if item.is_permanent:
-            announcement_msg += " :: This item cannot be traded/dropped."
+            announcement_msg += " :: No Drop"
 
-        if item.is_usable():
+        """
+        Use/effect information. An item is only usable if it
+        is explicitly defined as such and it has at least one
+        effect.
+        """
+        if item.is_usable() and len(item.effects) > 0:
+            announcement_msg += " :: %s causes " % self._b(".use")
+            effect_names = ", ".join([self._c(effect.name, "light blue") for effect in item.effects])
+            
+            announcement_msg += effect_names
+
             charges_word = "charges"
 
             if item.charges == 1:
@@ -1260,7 +1269,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
     def effect_info(self, **kwargs):
         effect = kwargs["effect"]
-        effect_name = self._b(effect.name)
+        effect_name = self._b(self._c(effect.name, "light blue"))
         params = (effect_name,
                   effect.description)
 
@@ -1396,7 +1405,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
 
         colored_hp = hp
 
-        body_count = len(unit.get_slain_units())
+        body_count = "{:,}".format(len(unit.get_slain_units()))
         unit_slain_count = self._c(body_count, "red")
         dungeon_name = self._get_dungeon_title(dungeon)
         stage = unit.get_stage_by_level(level=unit.level)
@@ -1412,7 +1421,7 @@ class SpiffyDungeonAnnouncer(SpiffyAnnouncer):
             msg += " :: %s %s" % (self._c("Dead", "red"), dead_duration)
 
         if body_count > 0:
-            msg += " :: %s slain" % "{:,}".format(unit_slain_count)
+            msg += " :: %s slain" % unit_slain_count
 
         if len(unit.effects) > 0:
             msg += " :: %s " % self._b("Effects")
@@ -2002,8 +2011,8 @@ class SpiffyDungeon:
         lower_name = name.lower()
 
         for unit in self.units:
-            unit_name_match = unit.get_name().lower() == lower_name
-            nick_match = unit.nick.lower() == lower_name
+            unit_name_match = unit.get_name().lower().startswith(lower_name)
+            nick_match = unit.nick.lower().startswith(lower_name)
 
             if unit_name_match or nick_match:
                 return unit
@@ -2014,28 +2023,24 @@ class SpiffyDungeon:
                 return unit
 
     def get_living_unit_by_name(self, name):
-        lower_name = name.lower()
+        units = self.get_unit_by_name(name)
 
-        for unit in self.units:
-            unit_name_match = unit.get_name().lower().startswith(lower_name)
-            nick_match = unit.nick.lower().startswith(lower_name)
-
-            if unit.is_alive() and (unit_name_match or nick_match):
-                return unit
+        return unit for unit in units if unit.is_alive()
 
     def get_dead_unit_by_name(self, name):
-        for unit in self.units:
-            if not unit.is_alive() and unit.get_name().lower() == name.lower():
-                return unit
+        units = self.get_unit_by_name(name)
+
+        return unit for unit in units if not unit.is_alive()
 
     def get_living_players(self):
-        players = []
+        units = self.get_unit_by_name(name)
 
-        for unit in self.units:
-            if unit.is_player and unit.is_alive():
-                players.append(unit)
+        return unit for unit in units if unit.is_player and unit.is_alive()
 
-        return players
+    def get_dead_players(self):
+        units = self.get_unit_by_name(name)
+
+        return unit for unit in units if unit.is_player and not unit.is_alive()
 
     def get_living_hostiles_at_stage(self, **kwargs):
         stage = kwargs["stage"]
@@ -2050,30 +2055,6 @@ class SpiffyDungeon:
                 hostiles.append(unit)
 
         return hostiles
-
-    def get_living_hostiles_near_level(self, **kwargs):
-        hostiles = []
-        near = 5
-        player_level = kwargs["level"]
-        
-        for unit in self.units:
-            is_hostile = not unit.is_player and unit.is_hostile()
-            alive = unit.is_alive()
-            near_level = unit.level <= (player_level+near)
-
-            if is_hostile and alive and near_level:
-                hostiles.append(unit)
-
-        return hostiles
-
-    def get_dead_players(self):
-        players = []
-
-        for unit in self.units:
-            if unit.is_player and not unit.is_alive():
-                players.append(unit)
-
-        return players
 
     def get_wounded_players(self):
         players = []
@@ -2815,7 +2796,7 @@ class SpiffyItemCollection:
 
     def get_item_by_item_name(self, item_name):
         for item in self.items:
-            if item_name.lower() in item.name.lower():
+            if item.name.lower().startswith(item_name.lower()):
                 return item
 
     def get_item_by_item_id(self, item_id):
@@ -3653,7 +3634,7 @@ class SpiffyUnit:
         """
         unit = kwargs["unit"]
         can_battle = False
-        reason = "That target is %s" % unit.combat_status
+        reason = "That target is not hostile."
 
         if unit is not None:
             if unit.is_hostile():
@@ -3671,13 +3652,22 @@ class SpiffyUnit:
                 and both have to have accepted a challenge
                 """
                 if combatants_are_same_stage:
+                    can_battle = True
+
+                    """
                     is_recent_combatant = self.is_recent_combatant(combatant=unit)
 
                     if is_recent_combatant is not None:
-                        """ Need to check who went last here """
                         can_battle = True
                     else:
                         reason = "Use .challenge to initiate a new battle"
+                    """
+
+            """
+            Cannot attack self
+            """
+            if self.id == unit.id:
+                reason = "Invalid target"
 
             return {
                 "reason": reason,
@@ -3976,12 +3966,20 @@ class SpiffyUnit:
 
         return items
 
-    def equip_random_weapon(self):
+    def equip_random_weapon(self, **kwargs):
         """
         Before each fight, NPCs equip a random weapon. However,
         this behavior can be modified through effects!
         """
-        weapon_types = ("rock", "paper", "scissors", "lizard", "spock")
+        all_types = ("rock", "paper", "scissors", "lizard", "spock")
+        weapon_types = all_types
+
+        """
+        This is used to avoid draws
+        """
+        if "avoid_weapon_type" in kwargs:
+            weapon_types = [wtype for wtype in all_types if wtype != kwargs["avoid_weapon_type"]]
+        
         items = [item for item in self.items if item.item_type in weapon_types]
 
         if len(items) > 0:
@@ -4516,12 +4514,12 @@ class SpiffyPlayerAnnouncer(SpiffyAnnouncer):
     def inventory(self, **kwargs):
         player = kwargs["player"]
         irc = kwargs["irc"]
-        items = player.items
+        items = sorted(player.items, key=lambda x: x.item_type, reverse=True)
 
         if len(items) > 0:
             item_name_list = []
 
-            for item in player.items:
+            for item in items:
                 item_type = item.get_indicator()
                 item_name = self._b(item.name)
 
@@ -4932,7 +4930,7 @@ class SpiffyRPG(callbacks.Plugin):
                         The target unit of the attack now equips a weapon!
                         """
                         if not unit.is_player:
-                            unit.equip_random_weapon()
+                            unit.equip_random_weapon(avoid_weapon_type="rock")
 
                         battle = dungeon_info["battle"]
                         battle.add_party_member(player)
@@ -4970,7 +4968,7 @@ class SpiffyRPG(callbacks.Plugin):
                         The target unit of the attack now equips a weapon!
                         """
                         if not unit.is_player:
-                            unit.equip_random_weapon()
+                            unit.equip_random_weapon(avoid_weapon_type="paper")
 
                         battle = dungeon_info["battle"]
                         battle.add_party_member(player)
@@ -5008,7 +5006,7 @@ class SpiffyRPG(callbacks.Plugin):
                         The target unit of the attack now equips a weapon!
                         """
                         if not unit.is_player:
-                            unit.equip_random_weapon()
+                            unit.equip_random_weapon(avoid_weapon_type="scissors")
 
                         battle = dungeon_info["battle"]
                         battle.add_party_member(player)
@@ -5036,7 +5034,7 @@ class SpiffyRPG(callbacks.Plugin):
             unit = dungeon.get_living_unit_by_name(target)
 
             if unit is not None:
-                equip_ok = player.equip_item_by_type(item_type="scissors")
+                equip_ok = player.equip_item_by_type(item_type="lizard")
 
                 if equip_ok:
                     can_battle_info = player.can_battle_unit(unit=unit)
@@ -5046,7 +5044,7 @@ class SpiffyRPG(callbacks.Plugin):
                         The target unit of the attack now equips a weapon!
                         """
                         if not unit.is_player:
-                            unit.equip_random_weapon()
+                            unit.equip_random_weapon(avoid_weapon_type="lizard")
 
                         battle = dungeon_info["battle"]
                         battle.add_party_member(player)
@@ -5084,7 +5082,7 @@ class SpiffyRPG(callbacks.Plugin):
                         The target unit of the attack now equips a weapon!
                         """
                         if not unit.is_player:
-                            unit.equip_random_weapon()
+                            unit.equip_random_weapon(avoid_weapon_type="spock")
 
                         battle = dungeon_info["battle"]
                         battle.add_party_member(player)
@@ -5161,84 +5159,80 @@ class SpiffyRPG(callbacks.Plugin):
 
         """
         dungeon_info = self._get_dungeon_and_user_id(irc, msg)
-        invalid_target = True
-
+        
         if dungeon_info is not None:
             dungeon = dungeon_info["dungeon"]
             player = dungeon_info["player"]
             combatant = dungeon.get_living_unit_by_name(unit_name)
 
             if combatant is not None:
-                combatants_are_same_stage = player.is_unit_same_stage(unit=combatant)
+                can_battle_info = player.can_battle_unit(unit=combatant)
+                reason = can_battle_info["reason"]
+                can_battle = can_battle_info["can_battle"]
 
-                if not combatants_are_same_stage:
-                    irc.error("That target is not the same stage as you. Use .look to find opponents in the same stage.")
+                if not can_battle:
+                    irc.error("You can't challenge that: %s" % reason)
                     return
 
-                target_same_as_attacker = combatant.id == player.id
+                last_battle = player.get_last_incomplete_battle(combatant=combatant)
+                
+                """
+                If there is an existing battle, they cannot challenge
+                """
+                if last_battle is not None:
+                    irc.error("You're already battling that")
+                    return
 
-                if not target_same_as_attacker:
-                    last_battle = player.get_last_incomplete_battle(combatant=combatant)
+                combatant_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                            destination=combatant.nick)
+
+                player_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                         destination=player.nick)
+
+                """
+                New battle if this is a NPC
+                """
+                if combatant.is_npc:
+                    player.add_battle(combatant=combatant, rounds=3)
+                    combatant.add_battle(combatant=player, rounds=3)
+
+                    dungeon.announcer.challenge_accepted(attacker=player,
+                                                         target=combatant)
+
+                    player_announcer.challenge_accepted(combatant=combatant)
+                else:
+                    """
+                    We don't really need to tell players that their challenge
+                    was sent to a NPC since the NPC always accepts.
+                    """
+                    player_announcer.challenge_sent(combatant=combatant)
+
+                    """
+                    Combatant is not a player. Let them know they've 
+                    received a challenge.
+                    """
+                    combatant_announcer.challenge_received(combatant=player)
+
+                    """
+                    Schedule challenge forfeit if the challenge
+                    was not accepted within the timeout.
                     
+                    challenge_timeout = 30
+
+                    def check_challenge_timeout():
+                        challenge = combatant.get_last_battle_by_combatant(combatant=player)
+
+                        if challenge is not None:
+                            seconds_since_challenge = time.time() - challenge.created_at
+
+                            if seconds_since_challenge >= challenge_timeout:
+                                player.cancel_challenge(combatant=combatant)
+
+                    schedule.addEvent(check_challenge_timeout,
+                                      time.time() + challenge_timeout,
+                                      name="check_challenge_timeout")
                     """
-                    If there is an existing battle, they cannot challenge
-                    """
-                    if last_battle is not None:
-                        irc.error("You're already battling that")
-                    else:
-                        invalid_target = False
-
-                        combatant_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                                    destination=combatant.nick)
-
-                        player_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                                 destination=player.nick)
-
-                        """
-                        New battle if this is a NPC
-                        """
-                        if combatant.is_npc:
-                            player.add_battle(combatant=combatant, rounds=3)
-                            combatant.add_battle(combatant=player, rounds=3)
-
-                            dungeon.announcer.challenge_accepted(attacker=player,
-                                                                 target=combatant)
-
-                            player_announcer.challenge_accepted(combatant=combatant)
-                        else:
-                            """
-                            We don't really need to tell players that their challenge
-                            was sent to a NPC since the NPC always accepts.
-                            """
-                            player_announcer.challenge_sent(combatant=combatant)
-
-                            """
-                            Combatant is not a player. Let them know they've 
-                            received a challenge.
-                            """
-                            combatant_announcer.challenge_received(combatant=player)
-
-                            """
-                            Schedule challenge forfeit if the challenge
-                            was not accepted within the timeout.
-                            
-                            challenge_timeout = 30
-
-                            def check_challenge_timeout():
-                                challenge = combatant.get_last_battle_by_combatant(combatant=player)
-
-                                if challenge is not None:
-                                    seconds_since_challenge = time.time() - challenge.created_at
-
-                                    if seconds_since_challenge >= challenge_timeout:
-                                        player.cancel_challenge(combatant=combatant)
-
-                            schedule.addEvent(check_challenge_timeout,
-                                              time.time() + challenge_timeout,
-                                              name="check_challenge_timeout")
-                            """
-
-            if invalid_target:
+            else:
                 irc.error("Invalid target")
 
     challenge = wrap(challenge, ["user", "text"])
