@@ -2,22 +2,15 @@
 import unittest
 from SpiffyWorld.collections import ItemCollection
 from SpiffyWorld import Item
-import logging
-
-log = logging.getLogger(__name__)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-log.addHandler(ch)
+from uuid import uuid4
+from random import randrange, choice
 
 class TestItemCollection(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        pass
-
     def _get_item(self, **kwargs):
-        item_name = kwargs["item_name"]
-        item_id = 1
-        item_type = kwargs["item_type"]
+        item_id = uuid4()
+        item_name = "Item%s" % item_id
+        item_types = ("rock", "paper", "scissors", "lizard", "spock")
+        item_type = choice(item_types)
         is_permanent = 0
 
         if "is_permanent" in kwargs:
@@ -45,15 +38,12 @@ class TestItemCollection(unittest.TestCase):
         return item
 
     def test_add_item(self):
-        item_name = "Test Item"
-        item_type = "rock"
-        item = self._get_item(item_name=item_name, item_type=item_type)
-        
+        item = self._get_item()        
         collection = ItemCollection()
         collection.add(item)
 
         expected = item
-        actual = collection.get_item_by_item_name(item_name)
+        actual = collection.get_item_by_item_name(item.name)
 
         self.assertEqual(len(collection.items), 1)
         self.assertEqual(expected, actual)
@@ -63,17 +53,14 @@ class TestItemCollection(unittest.TestCase):
         self.assertEqual(len(collection.items), 1)
 
     def test_get_item_by_item_name(self):
-        item_name = "QA Engineer's Razor-sharp Shears"
-        item_type = "scissors"
-        item = self._get_item(item_name=item_name, item_type=item_type)
-        
+        item = self._get_item()
         collection = ItemCollection()
         collection.add(item)
 
         expected = item
 
         # Typical use case
-        actual = collection.get_item_by_item_name(item_name)
+        actual = collection.get_item_by_item_name(item.name)
 
         self.assertEqual(len(collection.items), 1)
         self.assertEqual(expected, actual)
@@ -84,11 +71,7 @@ class TestItemCollection(unittest.TestCase):
         self.assertEqual(expected, actual)
 
     def test_get_base_items(self):
-        base_item_name = "QA Engineer's Boulder"
-        base_item_type = "rock"
-        base_item = self._get_item(item_name=base_item_name, 
-                                   item_type=base_item_type,
-                                   is_permanent=True)
+        base_item = self._get_item(is_permanent=True)
         
         collection = ItemCollection()
         collection.add(base_item)
@@ -99,9 +82,7 @@ class TestItemCollection(unittest.TestCase):
         self.assertEqual(len(actual), 1)
 
         # Add non-base item
-        item_name = "cat treat"
-        item_type = "paper"
-        item = self._get_item(item_name=item_name, item_type=item_type)
+        item = self._get_item()
 
         collection.add(item)
 
@@ -112,7 +93,3 @@ class TestItemCollection(unittest.TestCase):
 
         # Make sure the result is still correct
         self.assertEqual(len(actual), 1)
-        
-
-
-

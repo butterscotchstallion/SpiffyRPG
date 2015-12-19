@@ -21,6 +21,9 @@ class Item:
         self.charges = int(item["charges"])
         self.can_use = item["can_use"] == 1
 
+    def __eq__(self, other):
+        return self.id == other.id
+    
     def is_usable(self):
         return self.can_use
 

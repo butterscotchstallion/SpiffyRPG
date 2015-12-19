@@ -8,10 +8,12 @@ class UnitBuilder:
     and ItemCollection to look up items and such
     """
     def build_units(self, **kwargs):
+        unit_models = kwargs["unit_models"]
+
         item_collection = kwargs["item_collection"]
         effect_collection = kwargs["effect_collection"]
         dialogue_collection = kwargs["dialogue_collection"]
-        unit_models = kwargs["unit_models"]
+
         unit_items_map = kwargs["unit_items_map"]
         unit_effects_map = kwargs["unit_effects_map"]
         unit_dialogue_map = kwargs["unit_dialogue_map"]

@@ -17,7 +17,7 @@ class Battlemaster:
         combatant = kwargs["combatant"]
 
         for battle in self.battles:
-            if battle.combatant_1.id == combatant.id or \
-            battle.combatant_2.id == combatant.id:
-                return battle
+            for combatant in battle.combatants:
+                if combatant.id == combatant.id:
+                    return battle
 

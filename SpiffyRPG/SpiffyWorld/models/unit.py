@@ -58,3 +58,17 @@ class Unit:
         cursor.close()
         
         return units
+
+    def register_new_player(self, user_id, char_name, unit_type_id):
+        cursor = self.db.cursor()
+        created_at = time.time()
+        params = (user_id, char_name, unit_type_id, created_at)
+        cursor.execute("""INSERT INTO spiffyrpg_units(
+                          limnoria_user_id,
+                          name,
+                          unit_type_id,
+                          experience,
+                          created_at)
+                          VALUES (?, ?, ?, 0, ?)""", params)
+        self.db.commit()
+        cursor.close()
