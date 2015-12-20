@@ -325,7 +325,7 @@ class TestUnit(unittest.TestCase):
         self.assertTrue(undead_attack["damage"] >= undead_damage_lower_bound)
         self.assertTrue(undead_attack["damage"] <= undead_damage_upper_bound)
 
-    def test_attack_applies_damage(self):
+    def test_hit_applies_damage(self):
         unit_1, unit_2 = self.get_combatants()
 
         # Lizard should poison spock
@@ -349,10 +349,6 @@ class TestUnit(unittest.TestCase):
         unit_1.equip_lizard_weapon()
         unit_2.equip_lizard_weapon()
 
-        """
-        Maybe this should actually deal the damage
-        too!
-        """
         hit_info = unit_1.attack(target=unit_2)
 
         self.assertFalse(hit_info["is_hit"])
