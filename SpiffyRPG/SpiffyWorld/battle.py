@@ -12,6 +12,7 @@ class Battle:
         self.combatants = []
         self.total_rounds = kwargs["total_rounds"]
         self.created_at = time.time()
+        self.last_attacker = None
 
     def __eq__(self, other):
         created_at_match = self.created_at == other.created_at
@@ -41,15 +42,42 @@ class Battle:
 
     def add_round(self, **kwargs):
         current_rounds_length = len(self.rounds)
+        attacker = kwargs["attacker"]
+        target = kwargs["target"]
 
         if current_rounds_length < self.total_rounds:
+            """
+            Make sure we're not trying to add rounds when
+            either of the combatants are dead
+            """
+            if not attacker.is_alive():
+                raise ValueError("Cannot add round: Unit %s is dead." % attacker.name)
+
+            if not target.is_alive():
+                raise ValueError("Cannot add round: Unit %s is dead." % target.name)
+
+            """
+            Check to make sure units are not attacking twice
+            in a row
+            """
+            if self.last_attacker is not None and \
+            attacker.id == self.last_attacker.id:
+                params = (target.name, attacker.name)
+                raise ValueError("It is %s's turn to attack. %s attacked last." % params)
+
+            self.last_attacker = attacker
+
             self.rounds.append(kwargs)
         else:
             raise ValueError("Round maximum reached: %s (%s maximum)" % \
                             (current_rounds_length, self.total_rounds))
 
     def add_combatant(self, combatant):
-        if combatant not in self.combatants and combatant.is_alive():
+        if not combatant.is_alive():
+            params = (combatant.name, combatant.get_hp())
+            raise ValueError("Cannot add dead unit to battle: %s (%s HP)" % params)
+
+        if combatant not in self.combatants:
             self.combatants.append(combatant)
 
     def get_rounds_won(self, **kwargs):
