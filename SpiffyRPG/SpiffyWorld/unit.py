@@ -599,6 +599,21 @@ class Unit:
 
         return item_type
 
+    def equip_rock_weapon(self):
+        self.equip_item_by_type(item_type="rock")
+
+    def equip_paper_weapon(self):
+        self.equip_item_by_type(item_type="paper")
+
+    def equip_scissors_weapon(self):
+        self.equip_item_by_type(item_type="scissors")
+
+    def equip_lizard_weapon(self):
+        self.equip_item_by_type(item_type="lizard")
+
+    def equip_spock_weapon(self):
+        self.equip_item_by_type(item_type="spock")
+
     def equip_item_by_type(self, **kwargs):
         item_type = self.get_item_type_from_user_input(item_type=kwargs["item_type"])
         inventory_item = self.get_item_from_inventory_by_type(item_type_name=item_type)
@@ -845,7 +860,7 @@ class Unit:
     def get_hp(self):
         hp = self.hp
 
-        return int(hp)
+        return hp
 
     def get_name(self):
         unit_name = self.name
@@ -925,6 +940,101 @@ class Unit:
 
         return is_counterpart
 
+    def attack(self, **kwargs):
+        """
+        Get the attacker and target weapon type,
+        and determine who wins the round. The winner
+        of the round deals damage
+        """
+        attacker = self
+        target = kwargs["target"]
+        is_hit = False
+        is_draw = False
+        hit_word = "draw"
+
+        """ Attacker weapon """
+        attacker_weapon = attacker.get_equipped_weapon()
+        attacker_weapon_type = attacker_weapon.item_type
+
+        """ Target weapon """
+        target_weapon = target.get_equipped_weapon()
+        target_weapon_type = target_weapon.item_type
+
+        """ Rock crushes Scissors """
+        if attacker_weapon.is_rock() and \
+        target_weapon.is_scissors():
+            is_hit = True
+            hit_word = "crushes"
+
+        """ Scissors cuts Paper """
+        if attacker_weapon.is_scissors() and \
+        target_weapon.is_paper():
+            is_hit = True
+            hit_word = "cuts"
+
+        """ Paper covers Rock """
+        if attacker_weapon.is_paper() and \
+        target_weapon.is_rock():
+            is_hit = True
+            hit_word = "covers"
+
+        """ Lizard eats Paper """
+        if attacker_weapon.is_lizard() and \
+        target_weapon.is_paper():
+            is_hit = True
+            hit_word = "eats"
+
+        """ Spock vaporizes Rock """
+        if attacker_weapon.is_spock() and \
+        target_weapon.is_rock():
+            is_hit = True
+            hit_word = "vaporizes"
+
+        """ Lizard poisons Spock """
+        if attacker_weapon.is_lizard() and \
+        target_weapon.is_spock():
+            is_hit = True
+            hit_word = "poisons"
+
+        """ Rock crushes Lizard """
+        if attacker_weapon.is_rock() and \
+        target_weapon.is_lizard():
+            is_hit = True
+            hit_word = "crushes"
+
+        """ Spock smashes Scissors """
+        if attacker_weapon.is_spock() and \
+        target_weapon.is_scissors():
+            is_hit = True
+            hit_word = "smashes"
+
+        """ Paper disproves Spock """
+        if attacker_weapon.is_paper() and \
+        target_weapon.is_spock():
+            is_hit = True
+            hit_word = "disproves"
+
+        """ Scissors decapitate Lizard """
+        if attacker_weapon.is_scissors() and \
+        target_weapon.is_lizard():
+            is_hit = True
+            hit_word = "decapitates"
+
+        """ Draw! """
+        if attacker_weapon_type == target_weapon_type:
+            is_draw = True
+
+        log.info("SpiffyRPG: %s's %s vs %s's %s: hit is %s" % \
+        (attacker.name, attacker_weapon_type, target.name, target_weapon_type, is_hit))
+
+        return {
+            "is_hit": is_hit,
+            "attacker_weapon": attacker_weapon,
+            "target_weapon": target_weapon,
+            "is_draw": is_draw,
+            "hit_word": hit_word
+        }
+
     def get_attack(self, **kwargs):
         damage = self.get_attack_damage()
         item = self.get_equipped_weapon()
@@ -949,8 +1059,6 @@ class Unit:
                     damage += damage_adjustment
 
                     log.info("SpiffyRPG: adding %s damage because undead" % damage_adjustment)
-
-        damage = int(damage)
 
         attack_info = {
             "damage": damage,
