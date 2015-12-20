@@ -3,16 +3,8 @@ import unittest
 from SpiffyWorld.collections import ItemCollection, EffectCollection
 from SpiffyWorld.models import ItemEffects
 from SpiffyWorld import Item, ItemBuilder, Effect
-import logging
 from uuid import uuid4
 from random import randrange, choice
-
-"""
-log = logging.getLogger(__name__)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-log.addHandler(ch)
-"""
 
 class TestItemBuilder(unittest.TestCase):
     def _get_item_model(self, **kwargs):
