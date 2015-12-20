@@ -19,7 +19,12 @@ class ItemGenerator:
         can_use = 0
 
         if "item_type" in kwargs:
-            item_type = kwargs["item_type"]
+            specified_item_type = kwargs["item_type"]
+
+            if specified_item_type not in item_types:
+                raise ValueError("Invalid item_type")
+
+            item_type = specified_item_type
 
         if "is_permanent" in kwargs:
             is_permanent = kwargs["is_permanent"]
