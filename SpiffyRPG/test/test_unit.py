@@ -198,14 +198,14 @@ class TestUnit(unittest.TestCase):
         unit_items = [item for item in item_collection.items]
 
         for unit in actual_units:
+            # Ensure that each of the new units have full HP
+            self.assertEqual(unit.get_hp(), unit.calculate_hp())
             self.assertEqual(unit.items, unit_items)
 
         return actual_units
 
     def test_unit_attacks(self):
         unit_1, unit_2 = self.get_combatants()
-
-        unit_1_attack = unit_1.get_attack()
 
         """
         Equip a specific item type for each so we 
@@ -223,24 +223,78 @@ class TestUnit(unittest.TestCase):
         self.assertTrue(unit_2_weapon.is_scissors())
 
         """
+        Test hit info. Hit info is returned from attack()
+        (the result of an attack)
+        """
+        unit_2_hp_before_attack = unit_2.get_hp()
+
+        hit_info = unit_1.attack(target=unit_2)
+
+        self.assertEqual(hit_info["hit_word"], "crushes")
+        self.assertTrue(hit_info["is_hit"])
+        self.assertFalse(hit_info["is_draw"])
+        self.assertTrue(hit_info["damage"] > 0)
+
+        """
         Make sure this unit is attacking with an item that
         they have
         """
-        self.assertIn(unit_1_attack["item"], unit_1.items)
+        self.assertIn(hit_info["attacker_weapon"], unit_1.items)
 
-        # Damage should be random.randrange(X, Y) * level
-        lower_damage_coefficient = 5
-        upper_damage_coefficient = 10
+        self.assertTrue(hit_info["damage"] >= unit_1.get_min_base_attack_damage())
 
-        damage_lower_bound = unit_1.level * lower_damage_coefficient
+        # Upper bound is multiplied by two because of critical strikes
+        damage_upper_bound = unit_1.get_max_base_attack_damage() * 2
+
+        self.assertTrue(hit_info["damage"] <= damage_upper_bound)
 
         """
-        In the event of a critical strike, base damage is doubled
+        Since we equipped unit_1 with a rock and unit_2
+        with scissors, we know that is_hit should be True
         """
-        damage_upper_bound = (unit_1.level * upper_damage_coefficient) * 2
+        self.assertTrue(hit_info["is_hit"])
+        self.assertEqual(hit_info["attacker_weapon"], unit_1.get_equipped_weapon())
+        self.assertEqual(hit_info["target_weapon"], unit_2.get_equipped_weapon())
+        self.assertEqual(hit_info["hit_word"], "crushes")
 
-        self.assertTrue(unit_1_attack["damage"] >= damage_lower_bound)
-        self.assertTrue(unit_1_attack["damage"] <= damage_upper_bound)
+        unit_2_is_alive = unit_2.is_alive()
+        unit_2_total_hp = unit_2.calculate_hp()
+
+        if hit_info["damage"] >= unit_2_total_hp:
+            self.assertFalse(unit_2_is_alive)
+        else:
+            self.assertTrue(unit_2_is_alive)
+
+        """
+        apply_damage will always prevent the unit's HP from
+        going below zero
+        """
+        expected_hp = unit_2_hp_before_attack - hit_info["damage"]
+
+        if expected_hp < 0:
+            expected_hp = 0
+
+        actual_hp = unit_2.get_hp()
+
+        self.assertEqual(expected_hp, actual_hp)
+
+    def test_undead_attack(self):
+        unit_1, unit_2 = self.get_combatants()
+
+        """
+        Equip a specific item type for each so we 
+        can accurately predict the outcome for 
+        testing purposes
+        """
+        unit_1.equip_rock_weapon()
+        unit_1_weapon = unit_1.get_equipped_weapon()
+
+        self.assertTrue(unit_1_weapon.is_rock())
+
+        unit_2.equip_scissors_weapon()
+        unit_2_weapon = unit_2.get_equipped_weapon()
+
+        self.assertTrue(unit_2_weapon.is_scissors())
 
         # Test undead damage bonus
         undead_effect = self._make_undead_effect()
@@ -252,11 +306,16 @@ class TestUnit(unittest.TestCase):
         """
         unit_1.apply_effect(undead_effect)
 
-        self.assertEqual(len(unit_1.effects), 1)
+        self.assertTrue(unit_1.is_undead())
 
-        undead_attack = unit_1.get_attack()
+        undead_attack = unit_1.attack(target=unit_2)
 
         undead_bonus_dec = float(EFFECT_UNDEAD_BONUS) / float(100)
+
+        damage_lower_bound = unit_1.get_min_base_attack_damage()
+
+        # Upper bound is multiplied by two because of critical strikes
+        damage_upper_bound = unit_1.get_max_base_attack_damage() * 2
 
         bonus_dec_lower = damage_lower_bound * undead_bonus_dec
         bonus_dec_upper = damage_upper_bound * undead_bonus_dec
@@ -266,49 +325,23 @@ class TestUnit(unittest.TestCase):
         self.assertTrue(undead_attack["damage"] >= undead_damage_lower_bound)
         self.assertTrue(undead_attack["damage"] <= undead_damage_upper_bound)
 
-        """
-        Test hit info. Hit info is returned from attack()
-        (the result of an attack)
-        """
+    def test_attack_applies_damage(self):
+        unit_1, unit_2 = self.get_combatants()
+
+        # Lizard should poison spock
+        unit_1.equip_spock_weapon()
+        unit_2.equip_lizard_weapon()
+
+        unit_2_hp_before_attack = unit_2.get_hp()
         hit_info = unit_1.attack(target=unit_2)
 
-        """
-        Since we equipped unit_1 with a rock and unit_2
-        with scissors, we know that this should be True
-        """
-        self.assertTrue(hit_info["is_hit"])
-        self.assertEqual(hit_info["attacker_weapon"], unit_1.get_equipped_weapon())
-        self.assertEqual(hit_info["target_weapon"], unit_2.get_equipped_weapon())
-        self.assertEqual(hit_info["hit_word"], "crushes")
+        # unit_1 strikes because Lizard poisons Spock
+        self.assertFalse(hit_info["is_hit"])
 
-        """
-        Apply unit_1's attack damage to unit_2 and
-        test conditions afterward
-        """
-        unit_2_hp_before_attack = unit_2.get_hp()
-        unit_2.apply_damage(damage=unit_1_attack["damage"],
-                            attacker=unit_1)
+        expected_unit_2_hp = unit_2_hp_before_attack - hit_info["damage"]
+        actual_unit_2_hp = unit_2.get_hp()
 
-        unit_2_is_alive = unit_2.is_alive()
-        unit_2_total_hp = unit_2.calculate_hp()
-
-        if unit_1_attack["damage"] >= unit_2_total_hp:
-            self.assertFalse(unit_2_is_alive)
-        else:
-            self.assertTrue(unit_2_is_alive)
-
-        """
-        apply_damage will always prevent the unit's HP from
-        going below zero
-        """
-        expected_hp = unit_2_hp_before_attack - unit_1_attack["damage"]
-
-        if expected_hp < 0:
-            expected_hp = 0
-
-        actual_hp = unit_2.get_hp()
-
-        self.assertEqual(expected_hp, actual_hp)
+        self.assertEqual(expected_unit_2_hp, actual_unit_2_hp)
 
     def test_attack_is_draw(self):
         unit_1, unit_2 = self.get_combatants()
@@ -324,8 +357,7 @@ class TestUnit(unittest.TestCase):
 
         self.assertFalse(hit_info["is_hit"])
         self.assertTrue(hit_info["is_draw"])
-
-        # TODO: test draw does not apply damage or add round
+        self.assertEqual(hit_info["damage"], 0)
 
 if __name__ == '__main__':
     unittest.main()

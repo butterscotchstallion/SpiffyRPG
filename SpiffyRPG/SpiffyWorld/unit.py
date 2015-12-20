@@ -26,6 +26,9 @@ class Unit:
         Start by initializing the unit as if it is an NPC,
         since for the most part, a player is identical to a NPC.
         """
+        self.lower_damage_coefficient = 5
+        self.upper_damage_coefficient = 10
+        self.critical_strike_chance = 5
         self.slain_units = []
         self.winning_streak = []
         self.raised_units = []
@@ -918,8 +921,15 @@ class Unit:
         params = (self.name, total_hp)
         log.info("SpiffyRPG: %s has been turned! setting HP to %s" % params)
 
+    def get_min_base_attack_damage(self):
+        return float(self.level * self.lower_damage_coefficient)
+
+    def get_max_base_attack_damage(self):
+        return float(self.level * self.upper_damage_coefficient)
+
     def get_attack_damage(self):
-        return random.randrange(5, 10) * self.level
+        return random.randrange(self.get_min_base_attack_damage(),
+                                self.get_max_base_attack_damage())
 
     def is_counterpart(self, **kwargs):
         target_unit = kwargs["target_unit"]
@@ -942,9 +952,9 @@ class Unit:
 
     def attack(self, **kwargs):
         """
-        Get the attacker and target weapon type,
-        and determine who wins the round. The winner
-        of the round deals damage
+        Get attack info from attacker and
+        target, then return all the details
+        of the attack
         """
         attacker = self
         target = kwargs["target"]
@@ -1027,21 +1037,38 @@ class Unit:
         log.info("SpiffyRPG: %s's %s vs %s's %s: hit is %s" % \
         (attacker.name, attacker_weapon_type, target.name, target_weapon_type, is_hit))
 
+        damage = 0
+        is_critical_strike = False
+
+        if is_hit and not is_draw:
+            attack = self.get_attack()
+            is_critical_strike = attack["is_critical_strike"]
+            damage = attack["damage"]
+
+            """
+            After determining that the hit landed, apply damage
+            to to the target unit
+            """
+            target.apply_damage(damage=damage,
+                                attacker=attacker)
+
         return {
             "is_hit": is_hit,
             "attacker_weapon": attacker_weapon,
             "target_weapon": target_weapon,
             "is_draw": is_draw,
-            "hit_word": hit_word
+            "hit_word": hit_word,
+            "damage": damage,
+            "is_critical_strike": is_critical_strike
         }
 
-    def get_attack(self, **kwargs):
+    def get_attack(self):
         damage = self.get_attack_damage()
         item = self.get_equipped_weapon()
 
         """ Critical Strikes """
         crit_chance = self.get_critical_strike_chance()
-        is_critical_strike = random.randrange(1, 100) < crit_chance
+        is_critical_strike = random.randrange(1, 100) <= crit_chance
 
         if is_critical_strike:
             damage *= 2
@@ -1097,7 +1124,7 @@ class Unit:
                 return True
 
     def get_critical_strike_chance(self):
-        return 10
+        return self.critical_strike_chance
 
     def get_incoming_damage_adjustment(self, damage):
         """
