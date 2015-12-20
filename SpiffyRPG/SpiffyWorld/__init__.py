@@ -10,6 +10,7 @@ from .unit_dialogue import UnitDialogue
 from .item_builder import ItemBuilder
 from .dungeon_builder import DungeonBuilder
 from .unit_type import UnitType
+from .item_generator import ItemGenerator
 
 """
 from .announcer import Announcer
