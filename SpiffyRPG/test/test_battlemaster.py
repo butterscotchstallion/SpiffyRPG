@@ -1,72 +1,37 @@
 # -*- coding: utf-8 -*-
 import unittest
 
-from SpiffyWorld import Battle, Battlemaster, Unit, Item
+from SpiffyWorld import Battle, Battlemaster, Unit, ItemGenerator, UnitGenerator
 
 class TestBattlemaster(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        pass
-
     def _make_item(self, **kwargs):
         item_type = kwargs["item_type"]
-        item_name = kwargs["item_name"]
 
-        return Item(item={
-            "id": 1,
-            "name": item_name,
-            "description": "foo",
-            "item_type": item_type,
-            "unit_type_id": 0,
-            "min_level": 1,
-            "max_level": 1,
-            "rarity": "dank",
-            "equipment_slot": "main_hand",
-            "is_permanent": 0,
-            "created_at": "01-01-1970 00:00:00",
-            "charges": 0,
-            "can_use": 0,
-            "effects": []
-        })
+        item_generator = ItemGenerator()
+
+        return item_generator.generate(item_type=item_type)
 
     def _make_unit(self, **kwargs):
-        name = kwargs["name"]
-        unit_id = kwargs["id"]
+        unit_generator = UnitGenerator()
 
-        unit = {
-            "id": unit_id,
-            "user_id": 0,
-            "name": name,
-            "unit_name": name,
-            "unit_type_name": "TestUnitType",
-            "unit_type_id": 1,
-            "experience": 6500,
-            "is_boss": False,
-            "combat_status": "hostile",
-            "effects": [],
-            "items": [],
-            "dialogue": []
-        }
-
-        combatant_1 = Unit(unit=unit)
-
-        return combatant_1
+        return unit_generator.generate()
 
     def test_cannot_add_dead_combatants(self):
-        combatant_1 = self._make_unit(id=1, name="TestUnit1")
-        combatant_2 = self._make_unit(id=2, name="TestUnit2")
+        combatant_1 = self._make_unit()
+        combatant_2 = self._make_unit()
         battle = Battle(total_rounds=3)
 
         combatant_1.hp = 0
 
-        battle.add_combatant(combatant_1)
-        battle.add_combatant(combatant_2)
+        with self.assertRaises(ValueError):
+            battle.add_combatant(combatant_1)
 
+        battle.add_combatant(combatant_2)
         self.assertEqual(len(battle.combatants), 1)
 
     def test_add_battle(self):
-        combatant_1 = self._make_unit(id=1, name="TestUnit1")
-        combatant_2 = self._make_unit(id=2, name="TestUnit2")
+        combatant_1 = self._make_unit()
+        combatant_2 = self._make_unit()
 
         battle = Battle(total_rounds=3)
 
@@ -88,19 +53,19 @@ class TestBattlemaster(unittest.TestCase):
         self.assertIsNotNone(actual_2)
         self.assertEqual(battle, actual_2)
 
+        self.assertTrue(combatant_1.is_alive())
+        self.assertTrue(combatant_2.is_alive())
+
         """
         Round 1
         """
-        attacker_weapon = self._make_item(item_name="foo", item_type="rock")
-        target_weapon = self._make_item(item_name="foo", item_type="scissors")
+        attacker_weapon = self._make_item(item_type="rock")
+        target_weapon = self._make_item(item_type="scissors")
 
-        hit_info = {
-            "is_hit": True,
-            "attacker_weapon": attacker_weapon,
-            "target_weapon": target_weapon,
-            "is_draw": False,
-            "hit_word": "hit"
-        }
+        combatant_1.equip_item(item=attacker_weapon)
+        combatant_2.equip_item(item=target_weapon)
+
+        hit_info = combatant_1.attack(target=combatant_2)
 
         battle.add_round(attacker=combatant_1,
                          target=combatant_2,
@@ -117,18 +82,15 @@ class TestBattlemaster(unittest.TestCase):
         """
         Round 2
         """
-        round_2_attacker_weapon = self._make_item(item_name="foo", item_type="paper")
-        round_2_target_weapon = self._make_item(item_name="foo", item_type="rock")
+        round_2_attacker_weapon = self._make_item(item_type="paper")
+        round_2_target_weapon = self._make_item(item_type="rock")
 
-        hit_info = {
-            "is_hit": True,
-            "attacker_weapon": round_2_attacker_weapon,
-            "target_weapon": round_2_target_weapon,
-            "is_draw": False,
-            "hit_word": "hit"
-        }
+        combatant_1.equip_item(item=round_2_attacker_weapon)
+        combatant_2.equip_item(item=round_2_target_weapon)
 
-        battle.add_round(attacker=combatant_2, 
+        hit_info = combatant_1.attack(target=combatant_2)
+
+        battle.add_round(attacker=combatant_2,
                          target=combatant_1,
                          hit_info=hit_info)
 
@@ -141,20 +103,32 @@ class TestBattlemaster(unittest.TestCase):
         self.assertEqual(rounds_won_for_combatant_2, 1)
 
         """
+        Test that units cannot attack twice in a row
+        """
+        with self.assertRaises(ValueError):
+            battle.add_round(attacker=combatant_2,
+                             target=combatant_1,
+                             hit_info=hit_info)
+
+            """
+            Rounds should not change because adding a new
+            round with the same attacker as last round 
+            should not be possible
+            """
+            self.assertEqual(len(battle.rounds), 2)
+
+        """
         Round 3
         """
-        round_3_attacker_weapon = self._make_item(item_name="foo", item_type="lizard")
-        round_3_target_weapon = self._make_item(item_name="foo", item_type="spock")
+        round_3_attacker_weapon = self._make_item(item_type="lizard")
+        round_3_target_weapon = self._make_item(item_type="spock")
 
-        hit_info = {
-            "is_hit": True,
-            "attacker_weapon": round_3_attacker_weapon,
-            "target_weapon": round_3_target_weapon,
-            "is_draw": False,
-            "hit_word": "hit"
-        }
+        combatant_1.equip_item(item=round_3_attacker_weapon)
+        combatant_2.equip_item(item=round_3_target_weapon)
 
-        battle.add_round(attacker=combatant_1, 
+        hit_info = combatant_1.attack(target=combatant_2)
+
+        battle.add_round(attacker=combatant_1,
                          target=combatant_2,
                          hit_info=hit_info)
 
