@@ -1,5 +1,7 @@
 #!/usr/bin/python
-
 import unittest
 
-unittest.discover()
+loader = unittest.TestLoader()
+tests = loader.discover(".")
+testRunner = unittest.runner.TextTestRunner()
+testRunner.run(tests)
