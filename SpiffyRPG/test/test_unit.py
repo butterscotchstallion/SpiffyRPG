@@ -2,9 +2,11 @@
 import unittest
 from uuid import uuid4
 from random import randrange, choice
-from SpiffyWorld import Unit, UnitLevel, Item, UnitBuilder
+from SpiffyWorld import Unit, UnitLevel, Item, UnitBuilder, Effect
 from SpiffyWorld.collections import ItemCollection
 from SpiffyWorld.models import UnitItems
+
+EFFECT_UNDEAD_BONUS = 25
 
 class TestUnit(unittest.TestCase):
     def _get_item(self, **kwargs):
@@ -71,6 +73,53 @@ class TestUnit(unittest.TestCase):
         }
 
         return unit_model
+
+    def _make_undead_effect(self):
+        effect_name = "Undead"
+
+        return self._make_effect(effect_name=effect_name,
+                                 outgoing_damage_adjustment=EFFECT_UNDEAD_BONUS)
+
+    def _make_effect(self, **kwargs):
+        effect_name = kwargs["effect_name"]
+        effect_id = 1
+        description = "lorem ipsum"
+        hp_adjustment = 0
+        incoming_damage_adjustment = 0
+        outgoing_damage_adjustment = 0
+        stacks = 1
+        operator = "+"
+
+        if "operator" in kwargs:
+            operator = kwargs["operator"]
+
+        if "hp_adjustment" in kwargs:
+            hp_adjustment = kwargs["hp_adjustment"]
+
+        if "stacks" in kwargs:
+            stacks = kwargs["stacks"]
+
+        if "incoming_damage_adjustment" in kwargs:
+            incoming_damage_adjustment = kwargs["incoming_damage_adjustment"]
+
+        if "outgoing_damage_adjustment" in kwargs:
+            outgoing_damage_adjustment = kwargs["outgoing_damage_adjustment"]
+
+        effect_model = {
+            "id": effect_id,
+            "name": effect_name,
+            "description": description,
+            "operator": operator,
+            "hp_adjustment": hp_adjustment,
+            "incoming_damage_adjustment": incoming_damage_adjustment,
+            "outgoing_damage_adjustment": outgoing_damage_adjustment,
+            "interval_seconds": 0,
+            "stacks": stacks
+        }
+
+        effect = Effect(effect=effect_model)
+
+        return effect
 
     def test_create_player(self):
         unit_model = self._get_unit_model(is_player=True)
@@ -143,13 +192,64 @@ class TestUnit(unittest.TestCase):
 
         self.assertEqual(len(expected_units), len(actual_units))
 
+        """
+        Ensure that each unit has the expected item set
+        """
         unit_items = [item for item in item_collection.items]
 
         for unit in actual_units:
             self.assertEqual(unit.items, unit_items)
 
-        
+        """
+        Get an attack and test it
+        """
+        unit_1, unit_2 = actual_units
 
+        unit_1_attack = unit_1.get_attack()
+
+        """
+        Make sure this unit is attacking with an item that
+        they have
+        """
+        self.assertIn(unit_1_attack["item"], unit_1.items)
+
+        # Damage should be random.randrange(5, 10) * self.level
+        lower_damage_coefficient = 5
+        upper_damage_coefficient = 10
+
+        damage_lower_bound = unit_1.level * lower_damage_coefficient
+        
+        """
+        In the event of a critical strike, base damage is doubled
+        """
+        damage_upper_bound = (unit_1.level * upper_damage_coefficient) * 2
+
+        self.assertTrue(unit_1_attack["damage"] >= damage_lower_bound)
+        self.assertTrue(unit_1_attack["damage"] <= damage_upper_bound)
+
+        # Test undead damage bonus
+        undead_effect = self._make_undead_effect()
+
+        """
+        1. Add undead effect to unit
+        2. Get a new attack
+        3. Make sure the damage bonus has been applied
+        """
+        unit_1.apply_effect(undead_effect)
+
+        self.assertEqual(len(unit_1.effects), 1)
+
+        undead_attack = unit_1.get_attack()
+
+        undead_bonus_dec = float(EFFECT_UNDEAD_BONUS) / float(100)
+
+        bonus_dec_lower = damage_lower_bound * undead_bonus_dec
+        bonus_dec_upper = damage_upper_bound * undead_bonus_dec
+        undead_damage_lower_bound = damage_lower_bound + bonus_dec_lower
+        undead_damage_upper_bound = damage_upper_bound + bonus_dec_upper
+
+        self.assertTrue(undead_attack["damage"] >= undead_damage_lower_bound)
+        self.assertTrue(undead_attack["damage"] <= undead_damage_upper_bound)
 
 if __name__ == '__main__':
     unittest.main()
