@@ -1,20 +1,9 @@
 # -*- coding: utf-8 -*-
 import unittest
-import sqlite3
 from SpiffyWorld.collections import UnitCollection
 from SpiffyWorld import Unit
-import logging
-
-log = logging.getLogger(__name__)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-log.addHandler(ch)
 
 class TestUnitCollection(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        pass
-
     def _get_player_unit(self):
         xp = 6500
         level = 11
