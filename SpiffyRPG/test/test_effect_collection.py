@@ -10,10 +10,6 @@ ch.setLevel(logging.DEBUG)
 log.addHandler(ch)
 
 class TestEffectCollection(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        pass
-
     def _make_effect(self, **kwargs):
         effect_name = kwargs["effect_name"]
         effect_id = 1
@@ -125,14 +121,12 @@ class TestEffectCollection(unittest.TestCase):
         realm_king_effect = self._make_effect(effect_name=effect_name)
 
         collection.add(realm_king_effect)
-        
+
         actual = collection.get_effect_undead()
 
         self.assertEqual(len(collection.effects), 2)
         self.assertEqual(undead_effect, actual)
 
-
-        
 
 
 
