@@ -164,6 +164,16 @@ class TestUnit(unittest.TestCase):
 
         self.assertEqual(expected_big_adjusted, actual_big_adjusted)
 
+        """
+        Reset HP to full
+        """
+        unit.hp = unit.calculate_hp()
+
+        expected_full = 100
+        actual_full = unit.get_hp_percentage()
+
+        self.assertEqual(expected_full, actual_full)
+
     def test_create_player(self):
         unit_generator = UnitGenerator()
         unit = unit_generator.generate(is_player=True)
