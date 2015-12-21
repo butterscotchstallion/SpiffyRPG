@@ -24,8 +24,13 @@ class ItemBuilder:
 
             item_model["effects"] = effects
 
-            item = Item(item=item_model)
+            item = self.build_item(item_model=item_model)
 
             items.append(item)
 
         return items
+
+    def build_item(self, **kwargs):
+        item_model = kwargs["item_model"]
+        
+        return Item(item=item_model)
