@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import time
+from SpiffyWorld import Unit
 import logging as log
 
 class Dungeon:
@@ -21,7 +22,7 @@ class Dungeon:
         self.max_units = 100
 
         params = (self.id, self.channel)
-        
+
         log.info("SpiffyRPG: initializing dungeon #%s - %s" % params)
 
         self.announcer = kwargs["announcer"]
@@ -363,27 +364,47 @@ class Dungeon:
             if unit.is_player and unit.user_id == user_id:
                 return unit
 
+    def unit_name_matches(self, unit_name_1, unit_name_2):
+        lower_unit_1_name = unit_name_1.lower()
+        lower_unit_2_name = unit_name_2.lower()
+        unit_name_match = lower_unit_1_name.startswith(lower_unit_2_name)
+        
+        return unit_name_match
+
+    def unit_nick_matches(self, unit_nick_1, unit_nick_2):
+        lower_unit_1_nick = unit_nick_1.lower()
+        lower_unit_2_nick = unit_nick_2.lower()
+        nick_match = unit_nick_1.startswith(lower_unit_2_nick)
+
+        return nick_match
+
     def get_unit_by_name(self, name):
-        lower_name = name.lower()
-
         for unit in self.units:
-            unit_name_match = unit.get_name().lower().startswith(lower_name)
-            nick_match = unit.nick.lower().startswith(lower_name)
+            unit_name_matches = self.unit_name_matches(unit.get_name(), name)
+            nick_matches = self.unit_nick_matches(unit.nick, name)
 
-            if unit_name_match or nick_match:
+            if unit_name_matches or nick_matches:
                 return unit
 
-    def get_living_unit_by_name(self, name):
-        unit = self.get_unit_by_name(name)
+    def get_living_unit_by_name(self, target_unit_name):
+        living_units = [unit for unit in self.units if unit.is_alive()]
         
-        if unit.is_alive():
-            return unit
+        for unit in living_units:
+            unit_name_matches = self.unit_name_matches(unit.get_name(), target_unit_name)
+            nick_matches = self.unit_nick_matches(unit.nick, target_unit_name)
 
-    def get_dead_unit_by_name(self, name):
-        unit = self.get_unit_by_name(name)
-        
-        if not unit.is_alive():
-            return unit
+            if unit_name_matches or nick_matches:
+                return unit
+
+    def get_dead_unit_by_name(self, target_unit_name):
+        dead_units = [unit for unit in self.units if unit.is_dead()]
+
+        for unit in dead_units:
+            unit_name_matches = self.unit_name_matches(unit.get_name(), target_unit_name)
+            nick_matches = self.unit_nick_matches(unit.nick, target_unit_name)
+
+            if unit_name_matches or nick_matches:
+                return unit
 
     def get_living_players(self):
         return [unit for unit in self.units if unit.is_player and unit.is_alive()]

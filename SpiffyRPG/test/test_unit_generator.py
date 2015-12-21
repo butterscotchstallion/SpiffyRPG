@@ -10,3 +10,11 @@ class TestUnitGenerator(unittest.TestCase):
         self.assertIsInstance(unit, Unit)
         self.assertTrue(len(unit.name) > 0)
         self.assertEqual(len(unit.effects), 0)
+
+    def test_generate_unit_with_name(self):
+        unit_name = "quux"
+        unit_gen = UnitGenerator()
+        unit = unit_gen.generate(unit_name=unit_name)
+
+        self.assertEqual(unit.get_name(), unit_name)
+

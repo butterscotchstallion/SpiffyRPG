@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import unittest
-from SpiffyWorld import Dungeon, Unit
+from SpiffyWorld import Dungeon, UnitGenerator, Unit
 
 class TestDungeon(unittest.TestCase):
     def _get_dungeon_model(self):
@@ -26,67 +26,21 @@ class TestDungeon(unittest.TestCase):
         dungeon_model = self._get_dungeon_model()
         dungeon = Dungeon(dungeon=dungeon_model, announcer={})
 
-        xp = 6501
-        level = 11
-        name = "SpiffyPlayer"
-        unit_id = 1
-
-        unit_model = {
-            "id": unit_id,
-            "unit_name": name,
-            "items": [],
-            "effects": [],
-            "dialogue": [],
-            "experience": xp,
-            "level": level,
-            "user_id": 1,
-            "is_boss": 0,
-            "unit_type_id": 2,
-            "unit_type_name": "Hacker",
-            "combat_status": "hostile"
-        }
-
-        unit = Unit(unit=unit_model)
+        unit_generator = UnitGenerator()
+        unit = unit_generator.generate()
 
         dungeon.add_unit(unit)
 
         dungeon_unit = dungeon.units[0]
 
-        self.assertEqual(dungeon_unit.id, unit_id)
-        self.assertEqual(dungeon_unit.name, name)
-        self.assertEqual(dungeon_unit.items, [])
-        self.assertEqual(dungeon_unit.dialogue, [])
-        self.assertEqual(dungeon_unit.experience, xp)
-        self.assertEqual(dungeon_unit.level, level)
-        self.assertEqual(dungeon_unit.is_player, True)
-        self.assertEqual(dungeon_unit.is_npc, False)
+        self.assertIsInstance(dungeon_unit, Unit)
 
     def test_get_unit_by_user_id(self):
         dungeon_model = self._get_dungeon_model()
         dungeon = Dungeon(dungeon=dungeon_model, announcer={})
-
-        xp = 6501
-        level = 11
-        name = "SpiffyPlayer"
-        unit_id = 1
-        user_id = 1
-
-        unit_model = {
-            "id": unit_id,
-            "unit_name": name,
-            "items": [],
-            "effects": [],
-            "dialogue": [],
-            "experience": xp,
-            "level": level,
-            "user_id": user_id,
-            "is_boss": 0,
-            "unit_type_id": 2,
-            "unit_type_name": "Hacker",
-            "combat_status": "hostile"
-        }
-
-        unit = Unit(unit=unit_model)
+        user_id = 42
+        unit_generator = UnitGenerator()
+        unit = unit_generator.generate(user_id=user_id)
 
         dungeon.add_unit(unit)
 
@@ -98,30 +52,13 @@ class TestDungeon(unittest.TestCase):
         dungeon_model = self._get_dungeon_model()
         dungeon = Dungeon(dungeon=dungeon_model, announcer={})
 
-        xp = 6501
-        level = 11
-        name = "SpiffyPlayer"
-        unit_id = 1
         user_id = 42
-
-        unit_model = {
-            "id": unit_id,
-            "unit_name": name,
-            "items": [],
-            "effects": [],
-            "dialogue": [],
-            "experience": xp,
-            "level": level,
-            "user_id": user_id,
-            "is_boss": 0,
-            "unit_type_id": 2,
-            "unit_type_name": "Hacker",
-            "combat_status": "hostile"
-        }
-
-        unit = Unit(unit=unit_model)
+        unit_generator = UnitGenerator()
+        unit = unit_generator.generate(user_id=user_id)
 
         dungeon.add_unit(unit)
+
+        self.assertTrue(len(dungeon.units), 0)
 
         actual = dungeon.get_player_by_user_id(user_id)
 
@@ -131,176 +68,83 @@ class TestDungeon(unittest.TestCase):
         dungeon_model = self._get_dungeon_model()
         dungeon = Dungeon(dungeon=dungeon_model, announcer={})
 
-        xp = 6501
-        level = 11
-        name = "SpiffyPlayer"
-        unit_id = 1
-        user_id = 42
+        unit_name = "quux"
 
-        unit_model = {
-            "id": unit_id,
-            "unit_name": name,
-            "items": [],
-            "effects": [],
-            "dialogue": [],
-            "experience": xp,
-            "level": level,
-            "user_id": user_id,
-            "is_boss": 0,
-            "unit_type_id": 2,
-            "unit_type_name": "Hacker",
-            "combat_status": "hostile"
-        }
-
-        unit = Unit(unit=unit_model)
+        unit_generator = UnitGenerator()
+        unit = unit_generator.generate(unit_name=unit_name)
 
         dungeon.add_unit(unit)
 
+        self.assertTrue(len(dungeon.units), 0)
+
         # test exact match
-        actual = dungeon.get_unit_by_name(name)
+        actual = dungeon.get_unit_by_name(unit_name)
         self.assertIsInstance(actual, Unit)
 
         # test invalid match
-        actual = dungeon.get_unit_by_name("lol")
+        actual = dungeon.get_unit_by_name("foo")
         self.assertIsNone(actual)
 
         # test case sensitivity
-        actual = dungeon.get_unit_by_name(name.upper())
+        actual = dungeon.get_unit_by_name(unit_name.upper())
         self.assertIsInstance(actual, Unit)
 
         # test startswith
-        actual = dungeon.get_unit_by_name("spiffy")
+        actual = dungeon.get_unit_by_name(unit_name[0:1])
         self.assertIsInstance(actual, Unit)
 
     def test_get_living_unit_by_name(self):
         dungeon_model = self._get_dungeon_model()
         dungeon = Dungeon(dungeon=dungeon_model, announcer={})
 
-        xp = 6501
-        level = 11
-        name = "SpiffyPlayer"
-        unit_id = 1
-        user_id = 42
-
-        unit_model = {
-            "id": unit_id,
-            "unit_name": name,
-            "items": [],
-            "effects": [],
-            "dialogue": [],
-            "experience": xp,
-            "level": level,
-            "user_id": user_id,
-            "is_boss": 0,
-            "unit_type_id": 2,
-            "unit_type_name": "Hacker",
-            "combat_status": "hostile"
-        }
-
-        unit = Unit(unit=unit_model)
+        unit_name = "baz"
+        unit_generator = UnitGenerator()
+        unit = unit_generator.generate(unit_name=unit_name)
 
         dungeon.add_unit(unit)
 
         # test typical use case
-        actual = dungeon.get_living_unit_by_name(name)
+        actual = dungeon.get_living_unit_by_name(unit.get_name())
         self.assertIsInstance(actual, Unit)
 
-        unit.hp = 0
+        unit.kill()
 
-        actual = dungeon.get_living_unit_by_name(name)
+        actual = dungeon.get_living_unit_by_name(unit.get_name())
         self.assertIsNone(actual)
 
     def test_get_dead_unit_by_name(self):
         dungeon_model = self._get_dungeon_model()
         dungeon = Dungeon(dungeon=dungeon_model, announcer={})
 
-        xp = 6501
-        level = 11
-        name = "SpiffyPlayer"
-        unit_id = 1
-        user_id = 42
-
-        unit_model = {
-            "id": unit_id,
-            "unit_name": name,
-            "items": [],
-            "effects": [],
-            "dialogue": [],
-            "experience": xp,
-            "level": level,
-            "user_id": user_id,
-            "is_boss": 0,
-            "unit_type_id": 2,
-            "unit_type_name": "Hacker",
-            "combat_status": "hostile"
-        }
-
-        unit = Unit(unit=unit_model)
+        unit_name = "Oliver Queen"
+        unit_generator = UnitGenerator()
+        unit = unit_generator.generate(unit_name=unit_name)
 
         dungeon.add_unit(unit)
 
+        unit.kill()
+
         # test typical use case
-        actual = dungeon.get_dead_unit_by_name(name)
-        self.assertIsNone(actual)
-    
+        actual = dungeon.get_dead_unit_by_name(unit.get_name())
+        self.assertIsInstance(actual, Unit)
+
         unit.hp = 1
 
-        actual = dungeon.get_living_unit_by_name(name)
-        self.assertIsInstance(actual, Unit)
+        actual_alive = dungeon.get_living_unit_by_name(unit.get_name())
+        self.assertIsInstance(actual_alive, Unit)
 
     def test_get_living_players(self):
         dungeon_model = self._get_dungeon_model()
         dungeon = Dungeon(dungeon=dungeon_model, announcer={})
 
-        xp = 6501
-        level = 11
-        name = "SpiffyPlayer"
-        unit_id = 1
-        user_id = 42
+        unit_generator = UnitGenerator()
 
-        unit_model = {
-            "id": unit_id,
-            "unit_name": name,
-            "items": [],
-            "effects": [],
-            "dialogue": [],
-            "experience": xp,
-            "level": level,
-            "user_id": user_id,
-            "is_boss": 0,
-            "unit_type_id": 2,
-            "unit_type_name": "Hacker",
-            "combat_status": "hostile"
-        }
+        unit = unit_generator.generate(is_player=True)
 
-        living_unit = Unit(unit=unit_model)
+        dungeon.add_unit(unit)
 
-        dungeon.add_unit(living_unit)
-
-        """ dead unit """
-        xp = 6501
-        level = 11
-        name = "DeadSpiffyNPC"
-        unit_id = 2
-        user_id = 0
-
-        unit_model = {
-            "id": unit_id,
-            "unit_name": name,
-            "items": [],
-            "effects": [],
-            "dialogue": [],
-            "experience": xp,
-            "level": level,
-            "user_id": user_id,
-            "is_boss": 0,
-            "unit_type_id": 2,
-            "unit_type_name": "Hacker",
-            "combat_status": "hostile"
-        }
-
-        dead_unit = Unit(unit=unit_model)
-        dead_unit.hp = 0
+        dead_unit = unit_generator.generate()
+        dead_unit.kill()
 
         dungeon.add_unit(dead_unit)
 
@@ -315,57 +159,24 @@ class TestDungeon(unittest.TestCase):
         dungeon_model = self._get_dungeon_model()
         dungeon = Dungeon(dungeon=dungeon_model, announcer={})
 
-        xp = 6501
-        level = 11
-        name = "SpiffyPlayer"
-        unit_id = 1
-        user_id = 42
+        """ living hostile player """
+        unit_generator = UnitGenerator()
+        living_player = unit_generator.generate(is_player=True,
+                                                combat_status="hostile")
+        dungeon.add_unit(living_player)
 
-        unit_model = {
-            "id": unit_id,
-            "unit_name": name,
-            "items": [],
-            "effects": [],
-            "dialogue": [],
-            "experience": xp,
-            "level": level,
-            "user_id": user_id,
-            "is_boss": 0,
-            "unit_type_id": 2,
-            "unit_type_name": "Hacker",
-            "combat_status": "hostile"
-        }
+        """ dead friendly NPC """
+        dead_friendly_unit = unit_generator.generate(combat_status="friendly")
+        dead_friendly_unit.kill()
+        dungeon.add_unit(dead_friendly_unit)
 
-        living_unit = Unit(unit=unit_model)
+        """ living friendly NPC """
+        living_npc = unit_generator.generate(combat_status="friendly")
+        dungeon.add_unit(living_npc)
 
-        dungeon.add_unit(living_unit)
-
-        """ dead unit """
-        xp = 6501
-        level = 11
-        name = "DeadSpiffyNPC"
-        unit_id = 2
-        user_id = 0
-
-        unit_model = {
-            "id": unit_id,
-            "unit_name": name,
-            "items": [],
-            "effects": [],
-            "dialogue": [],
-            "experience": xp,
-            "level": level,
-            "user_id": user_id,
-            "is_boss": 0,
-            "unit_type_id": 2,
-            "unit_type_name": "Hacker",
-            "combat_status": "friendly"
-        }
-
-        dead_unit = Unit(unit=unit_model)
-        dead_unit.hp = 0
-
-        dungeon.add_unit(dead_unit)
+        """ living hostile NPC """
+        hostile_living_npc = unit_generator.generate(combat_status="hostile")
+        dungeon.add_unit(hostile_living_npc)
 
         actual = dungeon.get_unit_status_distribution()
 
@@ -377,12 +188,12 @@ class TestDungeon(unittest.TestCase):
             },
             "npc": {
                 "hostile": {
-                    "living": 0,
+                    "living": 1,
                     "dead": 0,
                     "undead": 0
                 },
                 "friendly": {
-                    "living": 0,
+                    "living": 1,
                     "dead": 1,
                     "undead": 0
                 }
@@ -390,7 +201,6 @@ class TestDungeon(unittest.TestCase):
         }
 
         self.assertEqual(expected, actual)
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,7 +1,7 @@
 from .battlemaster import Battlemaster
 from .battle import Battle
-from .dungeon import Dungeon
 from .unit import Unit
+from .dungeon import Dungeon
 from .unit_level import UnitLevel
 from .effect import Effect
 from .item import Item
@@ -11,6 +11,7 @@ from .item_builder import ItemBuilder
 from .dungeon_builder import DungeonBuilder
 from .unit_type import UnitType
 from .item_generator import ItemGenerator
+from .unit_generator import UnitGenerator
 
 """
 from .announcer import Announcer
