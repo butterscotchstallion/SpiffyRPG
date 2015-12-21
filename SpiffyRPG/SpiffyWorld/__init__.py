@@ -12,6 +12,7 @@ from .dungeon_builder import DungeonBuilder
 from .unit_type import UnitType
 from .item_generator import ItemGenerator
 from .unit_generator import UnitGenerator
+from .effect_generator import EffectGenerator
 
 """
 from .announcer import Announcer
