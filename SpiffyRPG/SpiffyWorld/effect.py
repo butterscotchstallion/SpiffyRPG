@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import time
+
 class Effect:
     """
     Representation of an effect. Effects can alter the behavior
@@ -16,7 +18,8 @@ class Effect:
         self.interval_seconds = effect["interval_seconds"]
         self.stacks = int(effect["stacks"])
         self.effect_on_possession = False
- 
+        self.created_at = time.time()
+
         if "effect_on_possession" in effect:
             self.effect_on_possession = effect["effect_on_possession"]
 
