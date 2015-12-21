@@ -1192,3 +1192,9 @@ class Unit:
 
     def is_alive(self):
         return self.get_hp() > 0
+
+    def is_dead(self):
+        return self.get_hp() <= 0
+
+    def kill(self):
+        self.hp = 0
