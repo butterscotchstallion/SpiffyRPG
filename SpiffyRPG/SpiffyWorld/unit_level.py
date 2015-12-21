@@ -27,6 +27,11 @@ class UnitLevel:
 
         return player_level
 
+    def get_xp_for_max_level(self):
+        levels = self.get_levels()
+        
+        return self.get_xp_for_level(levels[-1][1])
+
     def get_xp_for_next_level(self, level):
         xp = 0
         levels = self.get_levels()
