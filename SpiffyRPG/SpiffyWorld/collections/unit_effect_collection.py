@@ -1,4 +1,3 @@
-import logging as log
 from SpiffyWorld import Effect
 
 class UnitEffectCollection:
@@ -11,6 +10,3 @@ class UnitEffectCollection:
     def add(self, effect):
         if effect not in self.effects:
             self.effects.append(effect)
-
-    def get_effects_by_unit_id(self, **kwargs):
-        return [effect for effect in self.effects in effect]
