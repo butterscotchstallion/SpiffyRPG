@@ -351,6 +351,12 @@ class TestUnit(unittest.TestCase):
 
         hit_info = unit_1.attack(target=unit_2)
 
+        """
+        Make sure both units have not taken damage
+        in the event of a draw
+        """
+        self.assertTrue(unit_1.has_full_hp())
+        self.assertTrue(unit_2.has_full_hp())
         self.assertFalse(hit_info["is_hit"])
         self.assertTrue(hit_info["is_draw"])
         self.assertEqual(hit_info["damage"], 0)
