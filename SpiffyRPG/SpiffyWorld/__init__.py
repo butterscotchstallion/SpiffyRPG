@@ -1,5 +1,5 @@
-from .battlemaster import Battlemaster
 from .battle import Battle
+from .battlemaster import Battlemaster
 from .unit import Unit
 from .dungeon import Dungeon
 from .unit_level import UnitLevel

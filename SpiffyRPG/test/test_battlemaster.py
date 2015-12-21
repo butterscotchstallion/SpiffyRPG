@@ -16,12 +16,64 @@ class TestBattlemaster(unittest.TestCase):
 
         return unit_generator.generate()
 
+    def test_cannot_start_battle_with_no_combatants(self):
+        battle = Battle()
+
+        battlemaster = Battlemaster()
+
+        """
+        Attempting to add a battle with less than two
+        combatants should raise ValueError
+        """
+        with self.assertRaises(ValueError):
+            battlemaster.add_battle(battle=battle)
+            self.assertEqual(len(battlemaster.battles), 0)
+
+    def test_cannot_battle_unit_in_combat(self):
+        """
+        Units should not be able to start a battle
+        if either of them are currently engaged in
+        a battle.
+        """
+        unit_alpha = self._make_unit()
+        unit_bravo = self._make_unit()
+        unit_delta = self._make_unit()
+
+        # Engage first two targets in battle
+        battle = Battle(total_rounds=2)
+
+        battle.add_combatant(unit_alpha)
+        battle.add_combatant(unit_bravo)
+
+        self.assertEqual(len(battle.combatants), 2)
+
+        battlemaster = Battlemaster()
+        battlemaster.add_battle(battle=battle)
+
+        """
+        Make sure we can't add a combatant in battle to
+        another battle simultaneously
+        """
+        another_battle = Battle(total_rounds=2)
+        another_battle.add_combatant(unit_alpha)
+        another_battle.add_combatant(unit_bravo)
+        another_battle.add_combatant(unit_delta)
+
+        """
+        Attempting to do this should raise ValueError
+        because two of the combatants are in battle.
+        """
+        with self.assertRaises(ValueError):
+            battlemaster.add_battle(battle=another_battle)
+
+        self.assertEqual(len(battlemaster.battles), 1)
+
     def test_cannot_add_dead_combatants(self):
         combatant_1 = self._make_unit()
         combatant_2 = self._make_unit()
         battle = Battle(total_rounds=3)
 
-        combatant_1.hp = 0
+        combatant_1.kill()
 
         with self.assertRaises(ValueError):
             battle.add_combatant(combatant_1)
@@ -35,15 +87,15 @@ class TestBattlemaster(unittest.TestCase):
 
         battle = Battle(total_rounds=3)
 
-        battlemaster = Battlemaster()
-        battlemaster.add_battle(battle=battle)
-
-        self.assertEqual(len(battlemaster.battles), 1)
-
         battle.add_combatant(combatant_1)
         battle.add_combatant(combatant_2)
 
         self.assertEqual(len(battle.combatants), 2)
+
+        battlemaster = Battlemaster()
+        battlemaster.add_battle(battle=battle)
+
+        self.assertEqual(len(battlemaster.battles), 1)
 
         actual_1 = battlemaster.get_battle_by_combatant(combatant=combatant_1)
         self.assertIsNotNone(actual_1)
@@ -151,6 +203,7 @@ class TestBattlemaster(unittest.TestCase):
                                  hit_info=hit_info)
 
                 self.assertEqual(len(battle.rounds), 3)
+
         except ValueError:
             """
             If we're here, it means that one of the combatants died
