@@ -18,6 +18,9 @@ class ItemGenerator:
         charges = 0
         can_use = 0
 
+        if "item_name" in kwargs:
+            item_name = kwargs["item_name"]
+        
         if "item_type" in kwargs:
             specified_item_type = kwargs["item_type"]
 
