@@ -865,6 +865,14 @@ class Unit:
 
         return hp
 
+    def get_xp_remaining_until_next_level_percentage(self, total):
+        current_xp = self.experience
+        total_xp_for_current_level = total
+
+        remaining_xp = float(current_xp) / float(total_xp_for_current_level) * 100
+
+        return remaining_xp
+
     def get_hp_percentage(self):
         total_hp = self.calculate_hp()
         current_hp = self.get_hp()

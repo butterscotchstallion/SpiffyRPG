@@ -121,6 +121,41 @@ class TestUnit(unittest.TestCase):
                                            outgoing_damage_adjustment=outgoing_damage_adjustment)
         return effect
 
+    def test_get_xp_remaining_until_next_level_percentage(self):
+        unit_generator = UnitGenerator()
+        unit = unit_generator.generate()
+
+        unit_level = UnitLevel()
+
+        level_42_xp = unit_level.get_xp_for_level(42)
+        ten_percent_of_total_xp = level_42_xp * .10
+        unit.experience = level_42_xp - ten_percent_of_total_xp
+        current_xp = unit.experience
+        total_xp = level_42_xp
+
+        # Test 90%
+        expected_percentage = 90
+        actual_percentage = unit.get_xp_remaining_until_next_level_percentage(total_xp)
+
+        self.assertEqual(expected_percentage, actual_percentage)
+
+        # Test 50%
+        expected_fifty_percentage = 50
+        fifty_percent_of_total_xp = level_42_xp * .50
+        unit.experience = level_42_xp - fifty_percent_of_total_xp
+        actual_fifty_percentage = unit.get_xp_remaining_until_next_level_percentage(total_xp)
+
+        self.assertEqual(expected_fifty_percentage, actual_fifty_percentage)
+
+        # Test xp over max level
+        expected_one_twenty_percent = 120
+        max_level_xp = unit_level.get_xp_for_max_level()
+        twenty_percent_of_max = max_level_xp * .20
+        unit.experience = max_level_xp + twenty_percent_of_max
+        actual_120_percentage = unit.get_xp_remaining_until_next_level_percentage(max_level_xp)
+
+        self.assertEqual(expected_one_twenty_percent, actual_120_percentage)
+
     def test_get_hp_percentage(self):
         unit_generator = UnitGenerator()
         unit = unit_generator.generate()
