@@ -8,9 +8,14 @@ class Battle:
     A battle between two units
     """
     def __init__(self, **kwargs):
+        total_rounds = 3
+
+        if "total_rounds" in kwargs:
+            total_rounds = kwargs["total_rounds"]
+
         self.rounds = []
         self.combatants = []
-        self.total_rounds = kwargs["total_rounds"]
+        self.total_rounds = total_rounds
         self.created_at = time.time()
         self.last_attacker = None
 
@@ -60,8 +65,11 @@ class Battle:
             Check to make sure units are not attacking twice
             in a row
             """
-            if self.last_attacker is not None and \
-            attacker.id == self.last_attacker.id:
+            last_attacker_exists = self.last_attacker is not None
+            last_attacker_is_this_attacker = last_attacker_exists and \
+            attacker.id == self.last_attacker.id
+
+            if last_attacker_is_this_attacker:
                 params = (target.name, attacker.name)
                 raise ValueError("It is %s's turn to attack. %s attacked last." % params)
 
