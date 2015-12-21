@@ -865,6 +865,14 @@ class Unit:
 
         return hp
 
+    def get_hp_percentage(self):
+        total_hp = self.calculate_hp()
+        current_hp = self.get_hp()
+
+        percentage = float(current_hp) / float(total_hp) * 100
+
+        return int(percentage)
+
     def get_name(self):
         unit_name = self.name
 
@@ -872,6 +880,12 @@ class Unit:
             unit_name = "Undead %s" % unit_name
 
         return unit_name
+
+    def has_full_hp(self):
+        hp = self.get_hp()
+        total_hp = self.calculate_hp()
+
+        return hp == total_hp
 
     def adjust_hp(self, effect):
         total_hp = self.calculate_hp()

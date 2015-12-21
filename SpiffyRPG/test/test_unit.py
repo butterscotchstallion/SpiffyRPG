@@ -2,7 +2,8 @@
 import unittest
 from uuid import uuid4
 from random import randrange, choice
-from SpiffyWorld import Unit, UnitLevel, Item, UnitBuilder, Effect
+from SpiffyWorld import Unit, UnitLevel, Item, UnitBuilder, Effect, \
+                        UnitGenerator, EffectGenerator
 from SpiffyWorld.collections import ItemCollection
 from SpiffyWorld.models import UnitItems
 
@@ -74,6 +75,11 @@ class TestUnit(unittest.TestCase):
 
         return unit_model
 
+    def _make_unit(self):
+        unit_generator = UnitGenerator()
+
+        return unit_generator.generate()
+
     def _make_undead_effect(self):
         effect_name = "Undead"
 
@@ -81,14 +87,16 @@ class TestUnit(unittest.TestCase):
                                  outgoing_damage_adjustment=EFFECT_UNDEAD_BONUS)
 
     def _make_effect(self, **kwargs):
-        effect_name = kwargs["effect_name"]
-        effect_id = 1
-        description = "lorem ipsum"
         hp_adjustment = 0
         incoming_damage_adjustment = 0
         outgoing_damage_adjustment = 0
         stacks = 1
         operator = "+"
+        effect_generator = EffectGenerator()
+        effect_name = None
+
+        if "effect_name" in kwargs:
+            effect_name = kwargs["effect_name"]
 
         if "operator" in kwargs:
             operator = kwargs["operator"]
@@ -105,34 +113,67 @@ class TestUnit(unittest.TestCase):
         if "outgoing_damage_adjustment" in kwargs:
             outgoing_damage_adjustment = kwargs["outgoing_damage_adjustment"]
 
-        effect_model = {
-            "id": effect_id,
-            "name": effect_name,
-            "description": description,
-            "operator": operator,
-            "hp_adjustment": hp_adjustment,
-            "incoming_damage_adjustment": incoming_damage_adjustment,
-            "outgoing_damage_adjustment": outgoing_damage_adjustment,
-            "interval_seconds": 0,
-            "stacks": stacks
-        }
-
-        effect = Effect(effect=effect_model)
-
+        effect = effect_generator.generate(operator=operator,
+                                           hp_adjustment=hp_adjustment,
+                                           effect_name=effect_name,
+                                           stacks=stacks,
+                                           incoming_damage_adjustment=incoming_damage_adjustment,
+                                           outgoing_damage_adjustment=outgoing_damage_adjustment)
         return effect
 
-    def test_create_player(self):
-        unit_model = self._get_unit_model(is_player=True)
+    def test_get_hp_percentage(self):
+        unit_generator = UnitGenerator()
+        unit = unit_generator.generate()
 
-        unit = Unit(unit=unit_model)
+        """ Full hp """
+        expected = 100
+        actual = unit.get_hp_percentage()
+
+        self.assertEqual(expected, actual)
+
+        """
+        Adjust HP and re-test
+        """
+        hp_adjustment = 10
+        operator = "-"
+        adjust_hp_effect = self._make_effect(operator=operator, hp_adjustment=hp_adjustment)
+
+        self.assertEqual(adjust_hp_effect.hp_adjustment, hp_adjustment)
+        self.assertEqual(adjust_hp_effect.operator, operator)
+
+        # Apply effect
+        unit.apply_effect(adjust_hp_effect)
+
+        expected_adjusted = 90
+        actual_adjusted = unit.get_hp_percentage()
+
+        self.assertEqual(expected_adjusted, actual_adjusted)
+
+        """ 
+        Reset HP and try another percentage
+        """
+        unit.hp = unit.calculate_hp()
+        big_hp_adjustment = 50
+        operator = "-"
+        big_adjust_hp_effect = self._make_effect(operator=operator, 
+                                                 hp_adjustment=big_hp_adjustment)
+        unit.apply_effect(big_adjust_hp_effect)
+
+        expected_big_adjusted = 50
+        actual_big_adjusted = unit.get_hp_percentage()
+
+        self.assertEqual(expected_big_adjusted, actual_big_adjusted)
+
+    def test_create_player(self):
+        unit_generator = UnitGenerator()
+        unit = unit_generator.generate(is_player=True)
 
         self.assertEqual(unit.is_player, True)
         self.assertEqual(unit.is_npc, False)
 
     def test_create_npc(self):
-        unit_model = self._get_unit_model(is_player=False)
-
-        unit = Unit(unit=unit_model)
+        unit_generator = UnitGenerator()
+        unit = unit_generator.generate()
 
         self.assertEqual(unit.is_player, False)
         self.assertEqual(unit.is_npc, True)
