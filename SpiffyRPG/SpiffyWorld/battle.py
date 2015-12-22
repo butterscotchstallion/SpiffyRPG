@@ -56,22 +56,25 @@ class Battle:
             either of the combatants are dead
             """
             if not attacker.is_alive():
-                msg = "Cannot add round: Unit %s is dead." % \
-                       attacker.get_name()
-                raise ValueError(msg)
+                ex_msg = "Cannot add round: Unit %s is dead." % \
+                          attacker.get_name()
+                raise ValueError(ex_msg)
 
             if not target.is_alive():
                 ex_msg = "Cannot add round: Unit %s is dead." % \
                           target.get_name()
-                raise ValueError(msg)
+                raise ValueError(ex_msg)
 
             """
             Check to make sure units are not attacking twice
             in a row
             """
+            same_attacker = False
             attacker_exists = self.last_attacker is not None
-            id_match = attacker.id == self.last_attacker.id
-            same_attacker = attacker_exists and id_match
+
+            if attacker_exists:
+                id_match = attacker.id == self.last_attacker.id
+                same_attacker = attacker_exists and id_match
 
             if same_attacker:
                 raise ValueError("Not your turn")
