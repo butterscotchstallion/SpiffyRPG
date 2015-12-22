@@ -1,4 +1,6 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
 class Item:
     """
     Representation of an item which a unit can possess
@@ -23,7 +25,7 @@ class Item:
 
     def __eq__(self, other):
         return self.id == other.id
-    
+
     def is_usable(self):
         return self.can_use
 
@@ -59,3 +61,6 @@ class Item:
     def is_usable_by_level(self, **kwargs):
         return self.min_level <= kwargs["level"] and \
         kwargs["level"] <= self.max_level
+
+    def get_hit_word(self):
+        pass

@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 from .unit_items import UnitItems
 from .unit_effects import UnitEffects
 from .unit_dialogue import UnitDialogue

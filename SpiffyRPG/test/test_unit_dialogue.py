@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import unittest
 from SpiffyWorld import UnitDialogue

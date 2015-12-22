@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import unittest
 from SpiffyWorld import ItemGenerator, Item
@@ -10,7 +11,7 @@ class TestItemGenerator(unittest.TestCase):
         self.assertIsInstance(item, Item)
         self.assertEqual(item.charges, 0)
         self.assertEqual(item.can_use, 0)
-        self.assertIsNotNone(item.name)
+        self.assertTrue(len(item.name) > 0)
         self.assertEqual(len(item.effects), 0)
 
         """

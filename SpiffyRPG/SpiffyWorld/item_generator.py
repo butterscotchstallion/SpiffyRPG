@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from uuid import uuid4
 from random import randrange, choice
@@ -20,7 +21,7 @@ class ItemGenerator:
 
         if "item_name" in kwargs:
             item_name = kwargs["item_name"]
-        
+
         if "item_type" in kwargs:
             specified_item_type = kwargs["item_type"]
 

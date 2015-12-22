@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import logging as log
 from SpiffyWorld import Effect
 
@@ -7,14 +9,14 @@ class EffectCollection:
     """
     def __init__(self, **kwargs):
         self.effects = []
-    
+
     def add(self, effect):
         if not isinstance(effect, Effect):
             raise ValueError("effect must be an instance of Effect")
 
         if effect not in self.effects:
             self.effects.append(effect)
-    
+
     def get_effect_undead(self):
         return self.get_effect_by_effect_name(effect_name="Undead")
 

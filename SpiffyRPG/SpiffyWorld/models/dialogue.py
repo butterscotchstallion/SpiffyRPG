@@ -1,4 +1,6 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
 class Dialogue:
     """
     Stores a lookup of all dialogue each time the world

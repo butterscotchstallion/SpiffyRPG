@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from uuid import uuid4
 from random import randrange, choice
@@ -20,7 +21,7 @@ class EffectGenerator:
         outgoing_damage_adjustment = 0
         interval_second = 0
         stacks = 1
-        
+
         if "operator" in kwargs:
             operator = kwargs["operator"]
 

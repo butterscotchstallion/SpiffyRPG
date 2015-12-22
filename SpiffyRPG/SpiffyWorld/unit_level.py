@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 class UnitLevel:
     """
@@ -29,7 +30,7 @@ class UnitLevel:
 
     def get_xp_for_max_level(self):
         levels = self.get_levels()
-        
+
         return self.get_xp_for_level(levels[-1][1])
 
     def get_xp_for_next_level(self, level):
@@ -92,5 +93,4 @@ class UnitLevel:
                 (47, 101000),
                 (48, 104000),
                 (49, 107000),
-                (50, 110000)
-      ]
+                (50, 110000)]

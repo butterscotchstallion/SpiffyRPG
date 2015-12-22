@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import time
 
@@ -93,7 +94,7 @@ class Battle:
         else:
             ex_msg = "Round maximum reached: %s (%s maximum)" % \
                       (current_rounds_length, self.total_rounds)
-            
+
             raise InvalidCombatantException(ex_msg)
 
     def add_combatant(self, combatant):

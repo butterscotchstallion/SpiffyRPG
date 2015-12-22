@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import unittest
 
@@ -18,6 +19,11 @@ class TestBattlemaster(unittest.TestCase):
         return unit_generator.generate()
 
     def test_send_challenge(self):
+        """
+        In order to engage in combat, the unit must consent
+        to a challenge. NPCs should accept automatically; an
+        attack with an NPC target generates a challenge.
+        """
         battle = Battle()
         battlemaster = Battlemaster()
 

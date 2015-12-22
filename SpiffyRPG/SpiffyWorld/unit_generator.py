@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from uuid import uuid4
 from random import randrange, choice
@@ -13,13 +14,17 @@ class UnitGenerator:
         unit_level = UnitLevel()
         is_player = False
         level = randrange(1, 100)
-        xp = unit_level.get_xp_for_level(level)
         unit_id = uuid4()
         combat_status = "passive"
 
+        if "level" in kwargs:
+            level = kwargs["level"]
+
+        xp = unit_level.get_xp_for_level(level)
+
         if "combat_status" in kwargs:
             combat_status = kwargs["combat_status"]
-        
+
         if "unit_name" in kwargs:
             unit_name = kwargs["unit_name"]
         else:

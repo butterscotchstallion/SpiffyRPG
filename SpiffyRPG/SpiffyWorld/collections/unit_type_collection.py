@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from SpiffyWorld import UnitType
 
@@ -27,4 +28,3 @@ class UnitTypeCollection:
             unit_type_name_list = sorted(unit_type_name_list, key=lambda x: x)
 
         return ", ".join(unit_type_name_list)
-

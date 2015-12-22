@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 from .unit_collection import UnitCollection
 from .item_collection import ItemCollection
 from .effect_collection import EffectCollection

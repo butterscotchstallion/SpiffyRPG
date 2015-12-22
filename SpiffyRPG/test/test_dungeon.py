@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import unittest
 from SpiffyWorld import Dungeon, UnitGenerator, Unit
@@ -177,6 +178,15 @@ class TestDungeon(unittest.TestCase):
         """ living hostile NPC """
         hostile_living_npc = unit_generator.generate(combat_status="hostile")
         dungeon.add_unit(hostile_living_npc)
+
+        actual = dungeon.get_unit_status_distribution()
+
+        """ undead hostile npc 
+        hostile_undead_npc = unit_generator.generate(combat_status="hostile")
+        undead_effect = effect_collection.get_effect_by_name(effect_name="Undead")
+        hostile.apply_effect(undead_effect)
+        dungeon.add_unit(hostile_undead_npc)
+        """
 
         actual = dungeon.get_unit_status_distribution()
 

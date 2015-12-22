@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 from SpiffyWorld import Effect
 
 class UnitEffectCollection:
@@ -10,3 +12,4 @@ class UnitEffectCollection:
     def add(self, effect):
         if effect not in self.effects:
             self.effects.append(effect)
+

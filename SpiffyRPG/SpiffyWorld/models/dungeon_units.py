@@ -1,8 +1,7 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 class DungeonUnits:
-
-
     """
     Dungeon units model
     """

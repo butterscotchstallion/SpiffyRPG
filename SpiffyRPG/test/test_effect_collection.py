@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import unittest
 from SpiffyWorld.collections import EffectCollection
@@ -126,7 +127,3 @@ class TestEffectCollection(unittest.TestCase):
 
         self.assertEqual(len(collection.effects), 2)
         self.assertEqual(undead_effect, actual)
-
-
-
-
