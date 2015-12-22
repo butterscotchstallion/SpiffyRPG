@@ -217,8 +217,8 @@ class Unit:
             else:
                 log.info("SpiffyRPG: attempting to use item %s but it has no effects!" % item.name)
         else:
-            log.error("SpiffyRPG: attempting to use %s but it is not in %s's bags" % \
-            (item.name, self.name))
+            log.error("SpiffyRPG: attempting to use %s but it is not in %s's bags" %
+                      (item.name, self.name))
 
     def begin_casting_raise_dead(self):
         self.begin_casting_spell()
@@ -253,8 +253,8 @@ class Unit:
         dead_unit = kwargs["unit"]
 
         if self.is_casting_spell:
-            log.info("SpiffyRPG: %s raises %s from the dead!" % \
-            (self.name, dead_unit.get_name()))
+            log.info("SpiffyRPG: %s raises %s from the dead!" %
+                     (self.name, dead_unit.get_name()))
 
             """ Reset HP """
             dead_unit.hp = dead_unit.calculate_hp()
@@ -315,9 +315,9 @@ class Unit:
         other unit does not already have.
         """
         already_has_items = kwargs["already_has"]
-        already_has_item_ids = [item.id for item in already_has_items]        
-        lootable = [item for item in self.lootable_items \
-        if item.id not in already_has_item_ids]
+        already_has_item_ids = [item.id for item in already_has_items]
+        lootable = [item for item in self.lootable_items
+                    if item.id not in already_has_item_ids]
 
         if len(lootable):
             return random.choice(lootable)
@@ -422,8 +422,8 @@ class Unit:
         this unit 
         """
         self_battles = self.get_incomplete_battles()
-        battles_with_others = [battle for battle in self_battles \
-        if battle["combatant"].id != unit.id]
+        battles_with_others = [battle for battle in self_battles
+                               if battle["combatant"].id != unit.id]
 
         if len(battles_with_others) > 0:
             battle_with_other = battles_with_others[0]
@@ -436,8 +436,8 @@ class Unit:
 
         """ Check if the unit is in battle """
         target_battles = unit.get_incomplete_battles()
-        target_battles_with_others = [battle for battle in target_battles \
-        if battle["combatant"].id != self.id]
+        target_battles_with_others = [battle for battle in target_battles
+                                      if battle["combatant"].id != self.id]
 
         if len(target_battles_with_others) > 0:
             battle_with_other = target_battles_with_others[0]
@@ -1056,9 +1056,6 @@ class Unit:
         if attacker_weapon_type == target_weapon_type:
             is_draw = True
 
-        log.info("SpiffyRPG: %s's %s vs %s's %s: hit is %s" % \
-        (attacker.name, attacker_weapon_type, target.name, target_weapon_type, is_hit))
-
         damage = 0
         is_critical_strike = False
 
@@ -1179,9 +1176,6 @@ class Unit:
 
         """ Interrupt spell casting on damage """
         self.on_unit_spell_interrupted(unit=self, attacker=attacker)
-
-        log.info("SpiffyRPG: %s takes %s damage; now has %sHP" % \
-        (self.name, adjusted_damage, self.get_hp()))
 
         if self.hp <= 0:
             """

@@ -56,34 +56,38 @@ class Battle:
             either of the combatants are dead
             """
             if not attacker.is_alive():
-                raise ValueError("Cannot add round: Unit %s is dead." % attacker.name)
+                msg = "Cannot add round: Unit %s is dead." % \
+                       attacker.get_name()
+                raise ValueError(msg)
 
             if not target.is_alive():
-                raise ValueError("Cannot add round: Unit %s is dead." % target.name)
+                ex_msg = "Cannot add round: Unit %s is dead." % \
+                          target.get_name()
+                raise ValueError(msg)
 
             """
             Check to make sure units are not attacking twice
             in a row
             """
-            last_attacker_exists = self.last_attacker is not None
-            last_attacker_is_this_attacker = last_attacker_exists and \
-            attacker.id == self.last_attacker.id
+            attacker_exists = self.last_attacker is not None
+            id_match = attacker.id == self.last_attacker.id
+            same_attacker = attacker_exists and id_match
 
-            if last_attacker_is_this_attacker:
-                params = (target.name, attacker.name)
-                raise ValueError("It is %s's turn to attack. %s attacked last." % params)
+            if same_attacker:
+                raise ValueError("Not your turn")
 
             self.last_attacker = attacker
 
             self.rounds.append(kwargs)
         else:
-            raise ValueError("Round maximum reached: %s (%s maximum)" % \
-                            (current_rounds_length, self.total_rounds))
+            raise ValueError("Round maximum reached: %s (%s maximum)" %
+                             (current_rounds_length, self.total_rounds))
 
     def add_combatant(self, combatant):
         if not combatant.is_alive():
             params = (combatant.name, combatant.get_hp())
-            raise ValueError("Cannot add dead unit to battle: %s (%s HP)" % params)
+            msg = "Cannot add dead unit to battle: %s (%s HP)" % params
+            raise ValueError(msg)
 
         if combatant not in self.combatants:
             self.combatants.append(combatant)

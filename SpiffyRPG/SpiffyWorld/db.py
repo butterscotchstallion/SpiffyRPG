@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import sqlite3
-
 import logging
 
 log = logging.getLogger(__name__)
@@ -23,4 +22,3 @@ class Database:
 
     def get_handle(self):
         return self.db
-

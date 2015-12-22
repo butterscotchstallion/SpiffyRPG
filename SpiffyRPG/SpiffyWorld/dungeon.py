@@ -8,8 +8,6 @@ class Dungeon:
     Representation of a dungeon within the world
     """
     def __init__(self, **kwargs):
-        #self.schedule = worldbuilder.schedule
-
         dungeon = kwargs["dungeon"]
         self.units = dungeon["units"]
         self.created_at = time.time()
@@ -51,8 +49,8 @@ class Dungeon:
         return [unit for unit in self.units if unit.is_boss]
 
     def get_living_necromancer_units(self):
-        return [unit for unit in self.units if unit.is_necromancer() \
-                and unit.is_alive()]
+        return [unit for unit in self.units if unit.is_necromancer() and
+                unit.is_alive()]
 
     def check_dungeon_cleared(self, player):
         units = self.get_living_units()
@@ -96,8 +94,8 @@ class Dungeon:
         regen_interval = 300
 
         self.schedule.addPeriodicEvent(self.regenerate_players,
-                                  regen_interval,
-                                  name="player_regen_timer")
+                                       regen_interval,
+                                       name="player_regen_timer")
 
     def start_chaos_timer(self):
         log.info("SpiffyRPG: starting chaos interval")
@@ -105,8 +103,8 @@ class Dungeon:
         spawn_interval = 300
 
         self.schedule.addPeriodicEvent(self.herald_chaos,
-                                  spawn_interval,
-                                  name="chaos_timer")
+                                       spawn_interval,
+                                       name="chaos_timer")
 
     def regenerate_players(self):
         """
@@ -155,12 +153,12 @@ class Dungeon:
             if len(alive_without_attacker) > 0:
                 target = random.choice(alive_without_attacker)
 
-                log.info("SpiffyRPG: starting chaos battle: %s vs %s" % \
-                (attacker_title, target.get_title()))
+                log.info("SpiffyRPG: starting chaos battle: %s vs %s" %
+                         (attacker_title, target.get_title()))
 
                 dialogue = attacker.get_zombie_dialogue()
                 self.announcer.dungeon_undead_attacker(attacker=attacker,
-                                                       target=target, 
+                                                       target=target,
                                                        dungeon=self,
                                                        dialogue=dialogue)
 
@@ -178,17 +176,17 @@ class Dungeon:
         spawn_interval = 300
 
         self.schedule.addPeriodicEvent(self.check_population,
-                                  spawn_interval,
-                                  name="spawn_timer",
-                                  now=False)
+                                       spawn_interval,
+                                       name="spawn_timer",
+                                       now=False)
 
     def check_population(self):
         units = self.get_living_units()
         live_unit_count = len(units)
 
         if live_unit_count < self.max_units:
-            log.info("%s is under population cap %s" % \
-            (live_unit_count, self.max_units))
+            log.info("%s is under population cap %s" %
+                     (live_unit_count, self.max_units))
 
             quantity = self.max_units - live_unit_count
 
@@ -202,9 +200,9 @@ class Dungeon:
         dialogue_interval = 3600
 
         self.schedule.addPeriodicEvent(self.random_unit_dialogue,
-                                  dialogue_interval,
-                                  name="dialogue_timer",
-                                  now=False)
+                                       dialogue_interval,
+                                       name="dialogue_timer",
+                                       now=False)
 
     def random_unit_dialogue(self):
         """ Add random chance here """
@@ -218,8 +216,8 @@ class Dungeon:
 
                 dialogue = unit.dialogue_intro()
 
-                log.info("SpiffyRPG: %s says '%s' to %s" % \
-                (unit.get_title(), dialogue, self.channel))
+                log.info("SpiffyRPG: %s says '%s' to %s" %
+                         (unit.get_title(), dialogue, self.channel))
 
                 self.announcer.unit_dialogue(unit, dialogue)
             else:
@@ -277,7 +275,7 @@ class Dungeon:
                 self.add_unit(player)
 
     def get_user_lookup_from_channel(self):
-        """ 
+        """
         Add players to the dungeon by iterating the nick list
         and checking for user ids.
         """
@@ -331,14 +329,15 @@ class Dungeon:
     def add_unit(self, unit):
         if unit not in self.units:
             items = unit.items
+            params = (unit.level, unit.get_name(), unit.get_title(), unit.get_hp(), self.name)
 
             if unit.is_player:
-                log.info("SpiffyRPG: spawning a level %s player %s (%s) with %s HP in %s" % \
-                    (unit.level, unit.get_name(), unit.get_title(), unit.get_hp(), self.name))
+                msg = "SpiffyRPG: spawning a level %s player %s (%s) with %s HP in %s" % params
             else:
-                log.info("SpiffyRPG: spawning a level %s NPC: %s (%s) with %s HP in %s" % \
-                    (unit.level, unit.get_name(), unit.get_title(), unit.get_hp(), self.name))
-            
+                msg = "SpiffyRPG: spawning a level %s NPC: %s (%s) with %s HP in %s" % params
+                
+            log.info(msg)
+
             self.units.append(unit)
         else:
             log.info("SpiffyRPG: not adding duplicate unit %s" % (unit.get_name()))
