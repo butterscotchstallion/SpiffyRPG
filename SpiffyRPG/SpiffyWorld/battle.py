@@ -16,6 +16,19 @@ class InvalidCombatantException(ValueError):
         ValueError.__init__(self, ex_msg)
 
 
+class CombatStatusException(ValueError):
+
+    """
+    This exception occurs when a unit attempts to initiate
+    battle with a non-hostile unit (e.g. a unit which has not accepted
+    a challenge prior to attacking).
+    """
+
+    def __init__(self, ex_msg):
+        ex_msg = "You must challenge that unit prior to battle."
+        ValueError.__init__(self, ex_msg)
+
+
 class Battle:
 
     """
