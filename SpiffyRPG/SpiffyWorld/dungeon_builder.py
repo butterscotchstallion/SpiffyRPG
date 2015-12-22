@@ -2,14 +2,15 @@
 # -*- coding: utf-8 -*-
 from SpiffyWorld import Dungeon
 
+
 class DungeonBuilder:
 
     """
     Builds a Dungeon given a list of dungeon/unit models
     and UnitCollection to look up units and such
     """
+
     def build_dungeons(self, **kwargs):
-        unit_collection = kwargs["unit_collection"]
         dungeon_units_map = kwargs["dungeon_units_map"]
         dungeon_models = kwargs["dungeon_models"]
         dungeons = []

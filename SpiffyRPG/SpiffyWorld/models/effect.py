@@ -1,19 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+
 class Effect:
+
     """
     Representation of all effects
     """
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
-    
+
     def get_effects(self):
         """
         Fetches effects for one or many units
         """
         cursor = self.db.cursor()
-        
+
         cursor.execute("""SELECT
                           e.id,
                           e.name,

@@ -3,7 +3,9 @@
 import unittest
 from SpiffyWorld import Dungeon, UnitGenerator, Unit
 
+
 class TestDungeon(unittest.TestCase):
+
     def _get_dungeon_model(self):
         dungeon_model = {
             "id": 1,
@@ -181,7 +183,7 @@ class TestDungeon(unittest.TestCase):
 
         actual = dungeon.get_unit_status_distribution()
 
-        """ undead hostile npc 
+        """ undead hostile npc
         hostile_undead_npc = unit_generator.generate(combat_status="hostile")
         undead_effect = effect_collection.get_effect_by_name(effect_name="Undead")
         hostile.apply_effect(undead_effect)

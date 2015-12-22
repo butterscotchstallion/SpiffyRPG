@@ -3,10 +3,13 @@
 import unittest
 from SpiffyWorld import Item
 
+
 class TestItem(unittest.TestCase):
+
     """
     Tests the Item class
     """
+
     def test_create_item(self):
         item_name = "Orb of Testing"
         item_id = 1

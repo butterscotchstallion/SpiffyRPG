@@ -1,9 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+
 class UnitDialogue:
+
     """
     Unit dialogue model
     """
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
         self.dialogue = {}
@@ -28,12 +32,13 @@ class UnitDialogue:
         of the dialogue information
         """
         cursor = self.db.cursor()
-        
+
         cursor.execute("""SELECT
                           d.id,
                           ue.unit_id
                           FROM spiffyrpg_dialogue d
-                          JOIN spiffyrpg_unit_dialogue ue ON ue.dialogue_id = d.id
+                          JOIN spiffyrpg_unit_dialogue ue ON \
+                          ue.dialogue_id = d.id
                           JOIN spiffyrpg_units u ON u.id = ue.unit_id""")
 
         tmp_dialogue = cursor.fetchall()

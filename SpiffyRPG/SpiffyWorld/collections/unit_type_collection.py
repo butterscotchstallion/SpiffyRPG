@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 from SpiffyWorld import UnitType
 
+
 class UnitTypeCollection:
+
     """
     A whole mess of unit types
     """
+
     def __init__(self, **kwargs):
         self.unit_types = []
 

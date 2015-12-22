@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+
 class UnitDialogue:
+
     """
     Dialogue object for Units
     """
+
     def __init__(self, **kwargs):
         dialogue = kwargs["dialogue"]
 

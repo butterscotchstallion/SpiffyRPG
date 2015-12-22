@@ -10,7 +10,9 @@ ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 log.addHandler(ch)
 
+
 class TestEffectCollection(unittest.TestCase):
+
     def _make_effect(self, **kwargs):
         effect_name = kwargs["effect_name"]
         effect_id = 1
@@ -56,7 +58,7 @@ class TestEffectCollection(unittest.TestCase):
         effect_name = "Test Effect"
         effect_type = "rock"
         effect = self._make_effect(effect_name=effect_name)
-        
+
         collection = EffectCollection()
         collection.add(effect)
 
@@ -73,7 +75,7 @@ class TestEffectCollection(unittest.TestCase):
     def test_make_effect_by_effect_name(self):
         effect_name = "Realm King"
         effect = self._make_effect(effect_name=effect_name)
-        
+
         collection = EffectCollection()
         collection.add(effect)
 
@@ -87,13 +89,14 @@ class TestEffectCollection(unittest.TestCase):
 
         # Test that we don't get the wrong thing
         expected = None
-        actual = collection.get_effect_by_effect_name(effect_name="hello world")
+        actual = collection.get_effect_by_effect_name(
+            effect_name="hello world")
         self.assertEqual(expected, actual)
 
     def test_get_effect_undead(self):
         effect_name = "Undead"
         undead_effect = self._make_effect(effect_name=effect_name)
-        
+
         collection = EffectCollection()
 
         """

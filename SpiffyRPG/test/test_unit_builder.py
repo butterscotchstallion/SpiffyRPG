@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import unittest
-from SpiffyWorld.collections import ItemCollection, EffectCollection, UnitDialogueCollection
-from SpiffyWorld.models import UnitItems, UnitEffects, UnitDialogue as UnitDialogueModel
+from SpiffyWorld.collections import ItemCollection, EffectCollection, \
+                                    UnitDialogueCollection
+from SpiffyWorld.models import UnitItems, UnitEffects, \
+                               UnitDialogue as UnitDialogueModel
 from SpiffyWorld import Item, Unit, UnitBuilder, Effect, UnitDialogue
 import logging
 from uuid import uuid4
@@ -13,7 +15,9 @@ ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 log.addHandler(ch)
 
+
 class TestUnitBuilder(unittest.TestCase):
+
     def _make_dialogue(self):
         dialogue_id = uuid4()
         dialogue_context = "sup"
@@ -134,7 +138,7 @@ class TestUnitBuilder(unittest.TestCase):
 
         """
         Prepare unit model collection
-        """        
+        """
         unit_models = []
         expected_units = []
         unit_items = []
@@ -166,7 +170,7 @@ class TestUnitBuilder(unittest.TestCase):
                 unit_items.append({"item_id": item.id, "unit_id": unit_id})
 
             unit_model["items"] = items
-            
+
             """
             Add effects
             """
@@ -174,7 +178,8 @@ class TestUnitBuilder(unittest.TestCase):
                 effect = self._make_effect()
                 effects.append(effect)
                 effect_collection.add(effect)
-                unit_effects.append({"effect_id": effect.id, "unit_id": unit_id})
+                unit_effects.append(
+                    {"effect_id": effect.id, "unit_id": unit_id})
 
             unit_model["effects"] = effects
 
@@ -185,7 +190,8 @@ class TestUnitBuilder(unittest.TestCase):
                 a_dialogue = self._make_dialogue()
                 dialogue.append(a_dialogue)
                 dialogue_collection.add(a_dialogue)
-                unit_dialogue.append({"dialogue_id": a_dialogue.id, "unit_id": unit_id})
+                unit_dialogue.append(
+                    {"dialogue_id": a_dialogue.id, "unit_id": unit_id})
 
             unit_model["dialogue"] = dialogue
 
@@ -197,8 +203,10 @@ class TestUnitBuilder(unittest.TestCase):
             expected_units.append(unit)
 
         unit_items_map = unit_items_model._get_unit_items_map(unit_items)
-        unit_effects_map = unit_effects_model._get_unit_effects_map(unit_effects)
-        unit_dialogue_map = unit_dialogue_model._get_unit_dialogue_map(unit_dialogue)
+        unit_effects_map = unit_effects_model._get_unit_effects_map(
+            unit_effects)
+        unit_dialogue_map = unit_dialogue_model._get_unit_dialogue_map(
+            unit_dialogue)
 
         builder = UnitBuilder()
         actual_units = builder.build_units(unit_models=unit_models,
@@ -229,20 +237,3 @@ class TestUnitBuilder(unittest.TestCase):
             self.assertEqual(len(a_unit.items), total_items_per_unit)
             self.assertEqual(len(a_unit.effects), total_effects_per_unit)
             self.assertEqual(len(a_unit.dialogue), total_dialogue_per_unit)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

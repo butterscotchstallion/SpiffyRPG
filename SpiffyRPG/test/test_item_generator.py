@@ -3,7 +3,9 @@
 import unittest
 from SpiffyWorld import ItemGenerator, Item
 
+
 class TestItemGenerator(unittest.TestCase):
+
     def test_generate(self):
         item_gen = ItemGenerator()
         item = item_gen.generate()

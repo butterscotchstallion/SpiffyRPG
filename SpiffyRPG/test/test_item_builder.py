@@ -7,7 +7,9 @@ from SpiffyWorld import Item, ItemBuilder, Effect
 from uuid import uuid4
 from random import randrange, choice
 
+
 class TestItemBuilder(unittest.TestCase):
+
     def _get_item_model(self, **kwargs):
         item_id = uuid4()
         item_name = "TestItem-%s" % item_id
@@ -105,7 +107,8 @@ class TestItemBuilder(unittest.TestCase):
                 effect = self._make_effect()
                 effect_id = effect.id
                 effects.append(effect)
-                item_effects_list.append({"item_id": item_id, "effect_id": effect_id})
+                item_effects_list.append(
+                    {"item_id": item_id, "effect_id": effect_id})
 
             item_model["effects"] = effects
 
@@ -115,7 +118,8 @@ class TestItemBuilder(unittest.TestCase):
             expected_items.append(item)
 
         item_effects_model = ItemEffects(db="quux")
-        item_effects_map = item_effects_model._get_item_effects_map(item_effects_list)
+        item_effects_map = item_effects_model._get_item_effects_map(
+            item_effects_list)
 
         builder = ItemBuilder()
         actual_items = builder.build_items(item_collection=item_collection,
@@ -127,5 +131,3 @@ class TestItemBuilder(unittest.TestCase):
 
         for a_item in actual_items:
             self.assertEqual(len(a_item.effects), total_effects_per_item)
-
-

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import unittest
-from SpiffyWorld.collections import UnitEffectCollection, EffectCollection
+from SpiffyWorld.collections import EffectCollection
 from SpiffyWorld import Effect
 import logging
 
@@ -10,10 +10,8 @@ ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 log.addHandler(ch)
 
+
 class TestUnitEffectCollection(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        pass
 
     def _make_effect(self, **kwargs):
         effect_name = kwargs["effect_name"]
@@ -60,7 +58,7 @@ class TestUnitEffectCollection(unittest.TestCase):
         effect_name = "Test Effect"
         effect_type = "rock"
         effect = self._make_effect(effect_name=effect_name)
-        
+
         collection = EffectCollection()
         collection.add(effect)
 
@@ -73,4 +71,3 @@ class TestUnitEffectCollection(unittest.TestCase):
         # Test that we can't add duplicate effects
         collection.add(effect)
         self.assertEqual(len(collection.effects), 1)
-

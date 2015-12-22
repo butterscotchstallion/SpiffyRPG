@@ -4,22 +4,16 @@ import unittest
 from SpiffyWorld.collections import UnitCollection
 from SpiffyWorld.models import DungeonUnits
 from SpiffyWorld import Dungeon, Unit, DungeonBuilder
-import logging
 from uuid import uuid4
-from random import randrange, choice
+from random import randrange
 
-"""
-log = logging.getLogger(__name__)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-log.addHandler(ch)
-"""
 
 class TestDungeonBuilder(unittest.TestCase):
+
     def _get_dungeon_model(self, **kwargs):
         dungeon_id = uuid4()
         dungeon_name = "TestDungeon-%s" % dungeon_id
-        
+
         dungeon_model = {
             "id": dungeon_id,
             "name": dungeon_name,
@@ -82,7 +76,8 @@ class TestDungeonBuilder(unittest.TestCase):
                 unit = self._make_unit()
                 unit_id = unit.id
                 units.append(unit)
-                dungeon_units_list.append({"dungeon_id": dungeon_id, "unit_id": unit_id})
+                dungeon_units_list.append(
+                    {"dungeon_id": dungeon_id, "unit_id": unit_id})
 
             dungeon_model["units"] = units
 
@@ -92,7 +87,8 @@ class TestDungeonBuilder(unittest.TestCase):
             expected_dungeons.append(dungeon)
 
         dungeon_units_model = DungeonUnits(db="quux", announcer="quux")
-        dungeon_units_map = dungeon_units_model._get_dungeon_units_map(dungeon_units_list)
+        dungeon_units_map = dungeon_units_model._get_dungeon_units_map(
+            dungeon_units_list)
 
         builder = DungeonBuilder()
         actual_dungeons = builder.build_dungeons(unit_collection=unit_collection,

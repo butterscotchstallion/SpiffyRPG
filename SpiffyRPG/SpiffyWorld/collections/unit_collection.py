@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 from SpiffyWorld import Unit
 
+
 class UnitCollection:
+
     """
     All the units!
     """
+
     def __init__(self):
         self.units = []
 
@@ -31,6 +34,7 @@ class UnitCollection:
 
         if len(players) >= 1:
             limit = max(len(players), 3)
-            top_players = sorted(players, key=lambda x: x.experience, reverse=True)
+            top_players = sorted(
+                players, key=lambda x: x.experience, reverse=True)
 
             return top_players[0:limit]

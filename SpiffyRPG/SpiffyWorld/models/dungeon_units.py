@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+
 class DungeonUnits:
+
     """
     Dungeon units model
     """
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
 
@@ -26,7 +29,7 @@ class DungeonUnits:
         Fetches units for one or many dungeons
         """
         cursor = self.db.cursor()
-        
+
         cursor.execute("""SELECT
                           du.dungeon_id,
                           du.unit_id

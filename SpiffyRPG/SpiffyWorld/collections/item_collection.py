@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 from SpiffyWorld import Item
 
+
 class ItemCollection:
+
     """
     Catalog of available items
     """
+
     def __init__(self, **kwargs):
         self.items = []
 
@@ -15,7 +18,7 @@ class ItemCollection:
 
         if item not in self.items:
             self.items.append(item)
-    
+
     def get_item_by_item_name(self, item_name):
         for item in self.items:
             if item.name.lower().startswith(item_name.lower()):

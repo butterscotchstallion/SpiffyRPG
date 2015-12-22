@@ -50,7 +50,7 @@ class TestUnit(unittest.TestCase):
         unit_name = "Unit%s" % unit_id
         unit_types = (1, 2, 3)
         unit_type_id = choice(unit_types)
-        
+
         if "is_player" in kwargs:
             is_player = kwargs["is_player"]
 
@@ -185,13 +185,13 @@ class TestUnit(unittest.TestCase):
 
         self.assertEqual(expected_adjusted, actual_adjusted)
 
-        """ 
+        """
         Reset HP and try another percentage
         """
         unit.hp = unit.calculate_hp()
         big_hp_adjustment = 50
         operator = "-"
-        big_adjust_hp_effect = self._make_effect(operator=operator, 
+        big_adjust_hp_effect = self._make_effect(operator=operator,
                                                  hp_adjustment=big_hp_adjustment)
         unit.apply_effect(big_adjust_hp_effect)
 
@@ -295,8 +295,8 @@ class TestUnit(unittest.TestCase):
         unit_1, unit_2 = self.get_combatants()
 
         """
-        Equip a specific item type for each so we 
-        can accurately predict the outcome for 
+        Equip a specific item type for each so we
+        can accurately predict the outcome for
         testing purposes
         """
         unit_1.equip_rock_weapon()
@@ -369,8 +369,8 @@ class TestUnit(unittest.TestCase):
         unit_1, unit_2 = self.get_combatants()
 
         """
-        Equip a specific item type for each so we 
-        can accurately predict the outcome for 
+        Equip a specific item type for each so we
+        can accurately predict the outcome for
         testing purposes
         """
         unit_1.equip_rock_weapon()

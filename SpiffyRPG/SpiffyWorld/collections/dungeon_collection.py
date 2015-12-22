@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 import logging as log
 
+
 class DungeonCollection:
+
     """
     Stores a lookup of dungeons
     """
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
         self.dungeons = []
@@ -22,18 +25,18 @@ class DungeonCollection:
 
     def _get_dungeon_lookup(self):
         cursor = self.db.cursor()
-   
-        cursor.execute("""SELECT 
-                          id, 
-                          name, 
-                          channel, 
-                          description, 
+
+        cursor.execute("""SELECT
+                          id,
+                          name,
+                          channel,
+                          description,
                           min_level,
                           max_level
                           FROM spiffyrpg_dungeons""")
 
         dungeons = cursor.fetchall()
-        
+
         cursor.close()
 
         dungeons_all = []

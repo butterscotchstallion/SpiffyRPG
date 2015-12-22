@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging as log
+import time
+
 
 class Item:
+
     """
     Item model - db interactions
     """
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
 
@@ -24,7 +27,7 @@ class Item:
 
     def get_items(self, **kwargs):
         cursor = self.db.cursor()
-        
+
         cursor.execute("""SELECT
                           i.id,
                           i.name,
@@ -60,7 +63,7 @@ class Item:
         Fetches item effects
         """
         cursor = self.db.cursor()
-        
+
         cursor.execute("""SELECT
                           e.id,
                           e.name,
@@ -81,7 +84,7 @@ class Item:
                           JOIN spiffyrpg_effects e ON e.id = ie.effect_id""")
 
         effects = cursor.fetchall()
-        
+
         cursor.close()
 
         lookup = {}
@@ -103,7 +106,7 @@ class Item:
         Fetches items for one or many units
         """
         cursor = self.db.cursor()
-        
+
         cursor.execute("""SELECT
                           i.id,
                           i.name,
@@ -124,7 +127,7 @@ class Item:
                           JOIN spiffyrpg_items i ON ui.item_id = i.id""")
 
         items = cursor.fetchall()
-        
+
         cursor.close()
 
         lookup = {}

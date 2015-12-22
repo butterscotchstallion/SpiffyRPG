@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 import logging as log
 
+
 class UnitTitleCollection:
+
     """
     Stores unit type titles based on stage/level
     """
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
         self.titles = []
@@ -22,7 +25,7 @@ class UnitTitleCollection:
 
     def _get_titles_lookup(self):
         cursor = self.db.cursor()
-        
+
         cursor.execute("""SELECT
                           t.unit_type_id,
                           t.required_level,

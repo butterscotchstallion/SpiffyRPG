@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+
 class UnitEffects:
+
     """
     Unit effects model
     """
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
         self.effects = {}
@@ -29,7 +32,7 @@ class UnitEffects:
         of the effect information
         """
         cursor = self.db.cursor()
-        
+
         cursor.execute("""SELECT
                           e.id,
                           ue.unit_id

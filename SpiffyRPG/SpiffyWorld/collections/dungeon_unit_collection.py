@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 from SpiffyWorld import Unit
 
+
 class DungeonUnitCollection:
+
     """
     Stores persistant units in a dungeon by the dungeon ID
     """
-
 
     def __init__(self, **kwargs):
         self.units = []

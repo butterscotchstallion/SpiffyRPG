@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import time
-from SpiffyWorld import Unit
 import logging as log
+import random
+
 
 class Dungeon:
+
     """
     Representation of a dungeon within the world
     """
+
     def __init__(self, **kwargs):
         dungeon = kwargs["dungeon"]
         self.units = dungeon["units"]
@@ -40,11 +43,12 @@ class Dungeon:
             pass
         except AssertionError:
             log.error("SpiffyRPG: Error starting periodic events")
-        
+
         if "max_level" in kwargs:
             self.max_level = kwargs["max_level"]
 
-            log.info("SpiffyRPG: creating dungeon with max level %s" % self.max_level)
+            log.info("SpiffyRPG: creating dungeon with max level %s" %
+                     self.max_level)
 
     def get_boss_units(self):
         return [unit for unit in self.units if unit.is_boss]
@@ -61,7 +65,8 @@ class Dungeon:
         log.info("SpiffyRPG: checking if %s has been cleared" % self.name)
 
         if dungeon_cleared:
-            xp_needed_this_level = self.unit_level.get_xp_for_level(player.level)
+            xp_needed_this_level = self.unit_level.get_xp_for_level(
+                player.level)
             xp = int(xp_needed_this_level / 4)
 
             player.add_experience(xp)
@@ -76,9 +81,9 @@ class Dungeon:
 
     def destroy(self):
         self.units = []
-        
+
         log.info("SpiffyRPG: destroying %s" % self.name)
-        
+
         try:
             """
             self.schedule.removeEvent("spawn_timer")
@@ -130,13 +135,14 @@ class Dungeon:
         Finds units in the dungeon with the Undead effect.
         In the future this could be expanded to consider
         other effects.
-        
+
         chance_for_chaos = random.randrange(1, 100) < 20
         if not chance_for_chaos:
             return
         """
-        
-        units = self.get_living_units_with_effect(effect_id=self.effect_id_undead)
+
+        units = self.get_living_units_with_effect(
+            effect_id=self.effect_id_undead)
 
         if len(units) > 0:
             """ Now find a living unit in the dungeon for an opponent """
@@ -167,7 +173,8 @@ class Dungeon:
                 self.battle.add_party_member(target)
                 self.battle.start()
             else:
-                log.info("SpiffyRPG: %s has nobody to party with" % attacker_title)
+                log.info("SpiffyRPG: %s has nobody to party with" %
+                         attacker_title)
         else:
             log.info("SpiffyRPG: no undead units!")
 
@@ -193,7 +200,8 @@ class Dungeon:
 
             self.populate(quantity)
         else:
-            log.info("SpiffyRPG: [%s] %s units present" % (self.name, live_unit_count))
+            log.info("SpiffyRPG: [%s] %s units present" %
+                     (self.name, live_unit_count))
 
     def start_dialogue_timer(self):
         log.info("SpiffyRPG: starting monster dialogue interval")
@@ -235,7 +243,8 @@ class Dungeon:
         """
         user_id = kwargs["user_id"]
 
-        unit = self.player_unit_collection.get_player_by_user_id(user_id=user_id)
+        unit = self.player_unit_collection.get_player_by_user_id(
+            user_id=user_id)
 
         if unit is not None:
             """
@@ -256,7 +265,8 @@ class Dungeon:
 
         self.dungeon_unit_collection = collections["dungeon_unit_collection"]
 
-        dungeon_units = self.dungeon_unit_collection.get_units_by_dungeon_id(self.id)
+        dungeon_units = self.dungeon_unit_collection.get_units_by_dungeon_id(
+            self.id)
 
         for unit in dungeon_units:
             self.add_unit(unit)
@@ -312,7 +322,7 @@ class Dungeon:
                 user_id = ircdb.users.getUserId(hostmask)
             except KeyError:
                 log.info("SpiffyRPG: %s is not registered." % nick)
-            
+
             """ Registered users only """
             if user_id is None:
                 continue
@@ -330,23 +340,26 @@ class Dungeon:
     def add_unit(self, unit):
         if unit not in self.units:
             items = unit.items
-            params = (unit.level, unit.get_name(), unit.get_title(), unit.get_hp(), self.name)
+            params = (
+                unit.level, unit.get_name(), unit.get_title(), unit.get_hp(), self.name)
 
             if unit.is_player:
                 msg = "SpiffyRPG: spawning a level %s player %s (%s) with %s HP in %s" % params
             else:
                 msg = "SpiffyRPG: spawning a level %s NPC: %s (%s) with %s HP in %s" % params
-                
+
             log.info(msg)
 
             self.units.append(unit)
         else:
-            log.info("SpiffyRPG: not adding duplicate unit %s" % (unit.get_name()))
+            log.info("SpiffyRPG: not adding duplicate unit %s" %
+                     (unit.get_name()))
 
     def remove_unit(self, unit):
         units = []
 
-        log.info("SpiffyRPG: [%s] Unit %s#%s died" % (self.name, unit.get_title(), unit.id))
+        log.info("SpiffyRPG: [%s] Unit %s#%s died" %
+                 (self.name, unit.get_title(), unit.id))
 
         for u in self.units:
             if unit.id != u.id:
@@ -368,7 +381,7 @@ class Dungeon:
         lower_unit_1_name = unit_name_1.lower()
         lower_unit_2_name = unit_name_2.lower()
         unit_name_match = lower_unit_1_name.startswith(lower_unit_2_name)
-        
+
         return unit_name_match
 
     def unit_nick_matches(self, unit_nick_1, unit_nick_2):
@@ -388,9 +401,10 @@ class Dungeon:
 
     def get_living_unit_by_name(self, target_unit_name):
         living_units = [unit for unit in self.units if unit.is_alive()]
-        
+
         for unit in living_units:
-            unit_name_matches = self.unit_name_matches(unit.get_name(), target_unit_name)
+            unit_name_matches = self.unit_name_matches(
+                unit.get_name(), target_unit_name)
             nick_matches = self.unit_nick_matches(unit.nick, target_unit_name)
 
             if unit_name_matches or nick_matches:
@@ -400,7 +414,8 @@ class Dungeon:
         dead_units = [unit for unit in self.units if unit.is_dead()]
 
         for unit in dead_units:
-            unit_name_matches = self.unit_name_matches(unit.get_name(), target_unit_name)
+            unit_name_matches = self.unit_name_matches(
+                unit.get_name(), target_unit_name)
             nick_matches = self.unit_nick_matches(unit.nick, target_unit_name)
 
             if unit_name_matches or nick_matches:
@@ -507,7 +522,7 @@ class Dungeon:
                     if unit.is_alive():
                         if unit.is_undead():
                             dist["npc"]["friendly"]["undead"] += 1
-                        
+
                         dist["npc"]["friendly"]["living"] += 1
                     else:
                         dist["npc"]["friendly"]["dead"] += 1

@@ -4,9 +4,11 @@ import unittest
 from SpiffyWorld.collections import ItemCollection
 from SpiffyWorld import Item
 from uuid import uuid4
-from random import randrange, choice
+from random import choice
+
 
 class TestItemCollection(unittest.TestCase):
+
     def _get_item(self, **kwargs):
         item_id = uuid4()
         item_name = "Item%s" % item_id
@@ -39,7 +41,7 @@ class TestItemCollection(unittest.TestCase):
         return item
 
     def test_add_item(self):
-        item = self._get_item()        
+        item = self._get_item()
         collection = ItemCollection()
         collection.add(item)
 
@@ -73,7 +75,7 @@ class TestItemCollection(unittest.TestCase):
 
     def test_get_base_items(self):
         base_item = self._get_item(is_permanent=True)
-        
+
         collection = ItemCollection()
         collection.add(base_item)
 

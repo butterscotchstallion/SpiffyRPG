@@ -2,11 +2,14 @@
 # -*- coding: utf-8 -*-
 import time
 
+
 class Effect:
+
     """
     Representation of an effect. Effects can alter the behavior
     or stats of a unit and can have a duration or be permanent
     """
+
     def __init__(self, **kwargs):
         effect = kwargs["effect"]
         self.id = effect["id"]

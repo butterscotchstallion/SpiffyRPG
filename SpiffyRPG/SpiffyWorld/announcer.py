@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 from SpiffyWorld import UnitLevel
 
+
 class Announcer(object):
+
     """
     There are two types of announcements:
 

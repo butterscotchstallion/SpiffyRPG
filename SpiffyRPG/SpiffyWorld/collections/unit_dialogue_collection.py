@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging as log
 from SpiffyWorld import UnitDialogue
+import random
+
 
 class UnitDialogueCollection:
+
     """
     Representation of persisted dialogues on a unit
     """
+
     def __init__(self, **kwargs):
         self.dialogue = []
 
@@ -31,4 +34,5 @@ class UnitDialogueCollection:
         return dialogue
 
     def get_dialogue_by_dialogue_id_list(self, dialogue_id_list):
-        return [dialogue for dialogue in self.dialogue if dialogue.id in dialogue_id_list]
+        return [dialogue for dialogue in self.dialogue
+                if dialogue.id in dialogue_id_list]

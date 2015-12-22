@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 import unittest
 
-from SpiffyWorld import Battle, Battlemaster, Unit, ItemGenerator, UnitGenerator, \
-InvalidCombatantException
+from SpiffyWorld import Battle, Battlemaster, ItemGenerator, \
+    UnitGenerator, InvalidCombatantException
+
 
 class TestBattlemaster(unittest.TestCase):
+
     def _make_item(self, **kwargs):
         item_type = kwargs["item_type"]
 
@@ -167,8 +169,10 @@ class TestBattlemaster(unittest.TestCase):
 
             self.assertEqual(len(battle.rounds), 1)
 
-            rounds_won_for_combatant_1 = battle.get_rounds_won(combatant=combatant_1)
-            rounds_won_for_combatant_2 = battle.get_rounds_won(combatant=combatant_2)
+            rounds_won_for_combatant_1 = battle.get_rounds_won(
+                combatant=combatant_1)
+            rounds_won_for_combatant_2 = battle.get_rounds_won(
+                combatant=combatant_2)
 
             self.assertEqual(rounds_won_for_combatant_1, 1)
             self.assertEqual(rounds_won_for_combatant_2, 0)
@@ -190,8 +194,10 @@ class TestBattlemaster(unittest.TestCase):
 
             self.assertEqual(len(battle.rounds), 2)
 
-            rounds_won_for_combatant_1 = battle.get_rounds_won(combatant=combatant_1)
-            rounds_won_for_combatant_2 = battle.get_rounds_won(combatant=combatant_2)
+            rounds_won_for_combatant_1 = battle.get_rounds_won(
+                combatant=combatant_1)
+            rounds_won_for_combatant_2 = battle.get_rounds_won(
+                combatant=combatant_2)
 
             self.assertEqual(rounds_won_for_combatant_1, 1)
             self.assertEqual(rounds_won_for_combatant_2, 1)
@@ -206,7 +212,7 @@ class TestBattlemaster(unittest.TestCase):
 
                 """
                 Rounds should not change because adding a new
-                round with the same attacker as last round 
+                round with the same attacker as last round
                 should not be possible
                 """
                 self.assertEqual(len(battle.rounds), 2)
@@ -228,8 +234,10 @@ class TestBattlemaster(unittest.TestCase):
 
             self.assertEqual(len(battle.rounds), 3)
 
-            rounds_won_for_combatant_1 = battle.get_rounds_won(combatant=combatant_1)
-            rounds_won_for_combatant_2 = battle.get_rounds_won(combatant=combatant_2)
+            rounds_won_for_combatant_1 = battle.get_rounds_won(
+                combatant=combatant_1)
+            rounds_won_for_combatant_2 = battle.get_rounds_won(
+                combatant=combatant_2)
 
             self.assertEqual(rounds_won_for_combatant_1, 2)
             self.assertEqual(rounds_won_for_combatant_2, 1)

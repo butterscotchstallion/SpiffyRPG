@@ -2,15 +2,15 @@
 # -*- coding: utf-8 -*-
 from SpiffyWorld import Item
 
+
 class ItemBuilder:
 
     """
     Builds an Item given a list of item models
     and ItemCollection to look up items and such
     """
+
     def build_items(self, **kwargs):
-        item_collection = kwargs["item_collection"]
-        effect_collection = kwargs["effect_collection"]
         item_effects_map = kwargs["item_effects_map"]
         item_models = kwargs["item_models"]
         items = []
@@ -33,5 +33,5 @@ class ItemBuilder:
 
     def build_item(self, **kwargs):
         item_model = kwargs["item_model"]
-        
+
         return Item(item=item_model)

@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import time
+
 
 class Unit:
+
     """
     Unit model
     """
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
-    
+
     def add_experience(self, unit_id, experience):
         cursor = self.db.cursor()
         params = (experience, unit_id)
@@ -20,8 +24,6 @@ class Unit:
         cursor.close()
 
     def set_title(self, unit_id, title):
-        log.info("SpiffyRPG: %s sets title to %s" % (old_name, self.name))
-
         cursor = self.db.cursor()
         params = (title, unit_id)
 
@@ -34,7 +36,7 @@ class Unit:
 
     def get_units(self, **kwargs):
         cursor = self.db.cursor()
-        
+
         query = """SELECT
                    u.id,
                    u.unit_type_id,
@@ -48,7 +50,8 @@ class Unit:
                    ELSE 1
                    END AS is_boss
                    FROM spiffyrpg_units u
-                   JOIN spiffyrpg_unit_types utypes ON utypes.id = u.unit_type_id
+                   JOIN spiffyrpg_unit_types utypes ON \
+                   utypes.id = u.unit_type_id
                    LEFT JOIN spiffyrpg_dungeon_boss_units b ON b.unit_id = u.id
                    WHERE 1=1
                    GROUP BY u.id"""
@@ -57,7 +60,7 @@ class Unit:
 
         units = cursor.fetchall()
         cursor.close()
-        
+
         return units
 
     def register_new_player(self, user_id, char_name, unit_type_id):

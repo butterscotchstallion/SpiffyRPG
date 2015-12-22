@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+
 class ItemEffects:
+
     """
     Item effects model
     """
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
 
@@ -26,7 +29,7 @@ class ItemEffects:
         Fetches effects for one or many items
         """
         cursor = self.db.cursor()
-        
+
         cursor.execute("""SELECT
                           ie.item_id,
                           ie.effect_id

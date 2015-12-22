@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+
 class UnitItems:
+
     """
     Unit items model
     """
+
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
 
@@ -26,7 +29,7 @@ class UnitItems:
         Fetches items for one or many units
         """
         cursor = self.db.cursor()
-        
+
         cursor.execute("""SELECT
                           ui.item_id,
                           ui.unit_id

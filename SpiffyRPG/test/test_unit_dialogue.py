@@ -4,7 +4,9 @@ import unittest
 from SpiffyWorld import UnitDialogue
 from uuid import uuid4
 
+
 class TestUnitDialogue(unittest.TestCase):
+
     def _make_dialogue(self):
         dialogue_id = uuid4()
         dialogue_context = "sup"

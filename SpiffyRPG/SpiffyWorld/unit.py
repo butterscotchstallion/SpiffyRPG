@@ -16,8 +16,6 @@ class Unit:
     """
     Basis for units in a dungeon
     """
-
-
     UNIT_TYPE_ZEN_MASTER = 1
     UNIT_TYPE_HACKER = 2
     UNIT_TYPE_TROLL = 3
@@ -34,7 +32,7 @@ class Unit:
         self.winning_streak = []
         self.raised_units = []
         self.battles = []
-        self.units_that_have_struck_me = []        
+        self.units_that_have_struck_me = []
 
         """
         Build unit from db info
@@ -68,7 +66,7 @@ class Unit:
         self.title = self.unit_type_name
 
         """
-        If the unit has a non-zero user_id, then they are a player. 
+        If the unit has a non-zero user_id, then they are a player.
         When the unit is a NPC then their level depends
         on the dungeon min/max.
         """
@@ -145,7 +143,7 @@ class Unit:
 
         if not items_match:
             return False
-        
+
         """
         Test effects
         """
@@ -246,7 +244,7 @@ class Unit:
     def raise_dead(self, **kwargs):
         """
         Raise dead is a spell, so begin_casting_raise_dead is
-        called before this to symbolize a spell being cast. 
+        called before this to symbolize a spell being cast.
         If apply_damage is called before this method, then
         the spell is "interrupted". Returns True if the spell
         was cast successfully.
@@ -279,7 +277,7 @@ class Unit:
 
     def add_inventory_item(self, **kwargs):
         item = kwargs["item"]
-        
+
         if not self.has_item(item=item):
             """
             Add to inventory
@@ -365,7 +363,7 @@ class Unit:
     def is_on_hot_streak(self):
         """
         Determines if unit is on a hot streak. A streak is
-        at least three consecutive victories. Returns the 
+        at least three consecutive victories. Returns the
         streak count, if any.
         """
         streak_count = len(self.winning_streak)
@@ -418,9 +416,9 @@ class Unit:
             reason += " is not hostile (%s)" % unit.combat_status
             return reason
 
-        """ 
+        """
         Check if we're currently in battle with something other than
-        this unit 
+        this unit
         """
         self_battles = self.get_incomplete_battles()
         battles_with_others = [battle for battle in self_battles
@@ -527,9 +525,9 @@ class Unit:
                 else:
                     if self.is_stage_one() and item.is_rock():
                         continue
-                
+
                 self.items.append(item)
-  
+
     def get_stage_by_level(self, **kwargs):
         stage = 1
         stage_two_min_level = 3
@@ -573,7 +571,7 @@ class Unit:
     def equip_item_by_name(self, **kwargs):
         item_name = kwargs["item_name"]
         inventory_item = self.get_item_from_inventory_by_name(item_name=item_name)
-        
+
         if inventory_item is not None:
             self.equip_item(item=inventory_item)
 
@@ -636,7 +634,7 @@ class Unit:
 
     def get_equipped_weapon(self):
         """
-        If the player only has one weapon, then they're 
+        If the player only has one weapon, then they're
         always going to equip that.
         """
         return self.equipped_weapon
@@ -695,7 +693,7 @@ class Unit:
         items = []
         stage = self.get_stage_by_level(level=self.level)
         unit_type = "NPC"
-        
+
         if self.is_player:
             unit_type = "PC"
 
@@ -740,7 +738,7 @@ class Unit:
         """
         if "avoid_weapon_type" in kwargs:
             weapon_types = [wtype for wtype in all_types if wtype != kwargs["avoid_weapon_type"]]
-        
+
         items = [item for item in self.items if item.item_type in weapon_types]
 
         if len(items) > 0:
@@ -854,7 +852,7 @@ class Unit:
             base_factor += 5
 
         base_hp = self.level * base_factor
-        
+
         return base_hp
 
     def get_effects(self):
@@ -924,7 +922,7 @@ class Unit:
 
         if effect.hp_adjustment is not None:
             self.adjust_hp(effect)
-        
+
         if effect.name == "Undead":
             self.on_effect_undead_applied()
 

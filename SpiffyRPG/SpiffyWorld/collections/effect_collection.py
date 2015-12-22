@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging as log
 from SpiffyWorld import Effect
 
+
 class EffectCollection:
+
     """
     Effects catalog
     """
+
     def __init__(self, **kwargs):
         self.effects = []
 

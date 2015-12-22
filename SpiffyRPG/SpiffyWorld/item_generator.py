@@ -1,15 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from uuid import uuid4
-from random import randrange, choice
+from random import choice
 from SpiffyWorld import Item
 
+
 class ItemGenerator:
+
     """
     Generates items dynamically.
     TODO: use ItemBuilder so this can make
     items with effects
     """
+
     def generate(self, **kwargs):
         item_id = uuid4()
         item_name = "TestItem-%s" % item_id

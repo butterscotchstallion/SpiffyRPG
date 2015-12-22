@@ -3,7 +3,9 @@
 import unittest
 from SpiffyWorld import Effect
 
+
 class TestEffect(unittest.TestCase):
+
     def _make_effect(self, **kwargs):
         effect_name = kwargs["effect_name"]
         effect_id = 1

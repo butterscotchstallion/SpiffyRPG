@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+
 class UnitLevel:
+
     """
     Functionality related to how much xp a unit has
     """
+
     def get_level_by_xp(self, total_experience):
         player_level = 1
         levels = self.get_levels()
- 
+
         for level, experience_needed in levels:
             if total_experience > experience_needed:
                 player_level = level
@@ -19,9 +23,8 @@ class UnitLevel:
         return player_level
 
     def get_xp_for_level(self, player_level):
-        xp = 1
         levels = self.get_levels()
- 
+
         for level, experience_needed in levels:
             if level == player_level:
                 return experience_needed
@@ -38,7 +41,7 @@ class UnitLevel:
         levels = self.get_levels()
 
         for xp_level, req_xp in levels:
-            if xp_level == (level+1):
+            if xp_level == (level + 1):
                 xp = req_xp
                 break
 

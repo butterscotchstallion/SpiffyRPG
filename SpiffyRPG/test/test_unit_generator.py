@@ -18,4 +18,3 @@ class TestUnitGenerator(unittest.TestCase):
         unit = unit_gen.generate(unit_name=unit_name)
 
         self.assertEqual(unit.get_name(), unit_name)
-

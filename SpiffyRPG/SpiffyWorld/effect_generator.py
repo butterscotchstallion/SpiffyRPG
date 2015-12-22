@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from uuid import uuid4
-from random import randrange, choice
+from random import choice
 from SpiffyWorld import Effect
-import time
+
 
 class EffectGenerator:
+
     """
     Generates units dynamically.
     TODO: use UnitBuilder so this can make
     items with effects
     """
+
     def generate(self, **kwargs):
         effect_id = uuid4()
         operators = ("+", "-", "*", "/")
@@ -25,12 +27,9 @@ class EffectGenerator:
         if "operator" in kwargs:
             operator = kwargs["operator"]
 
-        if "combat_status" in kwargs:
-            combat_status = kwargs["combat_status"]
-        
         if "effect_name" in kwargs and kwargs["effect_name"] is not None:
             effect_name = kwargs["effect_name"]
-        
+
         if "hp_adjustment" in kwargs:
             hp_adjustment = kwargs["hp_adjustment"]
 
