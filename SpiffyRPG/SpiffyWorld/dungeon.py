@@ -4,6 +4,8 @@ import time
 import logging as log
 import random
 
+GAME_CHANNEL = "#spiffyrpg"
+
 
 class Dungeon:
 
@@ -28,21 +30,6 @@ class Dungeon:
         log.info("SpiffyRPG: initializing dungeon #%s - %s" % params)
 
         self.announcer = kwargs["announcer"]
-
-        """
-        Apparently scheduling these events can raise
-        AssertionError even when you remove them first!
-        """
-        try:
-            """
-            self.start_dialogue_timer()
-            self.start_spawn_timer()
-            self.start_chaos_timer()
-            self.start_player_regen_timer()
-            """
-            pass
-        except AssertionError:
-            log.error("SpiffyRPG: Error starting periodic events")
 
         if "max_level" in kwargs:
             self.max_level = kwargs["max_level"]
@@ -78,21 +65,6 @@ class Dungeon:
                                            xp=xp)
         else:
             log.info("SpiffyRPG: %s has %s units" % (self.name, num_units))
-
-    def destroy(self):
-        self.units = []
-
-        log.info("SpiffyRPG: destroying %s" % self.name)
-
-        try:
-            """
-            self.schedule.removeEvent("spawn_timer")
-            self.schedule.removeEvent("dialogue_timer")
-            self.schedule.removeEvent("chaos_timer")
-            """
-            self.schedule.removeEvent("player_regen_timer")
-        except:
-            pass
 
     def start_player_regen_timer(self):
         log.info("SpiffyRPG: starting player regen interval")
@@ -178,41 +150,6 @@ class Dungeon:
         else:
             log.info("SpiffyRPG: no undead units!")
 
-    def start_spawn_timer(self):
-        log.info("SpiffyRPG: starting monster spawn interval")
-
-        spawn_interval = 300
-
-        self.schedule.addPeriodicEvent(self.check_population,
-                                       spawn_interval,
-                                       name="spawn_timer",
-                                       now=False)
-
-    def check_population(self):
-        units = self.get_living_units()
-        live_unit_count = len(units)
-
-        if live_unit_count < self.max_units:
-            log.info("%s is under population cap %s" %
-                     (live_unit_count, self.max_units))
-
-            quantity = self.max_units - live_unit_count
-
-            self.populate(quantity)
-        else:
-            log.info("SpiffyRPG: [%s] %s units present" %
-                     (self.name, live_unit_count))
-
-    def start_dialogue_timer(self):
-        log.info("SpiffyRPG: starting monster dialogue interval")
-
-        dialogue_interval = 3600
-
-        self.schedule.addPeriodicEvent(self.random_unit_dialogue,
-                                       dialogue_interval,
-                                       name="dialogue_timer",
-                                       now=False)
-
     def random_unit_dialogue(self):
         """ Add random chance here """
         units = self.get_living_units()
@@ -257,96 +194,18 @@ class Dungeon:
 
                 return unit
 
-    def populate(self, **kwargs):
-        """
-        Permanent units in this dungeon
-        """
-        collections = kwargs["collections"]
-
-        self.dungeon_unit_collection = collections["dungeon_unit_collection"]
-
-        dungeon_units = self.dungeon_unit_collection.get_units_by_dungeon_id(
-            self.id)
-
-        for unit in dungeon_units:
-            self.add_unit(unit)
-
-        """
-        Unlike NPCs, players have a user_id which corresponds to their Limnoria
-        user ID
-        """
-        user_lookup = self.get_user_lookup_from_channel()
-        self.player_unit_collection = PlayerUnitCollection(db=self.db)
-
-        """ Get players """
-        player_units = self.player_unit_collection.get_players()
-
-        for player in player_units:
-            if self._is_nick_in_channel(self.irc, player.nick):
-                self.add_unit(player)
-
-    def get_user_lookup_from_channel(self):
-        """
-        Add players to the dungeon by iterating the nick list
-        and checking for user ids.
-        """
-        nicks = self.irc.state.channels[GAME_CHANNEL].users
-        ignoreMe = self.collections["ignore_nicks"]
-        look_up_user_ids = {}
-        look_up_nicks = {}
-        player_user_id_list = []
-
-        for nick in nicks:
-            if not nick:
-                continue
-
-            """ Skip bot nick """
-            if nick == self.irc.nick:
-                continue
-
-            """ Skip ignored nicks """
-            if nick in ignoreMe:
-                continue
-
-            try:
-                hostmask = self.irc.state.nickToHostmask(nick)
-            except KeyError:
-                hostmask = None
-
-            user_id = None
-
-            if hostmask is None:
-                continue
-
-            try:
-                user_id = ircdb.users.getUserId(hostmask)
-            except KeyError:
-                log.info("SpiffyRPG: %s is not registered." % nick)
-
-            """ Registered users only """
-            if user_id is None:
-                continue
-
-            look_up_nicks[nick] = user_id
-            look_up_user_ids[user_id] = nick
-            player_user_id_list.append(str(user_id))
-
-        return {
-            "look_up_nicks": look_up_nicks,
-            "look_up_user_ids": look_up_user_ids,
-            "player_user_id_list": player_user_id_list
-        }
-
     def add_unit(self, unit):
         if unit not in self.units:
-            items = unit.items
-            params = (
-                unit.level, unit.get_name(), unit.get_title(), unit.get_hp(), self.name)
+            params = (unit.level, unit.get_name(), unit.get_title(),
+                      unit.get_hp(), self.name)
+
+            msg_prefix = "SpiffyRPG: spawning a level "
+            msg = msg_prefix
 
             if unit.is_player:
-                msg = "SpiffyRPG: spawning a level %s player %s (%s) with %s HP in %s" % params
+                msg += "%s player %s (%s) with %s HP in %s" % params
             else:
-                msg = "SpiffyRPG: spawning a level %s NPC: %s (%s) with %s HP in %s" % params
+                msg += "%s NPC: %s (%s) with %s HP in %s" % params
 
             log.info(msg)
 
@@ -387,7 +246,7 @@ class Dungeon:
     def unit_nick_matches(self, unit_nick_1, unit_nick_2):
         lower_unit_1_nick = unit_nick_1.lower()
         lower_unit_2_nick = unit_nick_2.lower()
-        nick_match = unit_nick_1.startswith(lower_unit_2_nick)
+        nick_match = lower_unit_1_nick.startswith(lower_unit_2_nick)
 
         return nick_match
 
@@ -422,10 +281,12 @@ class Dungeon:
                 return unit
 
     def get_living_players(self):
-        return [unit for unit in self.units if unit.is_player and unit.is_alive()]
+        return [unit for unit in self.units
+                if unit.is_player and unit.is_alive()]
 
     def get_dead_players(self):
-        return [unit for unit in self.units if unit.is_player and not unit.is_alive()]
+        return [unit for unit in self.units
+                if unit.is_player and not unit.is_alive()]
 
     def get_living_hostiles_at_stage(self, **kwargs):
         stage = kwargs["stage"]
