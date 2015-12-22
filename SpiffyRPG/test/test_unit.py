@@ -3,14 +3,16 @@
 import unittest
 from uuid import uuid4
 from random import randrange, choice
-from SpiffyWorld import Unit, UnitLevel, Item, UnitBuilder, Effect, \
-                        UnitGenerator, EffectGenerator
+from SpiffyWorld import Unit, UnitLevel, Item, UnitBuilder, \
+    UnitGenerator, EffectGenerator
 from SpiffyWorld.collections import ItemCollection
 from SpiffyWorld.models import UnitItems
 
 EFFECT_UNDEAD_BONUS = 25
 
+
 class TestUnit(unittest.TestCase):
+
     def _get_item(self, **kwargs):
         item_id = uuid4()
         item_name = "Item%s" % item_id
@@ -83,17 +85,17 @@ class TestUnit(unittest.TestCase):
 
     def _make_undead_effect(self):
         effect_name = "Undead"
-
+        ud_bonus = EFFECT_UNDEAD_BONUS
         return self._make_effect(effect_name=effect_name,
-                                 outgoing_damage_adjustment=EFFECT_UNDEAD_BONUS)
+                                 outgoing_damage_adjustment=ud_bonus)
 
     def _make_effect(self, **kwargs):
         hp_adjustment = 0
-        incoming_damage_adjustment = 0
-        outgoing_damage_adjustment = 0
+        incoming_damage = 0
+        outgoing_damage = 0
         stacks = 1
         operator = "+"
-        effect_generator = EffectGenerator()
+        eg = EffectGenerator()
         effect_name = None
 
         if "effect_name" in kwargs:
@@ -109,17 +111,17 @@ class TestUnit(unittest.TestCase):
             stacks = kwargs["stacks"]
 
         if "incoming_damage_adjustment" in kwargs:
-            incoming_damage_adjustment = kwargs["incoming_damage_adjustment"]
+            incoming_damage = kwargs["incoming_damage_adjustment"]
 
         if "outgoing_damage_adjustment" in kwargs:
-            outgoing_damage_adjustment = kwargs["outgoing_damage_adjustment"]
+            outgoing_damage = kwargs["outgoing_damage_adjustment"]
 
-        effect = effect_generator.generate(operator=operator,
-                                           hp_adjustment=hp_adjustment,
-                                           effect_name=effect_name,
-                                           stacks=stacks,
-                                           incoming_damage_adjustment=incoming_damage_adjustment,
-                                           outgoing_damage_adjustment=outgoing_damage_adjustment)
+        effect = eg.generate(operator=operator,
+                             hp_adjustment=hp_adjustment,
+                             effect_name=effect_name,
+                             stacks=stacks,
+                             incoming_damage_adjustment=incoming_damage,
+                             outgoing_damage_adjustment=outgoing_damage)
         return effect
 
     def test_get_xp_remaining_until_next_level_percentage(self):
@@ -131,12 +133,12 @@ class TestUnit(unittest.TestCase):
         level_42_xp = unit_level.get_xp_for_level(42)
         ten_percent_of_total_xp = level_42_xp * .10
         unit.experience = level_42_xp - ten_percent_of_total_xp
-        current_xp = unit.experience
         total_xp = level_42_xp
 
         # Test 90%
         expected_percentage = 90
-        actual_percentage = unit.get_xp_remaining_until_next_level_percentage(total_xp)
+        actual_percentage = unit.get_xp_remaining_until_next_level_percentage(
+            total_xp)
 
         self.assertEqual(expected_percentage, actual_percentage)
 
@@ -144,18 +146,18 @@ class TestUnit(unittest.TestCase):
         expected_fifty_percentage = 50
         fifty_percent_of_total_xp = level_42_xp * .50
         unit.experience = level_42_xp - fifty_percent_of_total_xp
-        actual_fifty_percentage = unit.get_xp_remaining_until_next_level_percentage(total_xp)
+        a_fifty = unit.get_xp_remaining_until_next_level_percentage(total_xp)
 
-        self.assertEqual(expected_fifty_percentage, actual_fifty_percentage)
+        self.assertEqual(expected_fifty_percentage, a_fifty)
 
         # Test xp over max level
         expected_one_twenty_percent = 120
         max_level_xp = unit_level.get_xp_for_max_level()
         twenty_percent_of_max = max_level_xp * .20
         unit.experience = max_level_xp + twenty_percent_of_max
-        actual_120_percentage = unit.get_xp_remaining_until_next_level_percentage(max_level_xp)
+        a_120 = unit.get_xp_remaining_until_next_level_percentage(max_level_xp)
 
-        self.assertEqual(expected_one_twenty_percent, actual_120_percentage)
+        self.assertEqual(expected_one_twenty_percent, a_120)
 
     def test_get_hp_percentage(self):
         unit_generator = UnitGenerator()
@@ -172,7 +174,8 @@ class TestUnit(unittest.TestCase):
         """
         hp_adjustment = 10
         operator = "-"
-        adjust_hp_effect = self._make_effect(operator=operator, hp_adjustment=hp_adjustment)
+        adjust_hp_effect = self._make_effect(
+            operator=operator, hp_adjustment=hp_adjustment)
 
         self.assertEqual(adjust_hp_effect.hp_adjustment, hp_adjustment)
         self.assertEqual(adjust_hp_effect.operator, operator)
@@ -189,10 +192,10 @@ class TestUnit(unittest.TestCase):
         Reset HP and try another percentage
         """
         unit.hp = unit.calculate_hp()
-        big_hp_adjustment = 50
+        big_hp = 50
         operator = "-"
         big_adjust_hp_effect = self._make_effect(operator=operator,
-                                                 hp_adjustment=big_hp_adjustment)
+                                                 hp_adjustment=big_hp)
         unit.apply_effect(big_adjust_hp_effect)
 
         expected_big_adjusted = 50
@@ -244,7 +247,7 @@ class TestUnit(unittest.TestCase):
 
             for c_item in item_collection.items:
                 unit_items_list.append({"item_id": c_item.id,
-                                       "unit_id": unit_id})
+                                        "unit_id": unit_id})
                 unit_model["items"].append(c_item)
 
             unit = Unit(unit=unit_model)
@@ -328,7 +331,8 @@ class TestUnit(unittest.TestCase):
         """
         self.assertIn(hit_info["attacker_weapon"], unit_1.items)
 
-        self.assertTrue(hit_info["damage"] >= unit_1.get_min_base_attack_damage())
+        self.assertTrue(
+            hit_info["damage"] >= unit_1.get_min_base_attack_damage())
 
         # Upper bound is multiplied by two because of critical strikes
         damage_upper_bound = unit_1.get_max_base_attack_damage() * 2
@@ -340,8 +344,10 @@ class TestUnit(unittest.TestCase):
         with scissors, we know that is_hit should be True
         """
         self.assertTrue(hit_info["is_hit"])
-        self.assertEqual(hit_info["attacker_weapon"], unit_1.get_equipped_weapon())
-        self.assertEqual(hit_info["target_weapon"], unit_2.get_equipped_weapon())
+        self.assertEqual(
+            hit_info["attacker_weapon"], unit_1.get_equipped_weapon())
+        self.assertEqual(
+            hit_info["target_weapon"], unit_2.get_equipped_weapon())
         self.assertEqual(hit_info["hit_word"], "crushes")
 
         unit_2_is_alive = unit_2.is_alive()
