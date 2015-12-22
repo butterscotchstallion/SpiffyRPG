@@ -1,9 +1,17 @@
 # -*- coding: utf-8 -*-
 import time
 
+class InvalidCombatantException(ValueError):
+    """
+    This exception represents scenarios where the combatants
+    are the same or dead or some other condition that might
+    prevent the combatants from battling.
+    """
+    def __init__(self, ex_msg):
+        ex_msg = "One or more combatants is not valid."
+        ValueError.__init__(self, ex_msg)
+
 class Battle:
-
-
     """
     A battle between two units
     """
@@ -58,12 +66,12 @@ class Battle:
             if not attacker.is_alive():
                 ex_msg = "Cannot add round: Unit %s is dead." % \
                           attacker.get_name()
-                raise ValueError(ex_msg)
+                raise InvalidCombatantException(ex_msg)
 
             if not target.is_alive():
                 ex_msg = "Cannot add round: Unit %s is dead." % \
                           target.get_name()
-                raise ValueError(ex_msg)
+                raise InvalidCombatantException(ex_msg)
 
             """
             Check to make sure units are not attacking twice
@@ -90,7 +98,7 @@ class Battle:
         if not combatant.is_alive():
             params = (combatant.name, combatant.get_hp())
             msg = "Cannot add dead unit to battle: %s (%s HP)" % params
-            raise ValueError(msg)
+            raise InvalidCombatantException(msg)
 
         if combatant not in self.combatants:
             self.combatants.append(combatant)
@@ -107,3 +115,4 @@ class Battle:
                 rounds_won += 1
 
         return rounds_won
+

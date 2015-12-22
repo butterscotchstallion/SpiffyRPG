@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from SpiffyWorld import Battle
+from SpiffyWorld import Battle, InvalidCombatantException
 
 class Battlemaster:
     """
@@ -19,12 +19,15 @@ class Battlemaster:
 
         for unit in battle.combatants:
             if self.is_combatant_in_battle(combatant=unit):
-                raise ValueError("Unit %s is currently engaged in battle!" % unit.get_name())
+                ex_msg = "Unit %s is currently engaged in battle!" % \
+                          unit.get_name()
+                raise InvalidCombatantException(ex_msg)
 
         self.battles.append(battle)
 
     def is_combatant_in_battle(self, **kwargs):
-        is_in_battle = self.get_battle_by_combatant(combatant=kwargs["combatant"])
+        combatant = kwargs["combatant"]
+        is_in_battle = self.get_battle_by_combatant(combatant=combatant)
 
         return is_in_battle is not None
 

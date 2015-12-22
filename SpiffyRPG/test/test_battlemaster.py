@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import unittest
 
-from SpiffyWorld import Battle, Battlemaster, Unit, ItemGenerator, UnitGenerator
+from SpiffyWorld import Battle, Battlemaster, Unit, ItemGenerator, UnitGenerator, \
+InvalidCombatantException
 
 class TestBattlemaster(unittest.TestCase):
     def _make_item(self, **kwargs):
@@ -15,6 +16,40 @@ class TestBattlemaster(unittest.TestCase):
         unit_generator = UnitGenerator()
 
         return unit_generator.generate()
+
+    def test_send_challenge(self):
+        battle = Battle()
+        battlemaster = Battlemaster()
+
+        unit_charlie = self._make_unit(is_player=True, level=5)
+        unit_omega = self._make_unit(is_player=True, level=5)
+
+        battle.add_combatant(combatant=unit_charlie)
+        battle.add_combatant(combatant=unit_omega)
+
+        battlemaster.add_battle(battle=battle)
+
+        attacker_weapon = self._make_item(item_type="lizard")
+        target_weapon = self._make_item(item_type="spock")
+
+        unit_charlie.equip_item(item=attacker_weapon)
+        unit_omega.equip_item(item=target_weapon)
+
+        try:
+            hit_info = unit_charlie.attack(target=unit_omega)
+
+            battle.add_round(attacker=unit_charlie,
+                             target=unit_omega,
+                             hit_info=hit_info)
+        except InvalidCombatantException:
+            """
+            In the event of an InvalidCombatantException,
+            one of the combatants is dead. Since unit_omega
+            was the target of attack we can assume that in
+            this scenario that unit is dead. Let's verify that.
+            """
+            self.assertTrue(unit_omega.is_dead())
+            self.assertTrue(unit_charlie.is_alive())
 
     def test_cannot_start_battle_with_no_combatants(self):
         battle = Battle()
@@ -60,10 +95,10 @@ class TestBattlemaster(unittest.TestCase):
         another_battle.add_combatant(unit_delta)
 
         """
-        Attempting to do this should raise ValueError
+        Attempting to do this should raise InvalidCombatantException
         because two of the combatants are in battle.
         """
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InvalidCombatantException):
             battlemaster.add_battle(battle=another_battle)
 
         self.assertEqual(len(battlemaster.battles), 1)
@@ -75,7 +110,7 @@ class TestBattlemaster(unittest.TestCase):
 
         combatant_1.kill()
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(InvalidCombatantException):
             battle.add_combatant(combatant_1)
 
         battle.add_combatant(combatant_2)
@@ -158,7 +193,7 @@ class TestBattlemaster(unittest.TestCase):
             """
             Test that units cannot attack twice in a row
             """
-            with self.assertRaises(ValueError):
+            with self.assertRaises(InvalidCombatantException):
                 battle.add_round(attacker=combatant_2,
                                  target=combatant_1,
                                  hit_info=hit_info)
@@ -195,16 +230,16 @@ class TestBattlemaster(unittest.TestCase):
 
             """
             Make sure we can't add a new round and that
-            attempting to do so will raise a ValueError
+            attempting to do so will raise a InvalidCombatantException
             """
-            with self.assertRaises(ValueError):
+            with self.assertRaises(InvalidCombatantException):
                 battle.add_round(attacker=combatant_1,
                                  target=combatant_2,
                                  hit_info=hit_info)
 
                 self.assertEqual(len(battle.rounds), 3)
 
-        except ValueError:
+        except InvalidCombatantException:
             """
             If we're here, it means that one of the combatants died
             before three rounds were over. This is quite possible, since

@@ -1,4 +1,5 @@
 from .battle import Battle
+from .battle import InvalidCombatantException
 from .battlemaster import Battlemaster
 from .unit import Unit
 from .dungeon import Dungeon
