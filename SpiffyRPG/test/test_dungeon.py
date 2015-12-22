@@ -181,15 +181,7 @@ class TestDungeon(unittest.TestCase):
         hostile_living_npc = unit_generator.generate(combat_status="hostile")
         dungeon.add_unit(hostile_living_npc)
 
-        actual = dungeon.get_unit_status_distribution()
-
-        """ undead hostile npc
-        hostile_undead_npc = unit_generator.generate(combat_status="hostile")
-        undead_effect = effect_collection.get_effect_by_name(effect_name="Undead")
-        hostile.apply_effect(undead_effect)
-        dungeon.add_unit(hostile_undead_npc)
-        """
-
+        # TODO: add undead here
         actual = dungeon.get_unit_status_distribution()
 
         expected = {
