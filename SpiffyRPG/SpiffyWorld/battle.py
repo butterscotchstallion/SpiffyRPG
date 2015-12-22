@@ -85,14 +85,16 @@ class Battle:
                 same_attacker = attacker_exists and id_match
 
             if same_attacker:
-                raise ValueError("Not your turn")
+                raise InvalidCombatantException("Not your turn")
 
             self.last_attacker = attacker
 
             self.rounds.append(kwargs)
         else:
-            raise ValueError("Round maximum reached: %s (%s maximum)" %
-                             (current_rounds_length, self.total_rounds))
+            ex_msg = "Round maximum reached: %s (%s maximum)" % \
+                      (current_rounds_length, self.total_rounds)
+            
+            raise InvalidCombatantException(ex_msg)
 
     def add_combatant(self, combatant):
         if not combatant.is_alive():
