@@ -20,7 +20,7 @@ class TestBattlemaster(unittest.TestCase):
 
         return unit_generator.generate()
 
-    def test_send_challenge(self):
+    def test_add_battle(self):
         """
         In order to engage in combat, the unit must consent
         to a challenge. NPCs should accept automatically; an
@@ -35,6 +35,7 @@ class TestBattlemaster(unittest.TestCase):
         battle.add_combatant(combatant=unit_charlie)
         battle.add_combatant(combatant=unit_omega)
 
+        # Make sure batle was added
         battlemaster.add_battle(battle=battle)
 
         attacker_weapon = self._make_item(item_type="lizard")
@@ -68,8 +69,9 @@ class TestBattlemaster(unittest.TestCase):
         Attempting to add a battle with less than two
         combatants should raise ValueError
         """
-        with self.assertRaises(ValueError):
+        try:
             battlemaster.add_battle(battle=battle)
+        except ValueError:
             self.assertEqual(len(battlemaster.battles), 0)
 
     def test_cannot_battle_unit_in_combat(self):
@@ -106,10 +108,10 @@ class TestBattlemaster(unittest.TestCase):
         Attempting to do this should raise InvalidCombatantException
         because two of the combatants are in battle.
         """
-        with self.assertRaises(InvalidCombatantException):
+        try:
             battlemaster.add_battle(battle=another_battle)
-
-        self.assertEqual(len(battlemaster.battles), 1)
+        except InvalidCombatantException:
+            self.assertEqual(len(battlemaster.battles), 1)
 
     def test_cannot_add_dead_combatants(self):
         combatant_1 = self._make_unit()
@@ -118,13 +120,13 @@ class TestBattlemaster(unittest.TestCase):
 
         combatant_1.kill()
 
-        with self.assertRaises(InvalidCombatantException):
+        try:
             battle.add_combatant(combatant_1)
+        except InvalidCombatantException:
+            battle.add_combatant(combatant_2)
+            self.assertEqual(len(battle.combatants), 1)
 
-        battle.add_combatant(combatant_2)
-        self.assertEqual(len(battle.combatants), 1)
-
-    def test_add_battle(self):
+    def test_add_battle_with_rounds(self):
         combatant_1 = self._make_unit()
         combatant_2 = self._make_unit()
 
@@ -205,11 +207,11 @@ class TestBattlemaster(unittest.TestCase):
             """
             Test that units cannot attack twice in a row
             """
-            with self.assertRaises(InvalidCombatantException):
+            try:
                 battle.add_round(attacker=combatant_2,
                                  target=combatant_1,
                                  hit_info=hit_info)
-
+            except InvalidCombatantException:
                 """
                 Rounds should not change because adding a new
                 round with the same attacker as last round
@@ -246,11 +248,11 @@ class TestBattlemaster(unittest.TestCase):
             Make sure we can't add a new round and that
             attempting to do so will raise a InvalidCombatantException
             """
-            with self.assertRaises(InvalidCombatantException):
+            try:
                 battle.add_round(attacker=combatant_1,
                                  target=combatant_2,
                                  hit_info=hit_info)
-
+            except InvalidCombatantException:
                 self.assertEqual(len(battle.rounds), 3)
 
         except InvalidCombatantException:
