@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from .battle import Battle
 from .battle import InvalidCombatantException
+from .battle import CombatStatusException
 from .battlemaster import Battlemaster
 from .unit import Unit
 from .dungeon import Dungeon
