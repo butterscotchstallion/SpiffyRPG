@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-from . import levels as Levels
+from SpiffyWorld import UnitLevel
 
 class Announcer(object):
     """
     There are two types of announcements:
-    
+
     1. Dungeon (Public) - announcements made in the channel
        SpiffyDungeonAnnouncer fulfills this role.
     2. Player (Private) - announcements made directly to the
@@ -13,15 +13,13 @@ class Announcer(object):
     The destination of the announcement is set when the announcer
     is instantiated.
     """
-
-
     is_public = True
 
     def __init__(self, **kwargs):
         self._irc = kwargs["irc"]
         self.is_public = kwargs["public"]
         self.destination = kwargs["destination"]
-        unit_levels = Levels.Levels()
+        unit_levels = UnitLevel()
         self.levels = unit_levels.get_levels()
 
     def _get_player_role(self, player):
@@ -46,7 +44,7 @@ class Announcer(object):
 
         if unit.is_undead():
             bold_title = self._c(bold_title, "light blue")
-        
+
         title = "%s %s" % (indicator, bold_title)
 
         return title
@@ -94,7 +92,7 @@ class Announcer(object):
         m, s = divmod(seconds, 60)
         h, m = divmod(m, 60)
         existed_timestamp = "%02d:%02d" % (m, s)
- 
+
         if h > 0:
             existed_timestamp = "%d:%s" % (h, existed_timestamp)
 
