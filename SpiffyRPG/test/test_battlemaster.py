@@ -7,7 +7,9 @@ from SpiffyWorld import Battle, Battlemaster, ItemGenerator, \
 
 
 class TestBattlemaster(unittest.TestCase):
-
+    """
+    Tests battle interactions between units
+    """
     def _make_item(self, **kwargs):
         item_type = kwargs["item_type"]
 
@@ -20,7 +22,10 @@ class TestBattlemaster(unittest.TestCase):
 
         return unit_generator.generate()
 
-    def test_add_battle(self):
+    def test_battle_cannot_add_non_hostile_combatants(self):
+        pass
+
+    def test_battle_add_challenge(self):
         """
         In order to engage in combat, the unit must consent
         to a challenge. NPCs should accept automatically; an
@@ -29,13 +34,35 @@ class TestBattlemaster(unittest.TestCase):
         battle = Battle()
         battlemaster = Battlemaster()
 
-        unit_charlie = self._make_unit(is_player=True, level=5)
-        unit_omega = self._make_unit(is_player=True, level=5)
+        unit_charlie = self._make_unit(is_player=True)
+        unit_omega = self._make_unit(is_player=True)
+
+        """
+        Could adding a combatant automatically issue a challenge?
+        """
+        battle.add_combatant(combatant=unit_charlie)
+        battle.add_combatant(combatant=unit_omega)
+
+        battlemaster.issue_challenge(attacker=unit_charlie,
+                                     target=unit_omega)
+
+        has_challenged = \
+            battlemaster.has_accepted_challenge(attacker=unit_charlie,
+                                                target=unit_omega)
+
+        self.assertTrue(has_challenged)
+
+    def test_add_battle(self):
+        battle = Battle()
+        battlemaster = Battlemaster()
+
+        unit_charlie = self._make_unit(is_player=True)
+        unit_omega = self._make_unit(is_player=True)
 
         battle.add_combatant(combatant=unit_charlie)
         battle.add_combatant(combatant=unit_omega)
 
-        # Make sure batle was added
+        # Make sure battle was added
         battlemaster.add_battle(battle=battle)
 
         attacker_weapon = self._make_item(item_type="lizard")
@@ -62,7 +89,6 @@ class TestBattlemaster(unittest.TestCase):
 
     def test_cannot_start_battle_with_no_combatants(self):
         battle = Battle()
-
         battlemaster = Battlemaster()
 
         """
