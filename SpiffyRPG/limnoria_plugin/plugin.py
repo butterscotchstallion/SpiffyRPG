@@ -140,6 +140,45 @@ class SpiffyRPG(callbacks.Plugin):
         """
         self.SpiffyWorld.start()
 
+    def _get_dungeon_and_user_id(self, irc, msg):
+        """
+        Get user_id, dungeon id, and user. This occurs before
+        almost every user interaction
+        """
+        user_id = self._get_user_id_by_irc_and_msg(irc, msg)
+
+        if user_id is None:
+            log.info("SpiffyRPG: problem finding user_id for %s" % msg)
+
+        dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+
+        if dungeon is not None and user_id is not None:
+            player = dungeon.get_unit_by_user_id(user_id)
+
+            if player is not None:
+                battle = SpiffyBattle(db=self.db,
+                                      irc=irc,
+                                      destination=GAME_CHANNEL,
+                                      dungeon=dungeon)
+                unick = msg.nick
+                pnick = player.nick
+                attacker_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                           destination=unick)
+                target_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                         destination=pnick)
+
+                battle.set_challenger_announcer(attacker_announcer)
+                battle.set_opponent_announcer(target_announcer)
+
+                return {
+                    "dungeon": dungeon,
+                    "player": player,
+                    "battle": battle
+                }
+
+    """
+    Game commands
+    """
     def inspect(self, irc, msg, args, user, target):
         """
         Inspects a unit or item
@@ -274,42 +313,6 @@ class SpiffyRPG(callbacks.Plugin):
             dungeon.announcer.unit_info(unit=player, irc=irc, dungeon=dungeon)
 
     title = wrap(title, ["user", "text"])
-
-    def _get_dungeon_and_user_id(self, irc, msg):
-        """
-        Get user_id, dungeon id, and user. This occurs before
-        almost every user interaction
-        """
-        user_id = self._get_user_id_by_irc_and_msg(irc, msg)
-
-        if user_id is None:
-            log.info("SpiffyRPG: problem finding user_id for %s" % msg)
-
-        dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
-
-        if dungeon is not None and user_id is not None:
-            player = dungeon.get_unit_by_user_id(user_id)
-
-            if player is not None:
-                battle = SpiffyBattle(db=self.db,
-                                      irc=irc,
-                                      destination=GAME_CHANNEL,
-                                      dungeon=dungeon)
-                unick = msg.nick
-                pnick = player.nick
-                attacker_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                           destination=unick)
-                target_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                         destination=pnick)
-
-                battle.set_challenger_announcer(attacker_announcer)
-                battle.set_opponent_announcer(target_announcer)
-
-                return {
-                    "dungeon": dungeon,
-                    "player": player,
-                    "battle": battle
-                }
 
     def rock(self, irc, msg, args, user, target):
         """
