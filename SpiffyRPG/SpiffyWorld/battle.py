@@ -12,7 +12,6 @@ class InvalidCombatantException(ValueError):
     """
 
     def __init__(self, ex_msg):
-        ex_msg = "One or more combatants is not valid."
         ValueError.__init__(self, ex_msg)
 
 
@@ -25,7 +24,6 @@ class CombatStatusException(ValueError):
     """
 
     def __init__(self, ex_msg):
-        ex_msg = "You must challenge that unit prior to battle."
         ValueError.__init__(self, ex_msg)
 
 
