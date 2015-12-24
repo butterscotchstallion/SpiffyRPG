@@ -10,4 +10,4 @@ from .unit import Unit
 from .unit_type import UnitType
 from .item import Item
 from .dungeon import Dungeon
-from .dialogue import Dialogue
+from .effect import Effect
