@@ -3,7 +3,7 @@
 import unittest
 
 from SpiffyWorld.models import Unit as UnitModel, UnitItems, UnitType, \
-    Item, ItemEffects, DungeonUnits, Dungeon, Dialogue
+    Item, ItemEffects, DungeonUnits, Dungeon, UnitDialogue
 from SpiffyWorld import Database
 
 
@@ -86,19 +86,11 @@ class TestBuildWorld(unittest.TestCase):
             self.assertTrue("min_level" in dungeon)
             self.assertTrue("max_level" in dungeon)
 
-    def test_get_dialogue(self):
-        dialogue_model = Dialogue(db=self.db)
-        dialogue = dialogue_model.get_dialogue()
+    def test_get_unit_dialogue(self):
+        dialogue_model = UnitDialogue(db=self.db)
+        dialogue = dialogue_model.get_unit_dialogue()
 
-        self.assertIsInstance(dialogue, list)
-        self.assertTrue(len(dialogue) > 0)
-
-        for d in dialogue:
-            self.assertIsInstance(d, dict)
-            self.assertTrue(d["id"])
-            self.assertTrue(d["dialogue"])
-            self.assertTrue(d["context"])
-            self.assertTrue("unit_id" in d)
+        self.assertIsInstance(dialogue, dict)
 
     def test_get_dungeon_units(self):
         dungeon_units_model = DungeonUnits(db=self.db)

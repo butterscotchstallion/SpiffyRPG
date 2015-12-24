@@ -34,12 +34,12 @@ class UnitDialogue:
         cursor = self.db.cursor()
 
         cursor.execute("""SELECT
-                          d.id,
-                          ue.unit_id
-                          FROM spiffyrpg_dialogue d
-                          JOIN spiffyrpg_unit_dialogue ue ON \
-                          ue.dialogue_id = d.id
-                          JOIN spiffyrpg_units u ON u.id = ue.unit_id""")
+                          ud.id AS dialogue_id,
+                          ud.unit_id,
+                          ud.dialogue,
+                          ud.context
+                          FROM spiffyrpg_unit_dialogue ud
+                          LEFT JOIN spiffyrpg_units u ON u.id = ud.unit_id""")
 
         tmp_dialogue = cursor.fetchall()
         cursor.close()
@@ -47,7 +47,7 @@ class UnitDialogue:
 
         if tmp_dialogue:
             for e in tmp_dialogue:
-                dialogue = dict(e)
-                dialogue.append(dialogue)
+                dia = dict(e)
+                dialogue.append(dia)
 
         return self._get_unit_dialogue_map(dialogue)
