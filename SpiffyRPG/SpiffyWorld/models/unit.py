@@ -58,8 +58,14 @@ class Unit:
 
         cursor.execute(query)
 
-        units = cursor.fetchall()
+        tmp_units = cursor.fetchall()
         cursor.close()
+        units = []
+
+        if tmp_units:
+            for u in tmp_units:
+                unit = dict(u)
+                units.append(unit)
 
         return units
 

@@ -9,3 +9,5 @@ from .dungeon_units import DungeonUnits
 from .unit import Unit
 from .unit_type import UnitType
 from .item import Item
+from .dungeon import Dungeon
+from .dialogue import Dialogue

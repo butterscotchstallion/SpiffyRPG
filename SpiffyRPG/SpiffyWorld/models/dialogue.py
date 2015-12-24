@@ -12,7 +12,7 @@ class Dialogue:
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
 
-    def get_unit_dialogue(self, **kwargs):
+    def get_dialogue(self, **kwargs):
         """
         Fetches dialogue for one or many units
         """
@@ -29,8 +29,15 @@ class Dialogue:
                           FROM spiffyrpg_unit_dialogue ud
                           LEFT JOIN spiffyrpg_units u ON u.id = ud.unit_id""")
 
-        dialogues = cursor.fetchall()
+        tmp_dialogues = cursor.fetchall()
 
         cursor.close()
+        dialogue = []
 
-        return dialogues
+        if tmp_dialogues:
+            for d in tmp_dialogues:
+                dia = dict(d)
+
+                dialogue.append(dia)
+
+        return dialogue
