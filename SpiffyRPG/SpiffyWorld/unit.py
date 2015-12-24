@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import random
-import re
 import time
-from datetime import datetime
 import logging
 from .unit_level import UnitLevel
 
@@ -12,7 +10,9 @@ ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 log.addHandler(ch)
 
+
 class Unit:
+
     """
     Basis for units in a dungeon
     """
@@ -48,7 +48,8 @@ class Unit:
         self.unit_type_id = unit["unit_type_id"]
         self.effects = unit["effects"]
         self.items = unit["items"]
-        self.lootable_items = [item for item in self.items if item.is_permanent]
+        self.lootable_items = [
+            item for item in self.items if item.is_permanent]
         self.base_items = [item for item in self.items if item.is_permanent]
         self.dialogue = unit["dialogue"]
         self.experience = unit["experience"]
@@ -74,11 +75,7 @@ class Unit:
         self.is_npc = self.user_id <= 0
 
         if self.is_player:
-            #user_id_lookup = kwargs["user_lookup"]["look_up_user_ids"]
-
-            #if self.user_id in user_id_lookup:
             if "nick" in kwargs:
-                #self.nick = user_id_lookup[self.user_id]
                 self.nick = kwargs["nick"]
 
                 """
@@ -114,7 +111,7 @@ class Unit:
         self.apply_item_effects()
 
     def __str__(self):
-        return self.name
+        return "%s-%s" % (self.name, self.id)
 
     def __eq__(self, other):
         """
@@ -126,7 +123,7 @@ class Unit:
         if not id_match:
             return False
 
-        #if not self.name == other.name:
+        # if not self.name == other.name:
         #    return False
 
         """
@@ -159,7 +156,6 @@ class Unit:
         if not effects_match:
             return False
 
-
     def apply_unit_effects(self):
         for effect in self.effects:
             self.apply_effect(effect)
@@ -191,7 +187,8 @@ class Unit:
 
             log.info("SpiffyRPG: added charge to %s" % item.name)
         else:
-            log.error("SpiffyRPG: cannot add charges to %s because it is not usable" % item.name)
+            log.error(
+                "SpiffyRPG: cannot add charges to %s because it is not usable" % item.name)
 
     def use_item(self, **kwargs):
         item = kwargs["item"]
@@ -214,7 +211,8 @@ class Unit:
 
                 return True
             else:
-                log.info("SpiffyRPG: attempting to use item %s but it has no effects!" % item.name)
+                log.info(
+                    "SpiffyRPG: attempting to use item %s but it has no effects!" % item.name)
         else:
             log.error("SpiffyRPG: attempting to use %s but it is not in %s's bags" %
                       (item.name, self.name))
@@ -259,7 +257,8 @@ class Unit:
             dead_unit.hp = dead_unit.calculate_hp()
 
             """ Apply Undead effect """
-            undead_effect = self.effects_collection.get_effect_by_name(name="Undead")
+            undead_effect = self.effects_collection.get_effect_by_name(
+                name="Undead")
             dead_unit.apply_effect(undead_effect)
 
             """ Make this unit hostile """
@@ -301,7 +300,8 @@ class Unit:
                 for effect in item.effects:
                     if effect.effect_on_possession == "1":
                         params = (effect.name, self.name, item.name)
-                        log.info("SpiffyRPG: applying %s to %s due to item effect on %s" % params)
+                        log.info(
+                            "SpiffyRPG: applying %s to %s due to item effect on %s" % params)
 
                         self.apply_effect(effect)
 
@@ -398,7 +398,6 @@ class Unit:
         Returns True if can battle, or a reason (string) if not
         """
         unit = kwargs["unit"]
-        can_battle = False
         reason = "That target "
 
         """ Check if unit exists """
@@ -448,7 +447,6 @@ class Unit:
             return reason
 
         """ Check stage match """
-        combatants_are_same_stage = self.is_unit_same_stage(unit=unit)
         this_unit_stage = self.get_stage_by_level(level=self.level)
         target_unit_stage = self.get_stage_by_level(level=unit.level)
 
@@ -470,9 +468,10 @@ class Unit:
         if self.is_below_max_hp():
             self.hp += regen_hp
 
-            #self.announcer.player_regenerates(regen_hp=regen_hp)
+            # self.announcer.player_regenerates(regen_hp=regen_hp)
 
-            log.info("SpiffyRPG: unit %s gains %sHP from Regneration" % (self.name, regen_hp))
+            log.info("SpiffyRPG: unit %s gains %sHP from Regneration" %
+                     (self.name, regen_hp))
         else:
             """
             If regeneration has brought this unit back to life,
@@ -480,7 +479,8 @@ class Unit:
             """
             self.created_at = time.time()
 
-            log.info("SpiffyRPG: unit %s is not rengerating because max HP (%s/%s)" % (self.name, current_hp, max_hp))
+            log.info("SpiffyRPG: unit %s is not rengerating because max HP (%s/%s)" %
+                     (self.name, current_hp, max_hp))
 
     def is_below_max_hp(self):
         current_hp = self.get_hp()
@@ -497,9 +497,11 @@ class Unit:
             hp_bonus = int(max_hp * .10)
             self.hp += hp_bonus
 
-            log.info("SpiffyRPG: unit %s gains %sHP for winning" % (self.name, hp_bonus))
+            log.info("SpiffyRPG: unit %s gains %sHP for winning" %
+                     (self.name, hp_bonus))
         else:
-            log.info("SpiffyRPG: unit %s is at max HP (%s/%s)" % (self.name, current_hp, max_hp))
+            log.info("SpiffyRPG: unit %s is at max HP (%s/%s)" %
+                     (self.name, current_hp, max_hp))
 
         return hp_bonus
 
@@ -557,7 +559,8 @@ class Unit:
 
     def equip_random_inventory_item_by_type(self, **kwargs):
         item_name = kwargs["item_type_name"]
-        inventory_item = self.get_item_from_inventory_by_type(item_type_name=item_name)
+        inventory_item = self.get_item_from_inventory_by_type(
+            item_type_name=item_name)
 
         if inventory_item is not None:
             self.equip_item(item=inventory_item)
@@ -570,7 +573,8 @@ class Unit:
 
     def equip_item_by_name(self, **kwargs):
         item_name = kwargs["item_name"]
-        inventory_item = self.get_item_from_inventory_by_name(item_name=item_name)
+        inventory_item = self.get_item_from_inventory_by_name(
+            item_name=item_name)
 
         if inventory_item is not None:
             self.equip_item(item=inventory_item)
@@ -590,7 +594,9 @@ class Unit:
         if item_type == "paper" or item_type[0] == "p":
             item_type = "paper"
 
-        if item_type == "scissors" or (item_type[0] == "s" and item_type != "spock"):
+        starts_with_scissors = (item_type[0] == "s" and item_type != "spock")
+
+        if item_type == "scissors" or starts_with_scissors:
             item_type = "scissors"
 
         if item_type == "lizard" or item_type[0] == "l":
@@ -617,8 +623,10 @@ class Unit:
         self.equip_item_by_type(item_type="spock")
 
     def equip_item_by_type(self, **kwargs):
-        item_type = self.get_item_type_from_user_input(item_type=kwargs["item_type"])
-        inventory_item = self.get_item_from_inventory_by_type(item_type_name=item_type)
+        item_type = self.get_item_type_from_user_input(
+            item_type=kwargs["item_type"])
+        inventory_item = self.get_item_from_inventory_by_type(
+            item_type_name=item_type)
         equip_ok = False
 
         if inventory_item is not None:
@@ -697,7 +705,8 @@ class Unit:
         if self.is_player:
             unit_type = "PC"
 
-        log.info("SpiffyRPG: %s is a stage %s %s" % (self.name, stage, unit_type))
+        log.info("SpiffyRPG: %s is a stage %s %s" %
+                 (self.name, stage, unit_type))
 
         for item in self.items:
             equippable = False
@@ -709,6 +718,9 @@ class Unit:
                 Stage one players start with a rock
                 Stage one NPCs start with scissors
                 """
+                stage_two_items = ("paper", "scissors", "rock")
+                is_stage_two_item = item.item_type in stage_two_items
+
                 if self.is_stage_one():
                     if self.is_player:
                         if item.is_rock():
@@ -716,8 +728,7 @@ class Unit:
                     else:
                         if item.is_scissors():
                             equippable = True
-
-                elif self.is_stage_two() and item.item_type in ("paper", "scissors", "rock"):
+                elif self.is_stage_two() and is_stage_two_item:
                     equippable = True
 
             if equippable:
@@ -737,7 +748,8 @@ class Unit:
         This is used to avoid draws
         """
         if "avoid_weapon_type" in kwargs:
-            weapon_types = [wtype for wtype in all_types if wtype != kwargs["avoid_weapon_type"]]
+            avoid = kwargs["avoid_weapon_type"]
+            weapon_types = [wtype for wtype in all_types if wtype != avoid]
 
         items = [item for item in self.items if item.item_type in weapon_types]
 
@@ -754,25 +766,32 @@ class Unit:
             If the unit has one of the preferential weapon effects,
             then choose one of those appropriately.
             """
+            uname = self.name
+
             if self.is_archeologist():
                 if chance_to_equip_preferred:
-                    log.info("SpiffyRPG: Archeologist %s is equipping rock!" % self.name)
+                    log.info(
+                        "SpiffyRPG: Archeologist %s is equipping rock!" % uname)
                     equipped_item = self.get_rock_weapon()
             elif self.is_paper_enthusiast():
                 if chance_to_equip_preferred:
-                    log.info("SpiffyRPG: Paper Enthusiast %s is equipping paper!" % self.name)
+                    log.info(
+                        "SpiffyRPG: Paper Enthusiast %s is equipping paper!" % uname)
                     equipped_item = self.get_paper_weapon()
             elif self.is_running_with_scissors():
                 if chance_to_equip_preferred:
-                    log.info("SpiffyRPG: Running With Scissors %s is equipping scissors!" % self.name)
+                    log.info(
+                        "SpiffyRPG: Running With Scissors %s is equipping scissors!" % uname)
                     equipped_item = self.get_scissors_weapon()
             elif self.is_blue_tongue():
                 if chance_to_equip_preferred:
-                    log.info("SpiffyRPG: Blue Tongue %s is equipping lizard!" % self.name)
+                    log.info(
+                        "SpiffyRPG: Blue Tongue %s is equipping lizard!" % self.name)
                     equipped_item = self.get_lizard_weapon()
             elif self.is_vulcan_embraced():
                 if chance_to_equip_preferred:
-                    log.info("SpiffyRPG: Vulcan's Embrace %s is equipping spock!" % self.name)
+                    log.info(
+                        "SpiffyRPG: Vulcan's Embrace %s is equipping spock!" % self.name)
                     equipped_item = self.get_spock_weapon()
 
             self.equipped_weapon = equipped_item
@@ -812,7 +831,7 @@ class Unit:
         return self.unit_level.get_xp_for_next_level(self.level)
 
     def get_xp_required_for_previous_level(self):
-        return self.unit_level.get_xp_for_next_level(self.level-1)
+        return self.unit_level.get_xp_for_next_level(self.level - 1)
 
     def get_level(self):
         return self.unit_level.get_level_by_xp(self.experience)
@@ -868,7 +887,8 @@ class Unit:
         current_xp = self.experience
         total_xp_for_current_level = total
 
-        remaining_xp = float(current_xp) / float(total_xp_for_current_level) * 100
+        remaining_xp = float(
+            current_xp) / float(total_xp_for_current_level) * 100
 
         return remaining_xp
 
@@ -896,20 +916,24 @@ class Unit:
 
     def adjust_hp(self, effect):
         total_hp = self.calculate_hp()
-        adjustment = float(total_hp * (float(effect.hp_adjustment) / float(100)))
+        adjustment = float(
+            total_hp * (float(effect.hp_adjustment) / float(100)))
 
         if effect.operator == "+":
             self.hp += adjustment
 
-            log.info("SpiffyRPG: added %s HP from %s" % (adjustment, effect.name))
+            log.info("SpiffyRPG: added %s HP from %s" %
+                     (adjustment, effect.name))
         elif effect.operator == "-":
             self.hp -= adjustment
 
-            log.info("SpiffyRPG: subtracted %s HP from %s" % (adjustment, effect.name))
+            log.info("SpiffyRPG: subtracted %s HP from %s" %
+                     (adjustment, effect.name))
         elif effect.operator == "*":
             self.hp *= adjustment
 
-            log.info("SpiffyRPG: multiplying %s HP from %s" % (adjustment, effect.name))
+            log.info("SpiffyRPG: multiplying %s HP from %s" %
+                     (adjustment, effect.name))
 
     def apply_effect(self, effect):
         """
@@ -952,25 +976,6 @@ class Unit:
         return random.randrange(self.get_min_base_attack_damage(),
                                 self.get_max_base_attack_damage())
 
-    def is_counterpart(self, **kwargs):
-        target_unit = kwargs["target_unit"]
-        is_counterpart = False
-
-        """ Opponent """
-        target_unit_type = target_unit.unit_type_id
-        target_is_zm = target_unit_type == UNIT_TYPE_ZEN_MASTER
-        target_is_hacker = target_unit_type == UNIT_TYPE_HACKER
-        target_is_troll = target_unit_type == UNIT_TYPE_TROLL
-
-        """ Attacker """
-        attacker_is_zm = self.unit_type_id = UNIT_TYPE_ZEN_MASTER
-        attacker_is_hacker = self.unit_type_id == UNIT_TYPE_HACKER
-        attacker_is_troll = self.unit_type_id == UNIT_TYPE_TROLL
-
-        """ TODO: make this work """
-
-        return is_counterpart
-
     def attack(self, **kwargs):
         """
         Get attack info from attacker and
@@ -993,61 +998,61 @@ class Unit:
 
         """ Rock crushes Scissors """
         if attacker_weapon.is_rock() and \
-        target_weapon.is_scissors():
+                target_weapon.is_scissors():
             is_hit = True
             hit_word = "crushes"
 
         """ Scissors cuts Paper """
         if attacker_weapon.is_scissors() and \
-        target_weapon.is_paper():
+                target_weapon.is_paper():
             is_hit = True
             hit_word = "cuts"
 
         """ Paper covers Rock """
         if attacker_weapon.is_paper() and \
-        target_weapon.is_rock():
+                target_weapon.is_rock():
             is_hit = True
             hit_word = "covers"
 
         """ Lizard eats Paper """
         if attacker_weapon.is_lizard() and \
-        target_weapon.is_paper():
+                target_weapon.is_paper():
             is_hit = True
             hit_word = "eats"
 
         """ Spock vaporizes Rock """
         if attacker_weapon.is_spock() and \
-        target_weapon.is_rock():
+                target_weapon.is_rock():
             is_hit = True
             hit_word = "vaporizes"
 
         """ Lizard poisons Spock """
         if attacker_weapon.is_lizard() and \
-        target_weapon.is_spock():
+                target_weapon.is_spock():
             is_hit = True
             hit_word = "poisons"
 
         """ Rock crushes Lizard """
         if attacker_weapon.is_rock() and \
-        target_weapon.is_lizard():
+                target_weapon.is_lizard():
             is_hit = True
             hit_word = "crushes"
 
         """ Spock smashes Scissors """
         if attacker_weapon.is_spock() and \
-        target_weapon.is_scissors():
+                target_weapon.is_scissors():
             is_hit = True
             hit_word = "smashes"
 
         """ Paper disproves Spock """
         if attacker_weapon.is_paper() and \
-        target_weapon.is_spock():
+                target_weapon.is_spock():
             is_hit = True
             hit_word = "disproves"
 
         """ Scissors decapitate Lizard """
         if attacker_weapon.is_scissors() and \
-        target_weapon.is_lizard():
+                target_weapon.is_lizard():
             is_hit = True
             hit_word = "decapitates"
 
@@ -1099,11 +1104,12 @@ class Unit:
                 outgoing_damage_adjustment = effect.outgoing_damage_adjustment
 
                 if outgoing_damage_adjustment > 0:
-                    decimal_adjustment = float(outgoing_damage_adjustment) / float(100)
+                    decimal_adjustment = float(
+                        outgoing_damage_adjustment) / float(100)
                     damage_adjustment = (damage * decimal_adjustment)
                     damage += damage_adjustment
 
-                    log.info("SpiffyRPG: adding %s damage because undead" % damage_adjustment)
+                    log.info("SpiffyRPG: adding %s damage (undead) " % damage_adjustment)
 
         attack_info = {
             "damage": damage,
@@ -1158,7 +1164,8 @@ class Unit:
                     inc_dmg_adjustment = int(effect.incoming_damage_adjustment)
 
                     if inc_dmg_adjustment > 0:
-                        decimal_adjustment = float(inc_dmg_adjustment) / float(100)
+                        decimal_adjustment = float(
+                            inc_dmg_adjustment) / float(100)
                         damage_amount = float(damage * decimal_adjustment)
                         adjusted_damage -= damage_amount
 
