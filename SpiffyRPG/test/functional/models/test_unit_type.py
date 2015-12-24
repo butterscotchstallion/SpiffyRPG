@@ -9,7 +9,7 @@ from SpiffyWorld import Database
 class TestItem(unittest.TestCase):
 
     """
-    Functional tests for unit model
+    Functional tests for unit type model
     """
     @classmethod
     def setUpClass(cls):
