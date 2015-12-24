@@ -1,24 +1,38 @@
 # -*- coding: utf-8 -*-
-import sqlite3
-import logging
+import sqlite3 as lite
+import os
 
-log = logging.getLogger(__name__)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-log.addHandler(ch)
 
 class Database:
+
     """
     Handles db connection
     """
-    def __init__(self, **kwargs):
-        path = kwargs["path"]
-        
-        try:
-            self.db = sqlite3.connect(path)
-            self.db.row_factory = sqlite3.Row
-        except:
-            log.error("SpiffyRPG: error connecting to db")
 
-    def get_handle(self):
-        return self.db
+    def __init__(self, **kwargs):
+        self.connection = None
+        path = None
+
+        try:
+            path = os.environ.get("SPIFFYDB_PATH")
+        except KeyError:
+            pass
+
+        if path is None:
+            raise RuntimeError("Enviroment variable SPIFFYDB_PATH not found!")
+
+        is_file = os.path.isfile(path)
+        is_readable = os.access(path, os.R_OK)
+
+        if not is_file or not is_readable:
+            raise RuntimeError("Unable to read DB file: %s" % path)
+
+        self.connection = lite.connect(path)
+        self.connection.row_factory = lite.Row
+
+    def get_connection(self):
+        return self.connection
+
+    def destroy(self):
+        if self.connection is not None:
+            self.connection.close()
