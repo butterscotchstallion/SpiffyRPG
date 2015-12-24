@@ -32,7 +32,3 @@ class Database:
 
     def get_connection(self):
         return self.connection
-
-    def destroy(self):
-        if self.connection is not None:
-            self.connection.close()
