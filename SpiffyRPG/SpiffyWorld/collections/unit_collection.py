@@ -38,3 +38,6 @@ class UnitCollection:
                 players, key=lambda x: x.experience, reverse=True)
 
             return top_players[0:limit]
+
+    def get_units_by_unit_id_list(self, unit_id_list):
+        return [unit for unit in self.units if unit.id in unit_id_list]
