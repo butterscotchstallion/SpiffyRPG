@@ -45,4 +45,4 @@ class ItemEffects:
                 item = dict(i)
                 items.append(item)
 
-        return self._get_item_effects_map(items)
+        return items
