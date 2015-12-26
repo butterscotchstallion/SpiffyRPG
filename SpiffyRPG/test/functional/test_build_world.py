@@ -48,8 +48,9 @@ class TestBuildWorld(unittest.TestCase):
         self.assertTrue(effects_models)
 
         """ Unit effects map """
-        effects_model = UnitEffects(db=self.db)
-        unit_effects_map = effects_model.get_unit_effects()
+        unit_effects_model = UnitEffects(db=self.db)
+        unit_effects = unit_effects_model.get_unit_effects()
+        unit_effects_map = unit_effects_model._get_unit_effects_map(unit_effects)
 
         self.assertIsInstance(unit_effects_map, dict)
         self.assertTrue(unit_effects_map)
@@ -65,10 +66,13 @@ class TestBuildWorld(unittest.TestCase):
 
         """ Item effects map """
         item_effects_model = ItemEffects(db=self.db)
-        item_effects_map = item_effects_model.get_item_effects()
+        item_effects = item_effects_model.get_item_effects()
+        item_effects_map = item_effects_model._get_item_effects_map(item_effects)
 
+        self.assertIsInstance(item_effects, list)
         self.assertIsInstance(item_effects_map, dict)
         self.assertTrue(item_effects_map)
+        self.assertTrue(item_effects)
 
         """ Items """
         item_model = ItemModel(db=self.db)
@@ -79,10 +83,13 @@ class TestBuildWorld(unittest.TestCase):
 
         """ Unit items map """
         unit_items_model = UnitItems(db=self.db)
-        unit_items_map = unit_items_model.get_unit_items()
+        unit_item_models = unit_items_model.get_unit_items()
+        unit_items_map = unit_items_model._get_unit_items_map(unit_item_models)
 
+        self.assertIsInstance(unit_item_models, list)
         self.assertIsInstance(unit_items_map, dict)
         self.assertTrue(unit_items_map)
+        self.assertTrue(unit_item_models)
 
         """ Units """
         unit_model = UnitModel(db=self.db)
