@@ -45,4 +45,4 @@ class DungeonUnits:
                 unit = dict(u)
                 units.append(unit)
 
-        return self._get_dungeon_units_map(units)
+        return units
