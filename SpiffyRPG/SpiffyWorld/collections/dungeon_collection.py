@@ -10,7 +10,6 @@ class DungeonCollection:
     """
 
     def __init__(self, **kwargs):
-        self.db = kwargs["db"]
         self.dungeons = []
 
     def add(self, dungeon):
