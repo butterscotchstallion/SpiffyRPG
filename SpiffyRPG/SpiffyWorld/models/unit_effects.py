@@ -34,7 +34,7 @@ class UnitEffects:
         cursor = self.db.cursor()
 
         cursor.execute("""SELECT
-                          e.id,
+                          e.id AS effect_id,
                           ue.unit_id
                           FROM spiffyrpg_effects e
                           JOIN spiffyrpg_unit_effects ue ON ue.effect_id = e.id
@@ -49,4 +49,4 @@ class UnitEffects:
                 effect = dict(e)
                 effects.append(effect)
 
-        return self._get_unit_items_map(effects)
+        return self._get_unit_effects_map(effects)
