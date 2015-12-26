@@ -12,7 +12,7 @@ class Unit:
     def __init__(self, **kwargs):
         self.db = kwargs["db"]
 
-    def add_experience(self, unit_id, experience):
+    def update_experience(self, unit_id, experience):
         cursor = self.db.cursor()
         params = (experience, unit_id)
 
