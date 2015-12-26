@@ -37,9 +37,12 @@ class TestItemBuilder(unittest.TestCase):
             "item_type": item_type
         }
 
-        #item = Item(item=item_model)
-
         return item_model
+
+    def _make_item(self):
+        item_model = self._get_item_model()
+
+        return Item(item=item_model)
 
     def _make_effect(self, **kwargs):
         effect_id = uuid4()
@@ -107,6 +110,7 @@ class TestItemBuilder(unittest.TestCase):
                 effect = self._make_effect()
                 effect_id = effect.id
                 effects.append(effect)
+                effect_collection.add(effect)
                 item_effects_list.append(
                     {"item_id": item_id, "effect_id": effect_id})
 
