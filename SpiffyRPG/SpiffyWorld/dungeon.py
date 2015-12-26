@@ -15,7 +15,7 @@ class Dungeon:
 
     def __init__(self, **kwargs):
         dungeon = kwargs["dungeon"]
-        self.units = dungeon["units"]
+        self.units = []
         self.created_at = time.time()
         self.id = dungeon["id"]
         self.name = dungeon["name"]
