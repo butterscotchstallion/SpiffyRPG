@@ -34,6 +34,7 @@ class UnitDialogue:
         cursor = self.db.cursor()
 
         cursor.execute("""SELECT
+                          ud.id,
                           ud.id AS dialogue_id,
                           ud.unit_id,
                           ud.dialogue,
@@ -50,4 +51,4 @@ class UnitDialogue:
                 dia = dict(e)
                 dialogue.append(dia)
 
-        return self._get_unit_dialogue_map(dialogue)
+        return dialogue
