@@ -1,29 +1,23 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging as log
+
 
 class World:
     """
     Representation of the world
 
-    1. Get dungeon collection
-    3. Get lookups for items collection (needed for units)
-    4. Get lookups for unit effects collection (needed for units)
-    5. Get lookup for NPC units collection
-    6. Get lookup for player units collection
+    This is a container for all the stuff
+    Worldbuilder provides - the end product of
+    Worldbuilder.build_world()
     """
     def __init__(self, **kwargs):
         self._irc = kwargs["irc"]
-        self.worldbuilder = kwargs["worldbuilder"]
-
-    def populate(self):
-        dungeons = self.worldbuilder.dungeons
-
-        for dungeon in dungeons:
-            self.add_dungeon(dungeon)
-
-    def add_dungeon(self, dungeon):
-        if dungeon not in self.dungeons:
-            self.dungeons.append(dungeon)
+        self.dungeon_collection = kwargs["dungeon_collection"]
+        self.item_collection = kwargs["item_collection"]
+        self.unit_collection = kwargs["unit_collection"]
+        self.effect_collection = kwargs["effect_collection"]
+        self.dialogue_collection = kwargs["dialogue_collection"]
 
     def destroy(self):
         log.info("SpiffyRPG: destroying world!")
