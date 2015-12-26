@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
 from .battle import Battle
 from .battle import InvalidCombatantException
 from .battle import CombatStatusException
@@ -18,3 +19,5 @@ from .item_generator import ItemGenerator
 from .unit_generator import UnitGenerator
 from .effect_generator import EffectGenerator
 from .db import Database
+from .world import World
+from .worldbuilder import Worldbuilder
