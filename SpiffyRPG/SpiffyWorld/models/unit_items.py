@@ -45,4 +45,4 @@ class UnitItems:
                 item = dict(i)
                 items.append(item)
 
-        return self._get_unit_items_map(items)
+        return items
