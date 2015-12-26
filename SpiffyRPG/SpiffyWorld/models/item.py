@@ -30,6 +30,7 @@ class Item:
 
         cursor.execute("""SELECT
                           i.id,
+                          i.id AS item_id,
                           i.name,
                           i.description,
                           i.min_level,
