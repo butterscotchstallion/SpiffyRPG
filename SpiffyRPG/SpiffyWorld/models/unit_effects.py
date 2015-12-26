@@ -49,4 +49,4 @@ class UnitEffects:
                 effect = dict(e)
                 effects.append(effect)
 
-        return self._get_unit_effects_map(effects)
+        return effects
