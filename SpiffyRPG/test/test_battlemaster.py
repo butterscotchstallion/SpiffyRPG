@@ -43,14 +43,36 @@ class TestBattlemaster(unittest.TestCase):
         battle.add_combatant(combatant=unit_charlie)
         battle.add_combatant(combatant=unit_omega)
 
+        self.assertEqual(len(battle.combatants), 2, "Failed to add combatants")
+
+        """
+        The battlemaster issues a challenge on behalf of
+        unit_charlie!
+        """
         battlemaster.issue_challenge(attacker=unit_charlie,
                                      target=unit_omega)
+
+        self.assertEqual(len(battlemaster.challenges), 1)
+
+        """
+        After the challenge has been issued, verify that
+        the Battlemaster has recorded that
 
         has_challenged = \
             battlemaster.has_accepted_challenge(attacker=unit_charlie,
                                                 target=unit_omega)
 
-        self.assertTrue(has_challenged)
+        self.assertFalse(has_challenged, "Failed to issue challenge")
+
+        # Attempt to accept challenge
+        battlemaster.accept_challenge_from_target(target=unit_omega)
+
+        accepted_challenge = \
+            battlemaster.has_accepted_challenge(attacker=unit_charlie,
+                                                target=unit_omega)
+
+        self.assertTrue(accepted_challenge, "Failed to accept challenge")
+        """
 
     def test_add_battle(self):
         battle = Battle()

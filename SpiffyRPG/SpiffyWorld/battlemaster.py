@@ -11,6 +11,7 @@ class Battlemaster:
 
     def __init__(self):
         self.battles = []
+        self.challenges = {}
 
     def add_battle(self, **kwargs):
         battle = kwargs["battle"]
@@ -28,6 +29,36 @@ class Battlemaster:
                 raise InvalidCombatantException(ex_msg)
 
         self.battles.append(battle)
+
+    def has_accepted_challenge(self, **kwargs):
+        attacker = kwargs["attacker"]
+
+        return attacker.id not in self.challenges
+
+    def accept_challenge_from_target(self, **kwargs):
+        target = kwargs["target"]
+
+        for challenge in self.challenges:
+            if self.challenges[challenge] == target.id:
+                del self.challenges[challenge]
+
+    def issue_challenge(self, **kwargs):
+        attacker = kwargs["attacker"]
+        target = kwargs["target"]
+
+        attacker_in_battle = self.is_combatant_in_battle(combatant=attacker)
+
+        if attacker_in_battle:
+            raise InvalidCombatantException("%s is currently in battle!"
+                                            % attacker.get_name())
+
+        target_in_battle = self.is_combatant_in_battle(combatant=target)
+
+        if target_in_battle:
+            raise InvalidCombatantException("%s is currently in battle!"
+                                            % target.get_name())
+
+        self.challenges[attacker.id] = target
 
     def is_combatant_in_battle(self, **kwargs):
         combatant = kwargs["combatant"]
