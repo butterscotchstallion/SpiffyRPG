@@ -21,17 +21,25 @@ class Database:
             except KeyError:
                 pass
 
-        if path is None:
-            raise RuntimeError("SpiffyRPG DB not found!")
+        self.path = path
 
-        is_file = os.path.isfile(path)
+    def _open_connection(self):
+        path = self.path
+
+        exists = os.path.exists(path)
         is_readable = os.access(path, os.R_OK)
 
-        if not is_file or not is_readable:
+        if not exists:
+            raise RuntimeError("Unable to open DB file: %s" % path)
+
+        if not is_readable:
             raise RuntimeError("Unable to read DB file: %s" % path)
 
-        self.connection = lite.connect(path)
-        self.connection.row_factory = lite.Row
+        if self.connection is None:
+            self.connection = lite.connect(path)
+            self.connection.row_factory = lite.Row
 
     def get_connection(self):
+        self._open_connection()
+
         return self.connection
