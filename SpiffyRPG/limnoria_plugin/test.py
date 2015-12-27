@@ -7,8 +7,10 @@
 
 from supybot.test import *
 import supybot.ircdb as ircdb
+import unittest
 
 
+@unittest.skip("Skipping Limnoria tests (run with supybot-test)")
 class SpiffyRPGTestCase(PluginTestCase):
     plugins = ("SpiffyRPG", "User")
 
