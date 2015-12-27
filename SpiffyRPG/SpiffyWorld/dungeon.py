@@ -178,21 +178,10 @@ class Dungeon:
         """
         Spawns a player unit using its user_id
         """
-        user_id = kwargs["user_id"]
-
-        unit = self.player_unit_collection.get_player_by_user_id(
-            user_id=user_id)
+        unit = kwargs["unit"]
 
         if unit is not None:
-            """
-            Only spawn player units that are actually in the channel
-            """
-            nick_is_here = self._is_nick_in_channel(self.irc, unit.nick)
-
-            if nick_is_here:
-                self.add_unit(unit)
-
-                return unit
+            self.add_unit(unit)
 
     def add_unit(self, unit):
         if unit not in self.units:
