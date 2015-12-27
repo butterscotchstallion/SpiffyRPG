@@ -6,21 +6,20 @@
 #
 #
 ###
-import supybot.utils as utils
 from supybot.commands import *
-import supybot.plugins as plugins
 import supybot.ircutils as ircutils
 import supybot.callbacks as callbacks
 import supybot.ircmsgs as ircmsgs
 import supybot.log as log
 import supybot.ircdb as ircdb
 import supybot.conf as conf
-import supybot.dbi as dbi
-import supybot.schedule as schedule
-import random
 import re
 import time
-from datetime import datetime
+import sys
+
+sys.path.append("..")
+
+from SpiffyWorld import Database
 
 try:
     from supybot.i18n import PluginInternationalization
@@ -32,33 +31,6 @@ except ImportError:
 
 SQLITE_DB_FILENAME = "SpiffyRPG.sqlite3.db"
 GAME_CHANNEL = "#SpiffyRPG"
-
-
-class SqliteSpiffyRPGDB(dbi.DB):
-
-    """
-    This class manages the database used in SpiffyRPG
-    """
-    db = None
-
-    def __init__(self, filename):
-        """ For whatever reason this has to be here """
-        self.channel = GAME_CHANNEL
-
-    def _get_db(self):
-        try:
-            import sqlite3
-
-            filename = conf.supybot.directories.data.dirize(SQLITE_DB_FILENAME)
-
-            db = sqlite3.connect(filename, check_same_thread=False)
-            db.row_factory = sqlite3.Row
-
-            return db
-        except e:
-            log.info("SpiffyRPGDB: problem connecting to db %s" % e)
-
-SpiffyRPGDB = plugins.DB("SpiffyRPG", {"sqlite3": SqliteSpiffyRPGDB})
 
 
 class SpiffyRPG(callbacks.Plugin):
@@ -73,10 +45,10 @@ class SpiffyRPG(callbacks.Plugin):
         self.welcome_messages = {}
         self.welcome_message_cooldown_in_seconds = 600
 
-        db_lib = SpiffyRPGDB()
-        self.db = db_lib._get_db()
-        self.unit_level = SpiffyUnitLevel()
-        self.unit_db = SpiffyUnitDB(db=self.db)
+        db_path = conf.supybot.directories.data.dirize(SQLITE_DB_FILENAME)
+        db = Database(path=db_path)
+        self.db = db.get_connection()
+
         self.classes = self.unit_db.get_unit_types()
 
         ignore_nicks = self.registryValue("ignoreNicks")
@@ -664,7 +636,8 @@ class SpiffyRPG(callbacks.Plugin):
         """
         help - shows basic commands
         """
-        help_msg = "Basic commands: .look, .i, .rock, .paper, .scissors, .lizard, .spock (Read more: http://git.io/vR8f1)"
+        help_msg = "Basic commands: .look, .i, .rock, .paper, .scissors, \
+        .lizard, .spock (Read more: http://git.io/vR8f1)"
 
         irc.reply(help_msg, notice=True)
 
@@ -846,7 +819,6 @@ class SpiffyRPG(callbacks.Plugin):
                 log.info("SpiffyRPG: found effect %s" % effect)
 
                 five_minutes = 300
-                two_minutes = 120
                 duration = time.time() + five_minutes
 
                 player = dungeon.get_unit_by_user_id(user_id)
