@@ -26,14 +26,4 @@ class World:
             dungeon.destroy()
 
     def get_dungeon_by_channel(self, channel):
-        """
-        Retrieves dungeons in the current world
-        """
-        lower_channel = channel.lower()
-
-        for dungeon in self.dungeons:
-            """ dungeon.channel is lowered on instantiation """
-            if dungeon.channel == lower_channel:
-                return dungeon
-
-        log.error("SpiffyRPG: error finding dungeon with channel '%s'" % channel)
+        return self.dungeon_collection.get_dungeon_by_channel(channel)
