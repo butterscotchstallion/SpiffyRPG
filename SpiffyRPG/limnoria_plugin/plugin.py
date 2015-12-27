@@ -15,11 +15,8 @@ import supybot.ircdb as ircdb
 import supybot.conf as conf
 import re
 import time
-import sys
-
-sys.path.append("..")
-
-from SpiffyWorld import Database
+from SpiffyWorld import Database, Worldbuilder
+import os
 
 try:
     from supybot.i18n import PluginInternationalization
@@ -44,21 +41,8 @@ class SpiffyRPG(callbacks.Plugin):
         self.irc = irc
         self.welcome_messages = {}
         self.welcome_message_cooldown_in_seconds = 600
-
-        db_path = conf.supybot.directories.data.dirize(SQLITE_DB_FILENAME)
-        db = Database(path=db_path)
-        self.db = db.get_connection()
-
-        self.classes = self.unit_db.get_unit_types()
-
-        ignore_nicks = self.registryValue("ignoreNicks")
-
-        self.SpiffyWorld = SpiffyWorld(irc=self.irc,
-                                       db=self.db,
-                                       ignore_nicks=ignore_nicks,
-                                       unit_db=self.unit_db)
-
-        self.SpiffyWorld.start()
+        self.db = None
+        self.SpiffyWorld = None
 
     def _get_user_id(self, irc, prefix):
         try:
@@ -110,7 +94,24 @@ class SpiffyRPG(callbacks.Plugin):
         We need the nicks in the channel in order to initialize
         the world.
         """
-        self.SpiffyWorld.start()
+        #ignore_nicks = self.registryValue("ignoreNicks")
+
+        db_path = conf.supybot.directories.data.dirize(SQLITE_DB_FILENAME)
+
+        assert os.path.exists(db_path)
+
+        self.db_lib = Database(path=db_path)
+
+        if self.db is None:
+            self.db = self.db_lib.get_connection()
+
+        if self.SpiffyWorld is None:
+            log.info("Initializing world.")
+
+            worldbuilder = Worldbuilder(db=self.db, irc=self.irc)
+            spiffy_world = worldbuilder.build_world()
+
+            self.SpiffyWorld = spiffy_world
 
     def _get_dungeon_and_user_id(self, irc, msg):
         """
@@ -1089,21 +1090,24 @@ class SpiffyRPG(callbacks.Plugin):
         """
         Announces players joining
         """
-        is_bot_joining = hasattr(msg, "nick") and msg.nick == irc.nick
+        user_id = self._get_user_id_by_irc_and_msg(irc, msg)
 
-        if is_bot_joining:
-            log.info("SpiffyRPG: bot joining")
+        if user_id is not None:
             self._init_world()
-        else:
-            user_id = self._get_user_id_by_irc_and_msg(irc, msg)
+            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
 
-            if user_id is not None:
-                dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+            if dungeon is not None:
+                unit = self.SpiffyWorld.unit_collection.get_player_by_user_id(user_id=user_id)
 
-                if dungeon is not None:
-                    player = dungeon.spawn_player_unit(user_id=user_id)
+                if unit is not None:
+                    """
+                    Only spawn player units that are actually in the channel
+                    """
+                    nick_is_here = self._is_nick_in_channel(self.irc, unit.nick)
 
-                    if player is not None:
+                    if nick_is_here:
+                        player = dungeon.spawn_player_unit(unit=unit)
+
                         """ Voice recognized users """
                         irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
 
@@ -1121,8 +1125,8 @@ class SpiffyRPG(callbacks.Plugin):
                         else:
                             log.info(
                                 "SpiffyRPG: not welcoming %s because cooldown" % player.name)
-                    else:
-                        log.error(
-                            "SpiffyRPG: could not find player with user_id %s" % user_id)
+                else:
+                    log.error(
+                        "SpiffyRPG: could not find player with user_id %s" % user_id)
 
 Class = SpiffyRPG
