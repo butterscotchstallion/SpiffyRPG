@@ -13,13 +13,16 @@ class Database:
         self.connection = None
         path = None
 
-        try:
-            path = os.environ.get("SPIFFYDB_PATH")
-        except KeyError:
-            pass
+        if "path" in kwargs:
+            path = kwargs["path"]
+        else:
+            try:
+                path = os.environ.get("SPIFFYDB_PATH")
+            except KeyError:
+                pass
 
         if path is None:
-            raise RuntimeError("Enviroment variable SPIFFYDB_PATH not found!")
+            raise RuntimeError("SpiffyRPG DB not found!")
 
         is_file = os.path.isfile(path)
         is_readable = os.access(path, os.R_OK)
