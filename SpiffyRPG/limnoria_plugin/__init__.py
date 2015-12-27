@@ -8,7 +8,8 @@
 """
 SpiffyRPG: An IRC RPG
 """
-
+import sys
+import os
 import supybot
 import supybot.world as world
 
@@ -26,20 +27,24 @@ __contributors__ = {}
 # This is a url where the most recent plugin package can be downloaded.
 __url__ = ''
 
+"""
+Adds SpiffyWorld path so the Limnoria plugin
+knows about it
+"""
+realpath = os.path.realpath("../../../code/SpiffyRPG/SpiffyRPG/")
+sys.path.append(realpath)
+
 from . import config
 from . import plugin
 from imp import reload
 # In case we're being reloaded.
-reload(config)
 reload(plugin)
 # Add more reloads here if you add third-party modules and want them to be
 # reloaded when this plugin is reloaded.  Don't forget to import them as well!
+
 
 if world.testing:
     from . import test
 
 Class = plugin.Class
 configure = config.configure
-
-
-# vim:set shiftwidth=4 tabstop=4 expandtab textwidth=79:
