@@ -31,18 +31,27 @@ __url__ = ''
 Adds SpiffyWorld path so the Limnoria plugin
 knows about it
 """
-realpath = os.path.realpath("../../../code/SpiffyRPG/SpiffyRPG/")
-sys.path.append(realpath)
+test_path = os.path.realpath("../../../code/SpiffyRPG/SpiffyRPG/")
+sys.path.append(test_path)
+
+prod_path = os.path.realpath("../code/SpiffyRPG/SpiffyRPG/")
+sys.path.append(prod_path)
 
 from . import config
 from . import plugin
 from imp import reload
 # In case we're being reloaded.
+reload(config)
 reload(plugin)
 # Add more reloads here if you add third-party modules and want them to be
 # reloaded when this plugin is reloaded.  Don't forget to import them as well!
 
-
+"""
+Adds SpiffyWorld path so the Limnoria plugin
+knows about it
+"""
+realpath = os.path.realpath("../../../code/SpiffyRPG/SpiffyRPG/")
+sys.path.append(realpath)
 if world.testing:
     from . import test
 
