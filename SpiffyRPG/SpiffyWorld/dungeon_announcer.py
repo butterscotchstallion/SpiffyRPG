@@ -1,13 +1,20 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from . import announcer as Announcer
+from SpiffyWorld import Announcer
+import time
+import supybot.log as log
+import random
 
-class DungeonAnnouncer(Announcer.Announcer):
+
+class DungeonAnnouncer(Announcer):
     """
     Announcements specific to dungeon events
     """
     def __init__(self, **kwargs):
         announcer_parent = super(DungeonAnnouncer, self)
         announcer_parent.__init__(irc=kwargs["irc"],
+                                  ircutils=kwargs["ircutils"],
+                                  ircmsgs=kwargs["ircmsgs"],
                                   destination=kwargs["destination"],
                                   public=True)
 
@@ -60,7 +67,7 @@ class DungeonAnnouncer(Announcer.Announcer):
         unit = kwargs["unit"]
         unit_name = self._get_unit_title(unit)
 
-        deaths = ("%s was eaten by wolves" % unit_name, 
+        deaths = ("%s was eaten by wolves" % unit_name,
                   "%s's router was melted by DDoS" % unit_name,
                   "%s's computer was compromised by malware" % unit_name,
                   "%s ate expired Taco Bell" % unit_name,
@@ -81,7 +88,7 @@ class DungeonAnnouncer(Announcer.Announcer):
 
         bold_title = self._get_unit_title(unit)
         orange_dialogue = self._c(dialogue, "orange")
-        
+
         params = (bold_title, orange_dialogue)
 
         announcement_msg = "%s: %s" % params
@@ -97,7 +104,7 @@ class DungeonAnnouncer(Announcer.Announcer):
             "common": "light gray",
             "uncommon": "green",
             "rare": "dark blue",
-            "dank": "purple" 
+            "dank": "purple"
         }
 
         if rarity not in rarity_map:
@@ -116,7 +123,7 @@ class DungeonAnnouncer(Announcer.Announcer):
         item_name = self._b(self._c(item.name, "light blue"))
         rarity_indicator = self.get_rarity_indicator(rarity=item.rarity)
         item_type_indicator = item.get_indicator()
-        params = (rarity_indicator, 
+        params = (rarity_indicator,
                   item_name,
                   item_type_indicator)
 
@@ -140,7 +147,7 @@ class DungeonAnnouncer(Announcer.Announcer):
         if item.is_usable() and len(item.effects) > 0:
             announcement_msg += " :: %s causes " % self._b(".use")
             effect_names = ", ".join([self._c(effect.name, "light blue") for effect in item.effects])
-            
+
             announcement_msg += effect_names
 
             charges_word = "charges"
@@ -163,27 +170,14 @@ class DungeonAnnouncer(Announcer.Announcer):
         kwargs["irc"].reply(announcement_msg)
 
     def unit_attack(self, **kwargs):
-        danger_low_hp_threshold = 20
         attack_word = "hits"
         player_1 = kwargs["player_1"]
-        player_2 = kwargs["player_2"]
         attack = kwargs["attack"]
 
         if attack["is_critical_strike"]:
-            attack_word = ircutils.mircColor("critically strikes", fg="red", bg="black")
+            attack_word = \
+                ircutils.mircColor("critically strikes", fg="red", bg="black")
 
-        # Check player_1 hp for danger
-        if player_1.hp <= danger_low_hp_threshold:
-            winner_hp = self._c(player_1.hp, "red")
-        else:
-            winner_hp = self._c(player_1.hp, "green")
-
-        # Check player_2's hp for danger
-        if player_2.hp <= danger_low_hp_threshold:
-            loser_hp = self._c(player_2.hp, "red")
-        else:
-            loser_hp = self._c(player_2.hp, "green")
-        
         """ Formatted attack damage """
         formatted_damage = "{:,}".format(attack["damage"])
         red_damage = self._c(formatted_damage, "red")
@@ -198,9 +192,9 @@ class DungeonAnnouncer(Announcer.Announcer):
 
         damage_type = attack["damage_type"]
         player_title = self._get_unit_title(player_1)
-        
-        params = (player_title, attack_verb, attack_word, red_damage, 
-        damage_type, you_die)
+
+        params = (player_title, attack_verb, attack_word, red_damage,
+                  damage_type, you_die)
 
         announcement_msg = "%s's %s %s you for %s %s. %s" % params
 
@@ -216,7 +210,7 @@ class DungeonAnnouncer(Announcer.Announcer):
         utitle = self._b(unit.get_name())
 
         announcement_msg = "%s raises %s from the dead!" % \
-        (ptitle, utitle)
+            (ptitle, utitle)
 
         self.announce(announcement_msg)
 
@@ -248,13 +242,13 @@ class DungeonAnnouncer(Announcer.Announcer):
         irc = kwargs["irc"]
         unit = kwargs["unit"]
         dungeon = kwargs["dungeon"]
-        
+
         """
         Units start alive
         """
         seconds_alive = int(time.time() - unit.created_at)
         alive_duration = self._get_duration(seconds_alive)
-        
+
         """
         Also track how long the unit has been dead
         """
@@ -271,9 +265,8 @@ class DungeonAnnouncer(Announcer.Announcer):
 
         """
         Color level according to hostility
-        """
         combat_status = self._c(unit.combat_status, "yellow")
-
+        """
         if unit.combat_status == "hostile":
             level = self._c(level, "red")
 
@@ -288,17 +281,14 @@ class DungeonAnnouncer(Announcer.Announcer):
         if not unit.is_alive():
             hp = self._c(hp, "red")
 
-        colored_hp = hp
-
         body_count = "{:,}".format(len(unit.get_slain_units()))
         unit_slain_count = self._c(body_count, "red")
-        dungeon_name = self._get_dungeon_title(dungeon)
         stage = unit.get_stage_by_level(level=unit.level)
         cname = self._c(unit.get_title(), "light green")
         percent_xp = self._get_level_xp_percentage(unit=unit)
 
         msg = "[%s] %s%% %s %s [%s] %s %s" % \
-        (level, percent_xp, unit_title, cname, stage, pink_heart, hp)
+            (level, percent_xp, unit_title, cname, stage, pink_heart, hp)
 
         if unit.is_alive():
             msg += " :: %s %s" % (self._c("Alive", "green"), alive_duration)
@@ -328,7 +318,7 @@ class DungeonAnnouncer(Announcer.Announcer):
 
         xp_req_for_this_level = unit.get_xp_required_for_next_level() + 1
         xp_req_for_previous_level = unit.get_xp_required_for_previous_level() + 1
-        
+
         """ Unit is above max level """
         if unit_xp >= xp_req_for_this_level:
             xp_req_for_this_level = self.levels[-1][1]
@@ -366,15 +356,12 @@ class DungeonAnnouncer(Announcer.Announcer):
         player_title = self._get_unit_title(player)
 
         announcement_msg = "%s does not sense the dead nearby %s" % \
-        (player_title, dungeon_title)
+            (player_title, dungeon_title)
 
         self.announce(announcement_msg)
 
     def undead_attacker(self, **kwargs):
-        dungeon = kwargs["dungeon"]
         attacker = kwargs["attacker"]
-        target = kwargs["target"]
-        attacker_title = self._get_unit_title(attacker)
 
         self.unit_dialogue(attacker, kwargs["dialogue"])
 
@@ -383,7 +370,7 @@ class DungeonAnnouncer(Announcer.Announcer):
         seconds = int(time.time() - dungeon.created_at)
         duration = self._b(self._get_duration(seconds))
         dungeon_title = self._get_dungeon_title(dungeon)
-        
+
         """
         "players": {
               "living": 0,
@@ -412,13 +399,13 @@ class DungeonAnnouncer(Announcer.Announcer):
         pundead = unit_distro["players"]["undead"]
 
         unit_list_description = "%s/%s/%s hostiles, %s/%s/%s friendly, and %s/%s/%s players" % \
-        (hlive, hdead, hundead, flive, fdead, fundead, plive, pdead, pundead)
+            (hlive, hdead, hundead, flive, fdead, fundead, plive, pdead, pundead)
 
         announcement_msg = "You have been in %s for %s." % \
-        (dungeon_title, duration)
+            (dungeon_title, duration)
 
         announcement_msg += " %s has %s" % \
-        (dungeon_title, unit_list_description)
+            (dungeon_title, unit_list_description)
 
         self.announce(announcement_msg)
 
@@ -442,8 +429,8 @@ class DungeonAnnouncer(Announcer.Announcer):
         player = kwargs["player"]
         units = kwargs["units"]
         irc = kwargs["irc"]
-        words = ["looks around", "inspects the surroundings of", 
-        "scans the area of"]
+        words = ["looks around", "inspects the surroundings of",
+                 "scans the area of"]
         is_seance = kwargs["is_seance"]
         look_phrase = random.choice(words)
         player_name = self._get_unit_title(player)
@@ -451,14 +438,14 @@ class DungeonAnnouncer(Announcer.Announcer):
 
         if len(units) > 0:
             unit_titles = []
-            
+
             if is_seance:
                 msg = "%s channels the spirits of the dead in %s and senses " % \
-                (player_name, dungeon_name)
+                    (player_name, dungeon_name)
             else:
                 msg = "%s %s %s and sees " % \
-                (player_name, look_phrase, dungeon_name)
-            
+                    (player_name, look_phrase, dungeon_name)
+
             for unit in units:
                 unit_name = self._b(unit.get_name())
 
@@ -474,7 +461,7 @@ class DungeonAnnouncer(Announcer.Announcer):
             msg += ", ".join(unit_titles)
         else:
             msg = "%s %s %s but sees nothing of interest" % \
-            (player_name, look_phrase, dungeon_name)
+                (player_name, look_phrase, dungeon_name)
 
         irc.reply(msg, notice=True)
 
@@ -493,14 +480,14 @@ class DungeonAnnouncer(Announcer.Announcer):
 
     def look_failure(self, **kwargs):
         irc = kwargs["irc"]
-        words = ["looks around", "inspects the surroundings", 
-        "scans the area of"]
+        words = ["looks around", "inspects the surroundings",
+                 "scans the area of"]
         look_phrase = random.choice(words)
         player_name = self._get_unit_title(kwargs["player"])
         dungeon_name = self._get_dungeon_title(kwargs["dungeon"])
 
         msg = "%s %s %s but sees nothing of import" % \
-        (player_name, look_phrase, dungeon_name)
+            (player_name, look_phrase, dungeon_name)
 
         irc.reply(msg, notice=True)
 
