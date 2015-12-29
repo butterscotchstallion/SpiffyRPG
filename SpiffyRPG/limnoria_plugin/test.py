@@ -6,60 +6,71 @@
 ###
 
 from supybot.test import *
-import supybot.ircdb as ircdb
-import unittest
 import os
 import shutil
 
 
 #@unittest.skip("Skipping Limnoria tests (run with supybot-test)")
 class SpiffyRPGTestCase(ChannelPluginTestCase):
-    plugins = ("SpiffyRPG", "User")
+    plugins = ("User",)
+    channel = "#SpiffyRPG"
+
+    def _assert_response_not_error(self, message):
+        self.assertFalse(message.startswith("Error: "))
 
     def setUp(self):
         ChannelPluginTestCase.setUp(self)
 
         """
-        Almost all commands require a registered user
+        Register tester nick
         """
-        self.nick = "SpiffyTester"
-        self.prefix = "SpiffyRPG!SpiffyRPG@example.com"
-        self.test_channel = "#SpiffyRPG"
-        self.channel = self.test_channel
-        self.irc.feedMsg(ircmsgs.privmsg(self.irc.nick,
-                                         "register foo bar",
-                                         prefix=self.prefix))
-        _ = self.irc.takeMsg()
+        self.prefix = "SpiffyTester!SpiffyTester@example.com"
+
+        self.feedMsg('register SpiffyTester SpiffyPW',
+                     to=self.nick,
+                     frm=self.prefix)
+        reg_response = self.getMsg(' ')
+
+        self.feedMsg('hostmask add *!*@example.com',
+                     to=self.nick,
+                     frm=self.prefix)
+        hostmask_response = self.getMsg(' ')
 
         # copy test db
         filename = "SpiffyRPG.sqlite3.db"
         parent_dir = os.path.realpath("..")
-        test_db_src = "%s/SpiffyRPG/test/functional/fixture/%s" % (parent_dir, filename)
-        test_db_destination = "%s/test-data/%s" % (os.path.realpath("."), filename)
+        test_db_src = "%s/SpiffyRPG/test/functional/fixture/%s" % \
+            (parent_dir, filename)
+        test_db_destination = "%s/test-data/%s" % \
+            (os.path.realpath("."), filename)
 
         shutil.copy(test_db_src, test_db_destination)
-        #print "SpiffyRPG test database copy successful!"
 
         assert os.path.exists(test_db_destination)
 
-        self._join_test_channel()
+        self.assertNotError("load SpiffyRPG")
+        self.assertNotError("sjoin hacker")
 
-    def _join_test_channel(self):
-        self.irc.feedMsg(ircmsgs.join(self.test_channel, prefix=self.prefix))
-
-    def _send_channel_command(self, command):
-        self.irc.feedMsg(ircmsgs.privmsg(self.test_channel,
-                                         command,
-                                         prefix=self.prefix))
+    def test_help(self):
+        self.assertNotError("spiffyrpg help")
 
     def test_inspect(self):
-        self._send_channel_command("inspect")
+        self.assertNotError("inspect")
 
     def test_topplayers(self):
-        self._send_channel_command("top")
+        self.assertNotError("topplayers")
 
     def test_map(self):
-        self._send_channel_command("map")
+        self.assertNotError("smap")
 
     def test_look(self):
-        self._send_channel_command("look")
+        self.assertNotError("look")
+
+    def test_seance(self):
+        self.assertNotError("seance")
+
+    def test_title(self):
+        self.assertNotError("title THRILLHOUSE")
+
+    def test_rock(self):
+        self.assertNotError("rock")
