@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from SpiffyWorld import UnitLevel
+GAME_CHANNEL = "#SpiffyRPG"
 
 
 class Announcer(object):
@@ -22,6 +23,8 @@ class Announcer(object):
         self._irc = kwargs["irc"]
         self.is_public = kwargs["public"]
         self.destination = kwargs["destination"]
+        self.ircutils = kwargs["ircutils"]
+        self.ircmsgs = kwargs["ircmsgs"]
         unit_levels = UnitLevel()
         self.levels = unit_levels.get_levels()
 
@@ -83,13 +86,13 @@ class Announcer(object):
             self._send_player_notice(message)
 
     def _b(self, input):
-        return ircutils.bold(input)
+        return self.ircutils.bold(input)
 
     def _c(self, input, text_color):
-        return ircutils.mircColor(input, fg=text_color)
+        return self.ircutils.mircColor(input, fg=text_color)
 
     def _get_effect_text(self, input):
-        return ircutils.mircColor(input, fg="light blue")
+        return self.ircutils.mircColor(input, fg="light blue")
 
     def _get_duration(self, seconds):
         m, s = divmod(seconds, 60)
@@ -102,10 +105,10 @@ class Announcer(object):
         return existed_timestamp
 
     def _send_player_notice(self, message):
-        self._irc.queueMsg(ircmsgs.notice(self.destination, message))
+        self._irc.queueMsg(self.ircmsgs.notice(self.destination, message))
 
     def _send_channel_notice(self, message):
         """
         All event communication should be sent as a channel notice
         """
-        self._irc.queueMsg(ircmsgs.notice(GAME_CHANNEL, message))
+        self._irc.queueMsg(self.ircmsgs.notice(GAME_CHANNEL, message))
