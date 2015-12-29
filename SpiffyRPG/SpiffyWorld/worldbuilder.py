@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from SpiffyWorld import Database
-from SpiffyWorld.models import Dungeon as DungeonModel, Effect as EffectModel, \
-    ItemEffects, Item as ItemModel, UnitEffects, DungeonUnits, \
-    UnitDialogue as UnitDialogueModel, UnitItems as UnitItemsModel, \
-    Unit as UnitModel
+from SpiffyWorld.models import Dungeon as DungeonModel, \
+    Effect as EffectModel, ItemEffects, Item as ItemModel, \
+    UnitEffects, DungeonUnits, UnitDialogue as UnitDialogueModel, \
+    UnitItems as UnitItemsModel, Unit as UnitModel, UnitType as UnitTypeModel
 from SpiffyWorld.collections import EffectCollection, ItemCollection, \
-    UnitDialogueCollection, UnitCollection, DungeonCollection
+    UnitDialogueCollection, UnitCollection, DungeonCollection, \
+    UnitTypeCollection
 from SpiffyWorld import Effect, ItemBuilder, World, Dungeon, UnitDialogue, \
-    UnitBuilder
+    UnitBuilder, UnitType, DungeonAnnouncer
 
 
 class Worldbuilder:
@@ -28,9 +28,11 @@ class Worldbuilder:
         a. Dungeons with units
     """
     def __init__(self, **kwargs):
-        db = Database()
-        self.db = db.get_connection()
+        self.db = kwargs["db"]
         self.irc = kwargs["irc"]
+        self.ircmsgs = kwargs["ircmsgs"]
+        self.ircutils = kwargs["ircutils"]
+        self.log = kwargs["log"]
 
     def build_world(self):
         """
@@ -38,7 +40,8 @@ class Worldbuilder:
         uses that to create objects
         """
         effect_collection = self._build_effects()
-        item_collection = self._build_items(effect_collection=effect_collection)
+        item_collection = \
+            self._build_items(effect_collection=effect_collection)
 
         dialogue_info = self._build_dialogue()
         dialogue_collection = dialogue_info["dialogue_collection"]
@@ -49,28 +52,51 @@ class Worldbuilder:
         dungeon_unit_models = dungeon_unit_info["dungeon_unit_models"]
         dungeon_unit_map = dungeon_unit_info["dungeon_unit_map"]
         unit_items_map = self._build_unit_items()
+        unit_type_collection = self._build_unit_types()
 
-        unit_collection = self._build_units(item_collection=item_collection,
-                                            effect_collection=effect_collection,
-                                            dialogue_collection=dialogue_collection,
-                                            unit_effects_map=unit_effects_map,
-                                            unit_items_map=unit_items_map,
-                                            unit_dialogue_map=unit_dialogue_map)
+        unit_info = \
+            self._build_units(item_collection=item_collection,
+                              effect_collection=effect_collection,
+                              dialogue_collection=dialogue_collection,
+                              unit_effects_map=unit_effects_map,
+                              unit_items_map=unit_items_map,
+                              unit_dialogue_map=unit_dialogue_map)
+        unit_collection = unit_info["unit_collection"]
+        unit_model = unit_info["unit_model"]
 
-        dungeon_collection = self._build_dungeons(dungeon_unit_map=dungeon_unit_map,
-                                                  dungeon_unit_models=dungeon_unit_models,
-                                                  unit_collection=unit_collection)
+        dungeon_collection = \
+            self._build_dungeons(dungeon_unit_map=dungeon_unit_map,
+                                 dungeon_unit_models=dungeon_unit_models,
+                                 unit_collection=unit_collection)
 
         world = World(effect_collection=effect_collection,
                       item_collection=item_collection,
                       unit_collection=unit_collection,
                       dialogue_collection=dialogue_collection,
                       dungeon_collection=dungeon_collection,
-                      irc="quux")
+                      unit_type_collection=unit_type_collection,
+                      unit_model=unit_model,
+                      irc=self.irc)
 
         return world
 
+    def _build_unit_types(self):
+        self.log.info("Building unit types")
+
+        unit_type_model = UnitTypeModel(db=self.db)
+        unit_types = unit_type_model.get_unit_types()
+        unit_type_collection = UnitTypeCollection()
+
+        if unit_types:
+            for ut in unit_types:
+                unit_type = UnitType(unit_type=ut)
+                unit_type_collection.add(unit_type)
+
+        return unit_type_collection
+
     def _build_units(self, **kwargs):
+        self.log.info("Building units")
+
         unit_model = UnitModel(db=self.db)
         unit_models = unit_model.get_units()
 
@@ -83,20 +109,26 @@ class Worldbuilder:
 
         unit_builder = UnitBuilder()
         unit_collection = UnitCollection()
-        units = unit_builder.build_units(unit_models=unit_models,
-                                         item_collection=item_collection,
-                                         effect_collection=effect_collection,
-                                         dialogue_collection=dialogue_collection,
-                                         unit_effects_map=unit_effects_map,
-                                         unit_items_map=unit_items_map,
-                                         unit_dialogue_map=unit_dialogue_map)
+        units = \
+            unit_builder.build_units(unit_models=unit_models,
+                                     item_collection=item_collection,
+                                     effect_collection=effect_collection,
+                                     dialogue_collection=dialogue_collection,
+                                     unit_effects_map=unit_effects_map,
+                                     unit_items_map=unit_items_map,
+                                     unit_dialogue_map=unit_dialogue_map)
 
         for unit in units:
             unit_collection.add(unit)
 
-        return unit_collection
+        return {
+            "unit_collection": unit_collection,
+            "unit_model": unit_model
+        }
 
     def _build_unit_items(self):
+        self.log.info("Building unit items")
+
         unit_items_model = UnitItemsModel(db=self.db)
         unit_item_models = unit_items_model.get_unit_items()
         unit_items_map = unit_items_model._get_unit_items_map(unit_item_models)
@@ -104,10 +136,13 @@ class Worldbuilder:
         return unit_items_map
 
     def _build_dialogue(self, **kwargs):
+        self.log.info("Building dialogue")
+
         dialogue_collection = UnitDialogueCollection()
         dialogue_model = UnitDialogueModel(db=self.db)
         dialogue_models = dialogue_model.get_unit_dialogue()
-        unit_dialogue_map = dialogue_model._get_unit_dialogue_map(dialogue_models)
+        unit_dialogue_map = \
+            dialogue_model._get_unit_dialogue_map(dialogue_models)
 
         for dialogue_model in dialogue_models:
             dialogue = UnitDialogue(dialogue=dialogue_model)
@@ -124,6 +159,8 @@ class Worldbuilder:
         to build the items due to the fact that items can have
         associated effects.
         """
+        self.log.info("Building items")
+
         effect_collection = kwargs["effect_collection"]
 
         item_builder = ItemBuilder()
@@ -145,6 +182,8 @@ class Worldbuilder:
         """
         Returns a populated EffectCollection
         """
+        self.log.info("Building effects")
+
         effects_collection = EffectCollection()
         effects_model = EffectModel(db=self.db)
         effects_models = effects_model.get_effects()
@@ -157,13 +196,18 @@ class Worldbuilder:
         return effects_collection
 
     def _build_unit_effects(self):
+        self.log.info("Building unit effects")
+
         unit_effects_model = UnitEffects(db=self.db)
         unit_effects = unit_effects_model.get_unit_effects()
-        unit_effects_map = unit_effects_model._get_unit_effects_map(unit_effects)
+        unit_effects_map = \
+            unit_effects_model._get_unit_effects_map(unit_effects)
 
         return unit_effects_map
 
     def _build_dungeon_units(self):
+        self.log.info("Building dungeon units")
+
         dungeon_units_model = DungeonUnits(db=self.db)
         dungeon_units = dungeon_units_model.get_dungeon_units()
         dungeon_units_map = \
@@ -178,6 +222,9 @@ class Worldbuilder:
         """
         Add units from map/collection
         """
+        self.log.info("Building dungeons")
+
+        total_units = 0
         dungeon_collection = DungeonCollection()
         unit_collection = kwargs["unit_collection"]
         dungeon_unit_map = kwargs["dungeon_unit_map"]
@@ -193,13 +240,24 @@ class Worldbuilder:
             for dungeon_unit_model in dungeon_unit_models:
                 if dungeon_id in dungeon_unit_map:
                     unit_id_list = dungeon_unit_map[dungeon_id]
-                    units = unit_collection.get_units_by_unit_id_list(unit_id_list)
+                    units = \
+                        unit_collection.get_units_by_unit_id_list(unit_id_list)
 
-            dungeon = Dungeon(dungeon=dungeon_model, announcer="quux")
+            announcer = DungeonAnnouncer(irc=self.irc,
+                                         ircutils=self.ircutils,
+                                         ircmsgs=self.ircmsgs,
+                                         destination="#spiffyrpg")
+            dungeon = Dungeon(dungeon=dungeon_model, announcer=announcer)
 
             for unit in units:
                 dungeon.add_unit(unit)
+                total_units += 1
 
             dungeon_collection.add(dungeon)
+
+        total_dungeons = len(dungeon_collection.dungeons)
+
+        self.log.info("SpiffyWorld: %s dungeons with %s total units loaded" %
+                      (total_dungeons, total_units))
 
         return dungeon_collection
