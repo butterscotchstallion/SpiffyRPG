@@ -7,16 +7,16 @@
 #
 ###
 from supybot.commands import *
-import supybot.ircutils as ircutils
 import supybot.callbacks as callbacks
 import supybot.ircmsgs as ircmsgs
+import supybot.ircutils as ircutils
 import supybot.log as log
 import supybot.ircdb as ircdb
 import supybot.conf as conf
 import re
 import time
 from SpiffyWorld import Database, Worldbuilder
-import os
+import supybot.world as supyworld
 
 try:
     from supybot.i18n import PluginInternationalization
@@ -36,13 +36,16 @@ class SpiffyRPG(callbacks.Plugin):
     threaded = True
 
     def __init__(self, irc):
-        self.__parent = super(SpiffyRPG, self)
-        self.__parent.__init__(irc)
+        self.db = None
+        self.SpiffyWorld = None
         self.irc = irc
         self.welcome_messages = {}
         self.welcome_message_cooldown_in_seconds = 600
-        self.db = None
-        self.SpiffyWorld = None
+
+        self.__parent = super(SpiffyRPG, self)
+        self.__parent.__init__(irc)
+
+        self._init_world()
 
     def _get_user_id(self, irc, prefix):
         try:
@@ -55,7 +58,8 @@ class SpiffyRPG(callbacks.Plugin):
 
         if hasattr(msg, "prefix"):
             user_id = self._get_user_id(irc, msg.prefix)
-        elif hasattr(msg, "nick"):
+
+        if hasattr(msg, "nick"):
             hostmask = irc.state.nickToHostmask(msg.nick)
             user_id = self._get_user_id(irc, hostmask)
 
@@ -68,50 +72,87 @@ class SpiffyRPG(callbacks.Plugin):
         return len(char_name) > 1 and len(char_name) <= 16 \
             and self._is_alphanumeric_with_dashes(char_name)
 
-    def _is_valid_char_class(self, type):
-        for id, unit_type_name in self.unit_types:
-            if unit_type_name.lower() == type.lower():
-                return True
+    def _is_valid_char_class(self, unit_type):
+        col = self.SpiffyWorld.unit_type_collection
+        return col.get_unit_type_by_name(unit_type)
 
     def _is_nick_in_channel(self, irc, nick):
         return nick in irc.state.channels[GAME_CHANNEL].users
 
     def _get_character_class_list(self):
-        class_list = []
+        col = self.SpiffyWorld.unit_type_collection
+        return col.get_unit_type_name_list()
 
-        for c in self.classes:
-            class_list.append(ircutils.bold(c["name"]))
+    def _get_unit_type_id_by_name(self, unit_type):
+        col = self.SpiffyWorld.unit_type_collection
+        unit_type = col.get_unit_type_by_name(unit_type)
 
-        return ", ".join(class_list)
-
-    def _get_unit_type_id_by_name(self, type):
-        for c in self.unit_types:
-            if c["name"].lower() == type.lower():
-                return c["id"]
+        if unit_type is not None:
+            return unit_type.id
 
     def _init_world(self):
         """
         We need the nicks in the channel in order to initialize
         the world.
-        """
-        #ignore_nicks = self.registryValue("ignoreNicks")
 
+        ignore_nicks = self.registryValue("ignoreNicks")
+        """
         db_path = conf.supybot.directories.data.dirize(SQLITE_DB_FILENAME)
 
-        assert os.path.exists(db_path)
-
-        self.db_lib = Database(path=db_path)
-
         if self.db is None:
-            self.db = self.db_lib.get_connection()
+            database = Database(path=db_path)
+
+            self.db = database.get_connection()
+
+            log.info("SpiffyWorld: initializing db path %s" % db_path)
+
+        assert self.db is not None
 
         if self.SpiffyWorld is None:
             log.info("Initializing world.")
 
-            worldbuilder = Worldbuilder(db=self.db, irc=self.irc)
+            worldbuilder = Worldbuilder(db=self.db,
+                                        irc=self.irc,
+                                        ircmsgs=ircmsgs,
+                                        ircutils=ircutils,
+                                        log=log)
             spiffy_world = worldbuilder.build_world()
 
             self.SpiffyWorld = spiffy_world
+
+        assert self.SpiffyWorld is not None
+
+    def _get_dungeon_and_player(self, irc, user):
+        dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+        user_id = user.id
+
+        if dungeon is not None:
+            player = dungeon.get_unit_by_user_id(user_id)
+
+            if player is not None:
+                battle = SpiffyBattle(db=self.db,
+                                      irc=irc,
+                                      destination=GAME_CHANNEL,
+                                      dungeon=dungeon)
+                unick = msg.nick
+                pnick = player.nick
+                attacker_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                           destination=unick)
+                target_announcer = SpiffyPlayerAnnouncer(irc=irc,
+                                                         destination=pnick)
+
+                battle.set_challenger_announcer(attacker_announcer)
+                battle.set_opponent_announcer(target_announcer)
+
+                return {
+                    "dungeon": dungeon,
+                    "player": player,
+                    "battle": battle
+                }
+            else:
+                irc.error("No user with id %s" % user_id)
+        else:
+            irc.error("No dungeon")
 
     def _get_dungeon_and_user_id(self, irc, msg):
         """
@@ -156,7 +197,7 @@ class SpiffyRPG(callbacks.Plugin):
         """
         Inspects a unit or item
         """
-        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
+        dungeon_info = self._get_dungeon_and_player(irc, user)
 
         if dungeon_info is not None:
             player = dungeon_info["player"]
@@ -176,6 +217,8 @@ class SpiffyRPG(callbacks.Plugin):
                 dungeon.announcer.look_failure(player=player,
                                                dungeon=dungeon,
                                                irc=irc)
+        else:
+            irc.error("Unable to get dungeon/user")
 
     inspect = wrap(inspect, ["user", optional("text")])
 
@@ -836,44 +879,37 @@ class SpiffyRPG(callbacks.Plugin):
         """
         Choose a class: Zen Master, Hacker, or Troll
         """
-        user_id = self._get_user_id(irc, msg.prefix)
+        user_id = user.id
 
-        if user_id is not None:
-            char_name = msg.nick
-            channel = GAME_CHANNEL
-            dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
+        char_name = msg.nick
+        channel = GAME_CHANNEL
+        dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
 
-            if dungeon is not None:
-                """ Add player to dungeon """
-                player = dungeon.spawn_player_unit(user_id=user_id)
+        if dungeon is not None:
+            valid_registration = self._is_valid_char_class(
+                character_class)
 
-                if player is not None:
-                    valid_registration = self._is_valid_char_class(
-                        character_class)
+            if valid_registration:
+                unit_type_id = self._get_unit_type_id_by_name(
+                    character_class)
 
-                    if valid_registration:
-                        unit_type_id = self._get_unit_type_id_by_name(
-                            character_class)
+                if unit_type_id is not None:
+                    log.info("SpiffyRPG: %s -> register '%s' the '%s' with class id %s " %
+                             (msg.nick, char_name, character_class, unit_type_id))
 
-                        if unit_type_id is not None:
-                            log.info("SpiffyRPG: %s -> register '%s' the '%s' with class id %s " %
-                                     (msg.nick, char_name, character_class, unit_type_id))
-
-                            self.db.register_new_player(
-                                user_id, char_name, unit_type_id)
-                            dungeon.announcer.new_player(
-                                irc, char_name, character_class)
-                            irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
-                        else:
-                            log.error(
-                                "SpiffyRPG: error determining class id from '%s'" % character_class)
-                    else:
-                        classes = self._get_unit_type_list()
-                        irc.reply(
-                            "Please choose one of the following classes: %s" % classes, notice=True)
+                    self.SpiffyWorld.unit_model.register_new_player(
+                        user_id, char_name, unit_type_id)
+                    dungeon.announcer.new_player(char_name, character_class)
+                    irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
+                else:
+                    log.error(
+                        "SpiffyRPG: error determining class id from '%s'" % character_class)
+            else:
+                classes = self._get_unit_type_list()
+                irc.reply(
+                    "Please choose one of the following classes: %s" % classes, notice=True)
         else:
-            log.info(
-                "SpiffyRPG: %s is trying to join but is not registered" % msg.nick)
+            irc.error("No dungeon!")
 
     sjoin = wrap(sjoin, ["user", "text"])
 
@@ -1034,6 +1070,16 @@ class SpiffyRPG(callbacks.Plugin):
 
     fmove = wrap(fmove, ["text"])
 
+    def finit(self, irc, msg, args):
+        """
+        Force initialization
+        """
+        self._init_world()
+
+    finit = wrap(finit)
+
+    """ Limnoria callbacks """
+
     def doQuit(self, irc, msg):
         user_id = None
         nick = msg.nick
@@ -1089,11 +1135,15 @@ class SpiffyRPG(callbacks.Plugin):
     def doJoin(self, irc, msg):
         """
         Announces players joining
+        if supyworld.testing:
         """
+        #self._init_world()
+
         user_id = self._get_user_id_by_irc_and_msg(irc, msg)
 
+        log.error("SpiffyWorld: user id is %s" % user_id)
+
         if user_id is not None:
-            self._init_world()
             dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
 
             if dungeon is not None:
