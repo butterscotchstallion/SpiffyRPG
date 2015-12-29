@@ -12,12 +12,14 @@ class World:
     Worldbuilder.build_world()
     """
     def __init__(self, **kwargs):
-        self._irc = kwargs["irc"]
+        self.irc = kwargs["irc"]
         self.dungeon_collection = kwargs["dungeon_collection"]
         self.item_collection = kwargs["item_collection"]
         self.unit_collection = kwargs["unit_collection"]
         self.effect_collection = kwargs["effect_collection"]
         self.dialogue_collection = kwargs["dialogue_collection"]
+        self.unit_type_collection = kwargs["unit_type_collection"]
+        self.unit_model = kwargs["unit_model"]
 
     def destroy(self):
         log.info("SpiffyRPG: destroying world!")
