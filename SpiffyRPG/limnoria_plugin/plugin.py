@@ -15,8 +15,8 @@ import supybot.ircdb as ircdb
 import supybot.conf as conf
 import re
 import time
-from SpiffyWorld import Database, Worldbuilder
-import supybot.world as supyworld
+from SpiffyWorld import Database, Worldbuilder, \
+    Battle as SpiffyBattle, PlayerAnnouncer
 
 try:
     from supybot.i18n import PluginInternationalization
@@ -94,17 +94,12 @@ class SpiffyRPG(callbacks.Plugin):
         """
         We need the nicks in the channel in order to initialize
         the world.
-
-        ignore_nicks = self.registryValue("ignoreNicks")
         """
         db_path = conf.supybot.directories.data.dirize(SQLITE_DB_FILENAME)
 
         if self.db is None:
-            database = Database(path=db_path)
-
+            database = Database(path=db_path, log=log)
             self.db = database.get_connection()
-
-            log.info("SpiffyWorld: initializing db path %s" % db_path)
 
         assert self.db is not None
 
@@ -120,7 +115,57 @@ class SpiffyRPG(callbacks.Plugin):
 
             self.SpiffyWorld = spiffy_world
 
+            self._add_players_from_channel()
+
         assert self.SpiffyWorld is not None
+
+    def _add_players_from_channel(self):
+        nicks_in_channel = []
+        ignore_nicks = self.registryValue("ignoreNicks")
+
+        if GAME_CHANNEL in self.irc.state.channels:
+            nicks_in_channel = self.irc.state.channels[GAME_CHANNEL].users
+
+        for nick in nicks_in_channel:
+            if not nick:
+                continue
+
+            if nick in ignore_nicks:
+                continue
+
+            # Skip bot nick
+            if nick == self.irc.nick:
+                continue
+
+            unit_collection = self.SpiffyWorld.unit_collection
+
+            try:
+                hostmask = self.irc.state.nickToHostmask(nick)
+            except KeyError:
+                hostmask = None
+
+            user_id = None
+
+            if hostmask is None:
+                continue
+
+            try:
+                user_id = ircdb.users.getUserId(hostmask)
+            except KeyError:
+                log.info("SpiffyRPG: %s is not registered." % nick)
+
+            """ Registered users only """
+            if user_id is None:
+                continue
+
+            if user_id is not None:
+                player = unit_collection.get_player_by_user_id(user_id)
+
+                if player is not None:
+                    dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+                    dungeon.add_unit(player)
+                else:
+                    log.error("No player with user_id %s" % user_id)
 
     def _get_dungeon_and_player(self, irc, user):
         dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
@@ -130,19 +175,7 @@ class SpiffyRPG(callbacks.Plugin):
             player = dungeon.get_unit_by_user_id(user_id)
 
             if player is not None:
-                battle = SpiffyBattle(db=self.db,
-                                      irc=irc,
-                                      destination=GAME_CHANNEL,
-                                      dungeon=dungeon)
-                unick = msg.nick
-                pnick = player.nick
-                attacker_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                           destination=unick)
-                target_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                         destination=pnick)
-
-                battle.set_challenger_announcer(attacker_announcer)
-                battle.set_opponent_announcer(target_announcer)
+                battle = SpiffyBattle()
 
                 return {
                     "dungeon": dungeon,
@@ -170,20 +203,7 @@ class SpiffyRPG(callbacks.Plugin):
             player = dungeon.get_unit_by_user_id(user_id)
 
             if player is not None:
-                battle = SpiffyBattle(db=self.db,
-                                      irc=irc,
-                                      destination=GAME_CHANNEL,
-                                      dungeon=dungeon)
-                unick = msg.nick
-                pnick = player.nick
-                attacker_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                           destination=unick)
-                target_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                         destination=pnick)
-
-                battle.set_challenger_announcer(attacker_announcer)
-                battle.set_opponent_announcer(target_announcer)
-
+                battle = SpiffyBattle()
                 return {
                     "dungeon": dungeon,
                     "player": player,
@@ -258,8 +278,8 @@ class SpiffyRPG(callbacks.Plugin):
             if inventory_item is not None:
                 item_used_successfully = player.use_item(item=inventory_item)
                 pnick = player.nick
-                player_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                         destination=pnick)
+                player_announcer = PlayerAnnouncer(irc=irc,
+                                                   destination=pnick)
 
                 if item_used_successfully is not None:
                     player_announcer.use_item(item=inventory_item,
@@ -558,8 +578,8 @@ class SpiffyRPG(callbacks.Plugin):
                 player.add_battle(combatant=combatant, rounds=3)
                 combatant.add_battle(combatant=player, rounds=3)
                 pnick = player.nick
-                player_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                         destination=pnick)
+                player_announcer = PlayerAnnouncer(irc=irc,
+                                                   destination=pnick)
 
                 player_announcer.challenge_accepted(combatant=combatant)
 
@@ -606,11 +626,11 @@ class SpiffyRPG(callbacks.Plugin):
                     irc.error("You're already battling that")
                     return
 
-                combatant_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                            destination=combatant.nick)
+                combatant_announcer = PlayerAnnouncer(irc=irc,
+                                                      destination=combatant.nick)
 
-                player_announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                         destination=player.nick)
+                player_announcer = PlayerAnnouncer(irc=irc,
+                                                   destination=player.nick)
 
                 """
                 New battle if this is a NPC
@@ -807,8 +827,8 @@ class SpiffyRPG(callbacks.Plugin):
             player = dungeon.get_unit_by_user_id(user_id)
 
             if player is not None:
-                announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                  destination=msg.nick)
+                announcer = PlayerAnnouncer(irc=irc,
+                                            destination=msg.nick)
 
                 announcer.inventory(player=player, irc=irc)
         else:
@@ -1040,8 +1060,8 @@ class SpiffyRPG(callbacks.Plugin):
             unit = dungeon.get_unit_by_name(unit_name)
 
             if unit is not None:
-                announcer = SpiffyPlayerAnnouncer(irc=irc,
-                                                  destination=msg.nick)
+                announcer = PlayerAnnouncer(irc=irc,
+                                            destination=msg.nick)
 
                 announcer.inventory(player=unit, irc=irc)
         else:
@@ -1137,8 +1157,7 @@ class SpiffyRPG(callbacks.Plugin):
         Announces players joining
         if supyworld.testing:
         """
-        #self._init_world()
-
+        self.irc = irc
         user_id = self._get_user_id_by_irc_and_msg(irc, msg)
 
         log.error("SpiffyWorld: user id is %s" % user_id)
@@ -1147,7 +1166,8 @@ class SpiffyRPG(callbacks.Plugin):
             dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
 
             if dungeon is not None:
-                unit = self.SpiffyWorld.unit_collection.get_player_by_user_id(user_id=user_id)
+                uc = self.SpiffyWorld.unit_collection
+                unit = uc.get_player_by_user_id(user_id=user_id)
 
                 if unit is not None:
                     """
