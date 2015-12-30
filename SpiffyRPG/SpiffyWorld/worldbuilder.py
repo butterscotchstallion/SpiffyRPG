@@ -246,6 +246,14 @@ class Worldbuilder:
                     units = \
                         unit_collection.get_units_by_unit_id_list(unit_id_list)
 
+            """
+            Any units that are not in the dungeon (players)
+            """
+            other_units = unit_collection.units
+
+            for ounit in other_units:
+                units.append(ounit)
+
             announcer = DungeonAnnouncer(irc=self.irc,
                                          ircutils=self.ircutils,
                                          ircmsgs=self.ircmsgs,
