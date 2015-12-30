@@ -73,11 +73,6 @@ class Unit:
             if "nick" in kwargs:
                 self.nick = kwargs["nick"]
 
-                """
-                self.announcer = PlayerAnnouncer(irc=collections["irc"],
-                                                 destination=self.nick)
-                """
-
         """
         Each unit should get some base items for their level.
         """
@@ -574,11 +569,7 @@ class Unit:
         if inventory_item is not None:
             self.equip_item(item=inventory_item)
 
-            self.announcer.item_equip(player=self,
-                                      item=inventory_item)
-        else:
-            self.announcer.item_equip_failed(player=self,
-                                             item_name=item_name)
+            return inventory_item
 
     def get_item_type_from_user_input(self, **kwargs):
         item_type = kwargs["item_type"].lower()
