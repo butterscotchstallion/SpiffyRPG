@@ -8,9 +8,9 @@
 from supybot.test import *
 import os
 import shutil
+import random
 
 
-#@unittest.skip("Skipping Limnoria tests (run with supybot-test)")
 class SpiffyRPGTestCase(ChannelPluginTestCase):
     plugins = ("User",)
     channel = "#SpiffyRPG"
@@ -26,15 +26,15 @@ class SpiffyRPGTestCase(ChannelPluginTestCase):
         """
         self.prefix = "SpiffyTester!SpiffyTester@example.com"
 
-        self.feedMsg('register SpiffyTester SpiffyPW',
+        self.feedMsg("register SpiffyTester SpiffyPW",
                      to=self.nick,
                      frm=self.prefix)
-        reg_response = self.getMsg(' ')
+        reg_response = self.getMsg(" ")
 
-        self.feedMsg('hostmask add *!*@example.com',
+        self.feedMsg("hostmask add *!*@example.com",
                      to=self.nick,
                      frm=self.prefix)
-        hostmask_response = self.getMsg(' ')
+        hostmask_response = self.getMsg(" ")
 
         # copy test db
         filename = "SpiffyRPG.sqlite3.db"
@@ -49,13 +49,19 @@ class SpiffyRPGTestCase(ChannelPluginTestCase):
         assert os.path.exists(test_db_destination)
 
         self.assertNotError("load SpiffyRPG")
-        self.assertNotError("sjoin hacker")
+
+        classes = ("hacker", "zen master", "troll")
+        sclass = random.choice(classes)
+        self.assertNotError("sjoin %s" % sclass)
 
     def test_help(self):
         self.assertNotError("spiffyrpg help")
 
     def test_inspect(self):
         self.assertNotError("inspect")
+
+    def test_inspect_something(self):
+        self.assertNotError("inspect john")
 
     def test_topplayers(self):
         self.assertNotError("topplayers")
@@ -74,3 +80,27 @@ class SpiffyRPGTestCase(ChannelPluginTestCase):
 
     def test_rock(self):
         self.assertNotError("rock")
+
+    def test_paper(self):
+        self.assertNotError("paper")
+
+    def test_scissors(self):
+        self.assertNotError("scissors")
+
+    def test_lizard(self):
+        self.assertNotError("lizard")
+
+    def test_spock(self):
+        self.assertNotError("spock")
+
+    def test_equip(self):
+        self.assertNotError("equip rock")
+
+    def test_items(self):
+        self.assertNotError("items")
+
+    def test_effect(self):
+        self.assertNotError("effect")
+
+    def test_raise(self):
+        self.assertNotError("raise")
