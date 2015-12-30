@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging as log
 
 
 class World:
@@ -13,6 +12,7 @@ class World:
     """
     def __init__(self, **kwargs):
         self.irc = kwargs["irc"]
+        self.log = kwargs["log"]
         self.dungeon_collection = kwargs["dungeon_collection"]
         self.item_collection = kwargs["item_collection"]
         self.unit_collection = kwargs["unit_collection"]
@@ -22,7 +22,7 @@ class World:
         self.unit_model = kwargs["unit_model"]
 
     def destroy(self):
-        log.info("SpiffyRPG: destroying world!")
+        self.log.info("SpiffyRPG: destroying world!")
 
         for dungeon in self.dungeons:
             dungeon.destroy()
