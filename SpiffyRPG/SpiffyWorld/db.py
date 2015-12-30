@@ -10,46 +10,34 @@ class Database:
     """
 
     def __init__(self, **kwargs):
-        self.connection = None
+        self.log = None
+
+        if "log" in kwargs:
+            self.log = kwargs["log"]
 
         if "path" in kwargs:
-            self.path = kwargs["path"]
-        else:
-            path = None
+            path = kwargs["path"]
 
+            if not path or path is None:
+                raise ValueError("Database: path is invalid")
+
+            self.path = path
+        else:
             try:
-                path = os.environ.get("SPIFFYDB_PATH")
+                self.path = os.environ.get("SPIFFYDB_PATH")
             except KeyError:
                 pass
 
-            if path is None:
-                raise RuntimeError("Enviroment variable \
-                    SPIFFYDB_PATH not found!")
-
-            self.path = path
-
-        assert self.path is not None
-        assert isinstance(self.path, str) and self.path
-
-    def _open_connection(self):
-        assert self.path is not None
-
-        exists = os.path.exists(self.path)
-        is_readable = os.access(self.path, os.R_OK)
-
-        if not exists:
-            raise RuntimeError("Unable to open DB file: %s" % self.path)
-
-        if not is_readable:
-            raise RuntimeError("Unable to read DB file: %s" % self.path)
+        if not isinstance(self.path, str) or not self.path:
+            raise RuntimeError("Database path not found: %s" % self.path)
 
         connection = lite.connect(self.path, check_same_thread=False)
         connection.row_factory = lite.Row
 
-        return connection
+        if self.log is not None:
+            self.log.info("SpiffyWorld: initialized db path %s" % self.path)
+
+        self.connection = connection
 
     def get_connection(self):
-        if self.connection is None:
-            self.connection = self._open_connection()
-
         return self.connection
