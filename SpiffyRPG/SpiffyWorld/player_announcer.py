@@ -15,6 +15,7 @@ class PlayerAnnouncer(Announcer):
                                   ircmsgs=kwargs["ircmsgs"],
                                   destination=kwargs["destination"],
                                   public=False)
+        self.public = False
 
     def use_item(self, **kwargs):
         item = kwargs["item"]
