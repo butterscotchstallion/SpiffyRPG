@@ -76,7 +76,8 @@ class Worldbuilder:
                       dungeon_collection=dungeon_collection,
                       unit_type_collection=unit_type_collection,
                       unit_model=unit_model,
-                      irc=self.irc)
+                      irc=self.irc,
+                      log=self.log)
 
         return world
 
@@ -116,7 +117,8 @@ class Worldbuilder:
                                      dialogue_collection=dialogue_collection,
                                      unit_effects_map=unit_effects_map,
                                      unit_items_map=unit_items_map,
-                                     unit_dialogue_map=unit_dialogue_map)
+                                     unit_dialogue_map=unit_dialogue_map,
+                                     log=self.log)
 
         for unit in units:
             unit_collection.add(unit)
@@ -225,6 +227,7 @@ class Worldbuilder:
         self.log.info("Building dungeons")
 
         total_units = 0
+        player_units = 0
         dungeon_collection = DungeonCollection()
         unit_collection = kwargs["unit_collection"]
         dungeon_unit_map = kwargs["dungeon_unit_map"]
@@ -253,11 +256,14 @@ class Worldbuilder:
                 dungeon.add_unit(unit)
                 total_units += 1
 
+                if unit.is_player:
+                    player_units += 1
+
             dungeon_collection.add(dungeon)
 
         total_dungeons = len(dungeon_collection.dungeons)
 
-        self.log.info("SpiffyWorld: %s dungeons with %s total units loaded" %
-                      (total_dungeons, total_units))
+        self.log.info("SpiffyWorld: %s dungeons with %s total units and %s players loaded" %
+                      (total_dungeons, total_units, player_units))
 
         return dungeon_collection
