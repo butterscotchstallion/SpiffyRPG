@@ -3,6 +3,8 @@
 from uuid import uuid4
 from random import randrange, choice
 from SpiffyWorld import Unit, UnitLevel
+from testfixtures import LogCapture
+import logging
 
 
 class UnitGenerator:
@@ -58,6 +60,8 @@ class UnitGenerator:
             "combat_status": combat_status
         }
 
-        unit = Unit(unit=unit_model)
+        with LogCapture() as l:
+            logger = logging.getLogger()
+            unit = Unit(unit=unit_model, log=logger)
 
         return unit
