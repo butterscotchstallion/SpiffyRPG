@@ -2,18 +2,14 @@
 # -*- coding: utf-8 -*-
 import unittest
 from SpiffyWorld.collections import ItemCollection, EffectCollection, \
-                                    UnitDialogueCollection
+    UnitDialogueCollection
 from SpiffyWorld.models import UnitItems, UnitEffects, \
-                               UnitDialogue as UnitDialogueModel
+    UnitDialogue as UnitDialogueModel
 from SpiffyWorld import Item, Unit, UnitBuilder, Effect, UnitDialogue
 import logging
 from uuid import uuid4
 from random import randrange, choice
-
-log = logging.getLogger(__name__)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-log.addHandler(ch)
+from testfixtures import LogCapture
 
 
 class TestUnitBuilder(unittest.TestCase):
@@ -199,7 +195,11 @@ class TestUnitBuilder(unittest.TestCase):
             Add completed unit to expected
             """
             unit_models.append(unit_model)
-            unit = Unit(unit=unit_model)
+
+            with LogCapture() as l:
+                logger = logging.getLogger()
+                unit = Unit(unit=unit_model, log=logger)
+
             expected_units.append(unit)
 
         unit_items_map = unit_items_model._get_unit_items_map(unit_items)
@@ -209,16 +209,19 @@ class TestUnitBuilder(unittest.TestCase):
             unit_dialogue)
 
         builder = UnitBuilder()
-        actual_units = builder.build_units(unit_models=unit_models,
-                                           unit_items_map=unit_items_map,
-                                           item_collection=item_collection,
-                                           effect_collection=effect_collection,
-                                           unit_effects_map=unit_effects_map,
-                                           dialogue_collection=dialogue_collection,
-                                           unit_dialogue_map=unit_dialogue_map)
+        with LogCapture() as l:
+            logger = logging.getLogger()
+            actual_units = builder.build_units(unit_models=unit_models,
+                                               unit_items_map=unit_items_map,
+                                               item_collection=item_collection,
+                                               effect_collection=effect_collection,
+                                               unit_effects_map=unit_effects_map,
+                                               dialogue_collection=dialogue_collection,
+                                               unit_dialogue_map=unit_dialogue_map,
+                                               log=logger)
 
-        expected_unit_ids = [unit.id for unit in expected_units]
-        actual_unit_ids = [unit.id for unit in actual_units]
+        expected_unit_ids = [unit.id for e_unit in expected_units]
+        actual_unit_ids = [unit.id for a_unit in actual_units]
 
         self.assertEqual(expected_unit_ids, actual_unit_ids)
 

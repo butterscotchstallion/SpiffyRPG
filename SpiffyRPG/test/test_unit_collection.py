@@ -2,6 +2,9 @@
 import unittest
 from SpiffyWorld.collections import UnitCollection
 from SpiffyWorld import Unit
+import logging
+from testfixtures import LogCapture
+
 
 class TestUnitCollection(unittest.TestCase):
     def _get_player_unit(self):
@@ -25,7 +28,9 @@ class TestUnitCollection(unittest.TestCase):
             "combat_status": "hostile"
         }
 
-        unit = Unit(unit=unit_model)
+        with LogCapture() as l:
+            logger = logging.getLogger()
+            unit = Unit(unit=unit_model, log=logger)
 
         return unit
 
@@ -50,8 +55,10 @@ class TestUnitCollection(unittest.TestCase):
             "combat_status": "hostile"
         }
 
-        unit = Unit(unit=unit_model)
-        
+        with LogCapture() as l:
+            logger = logging.getLogger()
+            unit = Unit(unit=unit_model, log=logger)
+
         return unit
 
     def test_add_unit(self):

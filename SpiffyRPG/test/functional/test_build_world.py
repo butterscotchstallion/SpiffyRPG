@@ -9,6 +9,8 @@ from SpiffyWorld.collections import UnitCollection, ItemCollection, \
     EffectCollection, UnitDialogueCollection
 from SpiffyWorld import UnitBuilder, Effect, Unit, UnitDialogue, \
     ItemBuilder
+import logging
+from testfixtures import LogCapture
 
 
 class TestBuildWorld(unittest.TestCase):
@@ -128,19 +130,29 @@ class TestBuildWorld(unittest.TestCase):
         """ Build units using assembled collections """
         unit_builder = UnitBuilder()
 
-        units = unit_builder.build_units(unit_models=unit_models,
-                                         effect_collection=effect_collection,
-                                         item_collection=item_collection,
-                                         dialogue_collection=dialogue_collection,
-                                         unit_items_map=unit_items_map,
-                                         unit_effects_map=unit_effects_map,
-                                         unit_dialogue_map=unit_dialogue_map)
+        with LogCapture() as l:
+            logger = logging.getLogger()
+            units = unit_builder.build_units(unit_models=unit_models,
+                                             effect_collection=effect_collection,
+                                             item_collection=item_collection,
+                                             dialogue_collection=dialogue_collection,
+                                             unit_items_map=unit_items_map,
+                                             unit_effects_map=unit_effects_map,
+                                             unit_dialogue_map=unit_dialogue_map,
+                                             log=logger)
 
         self.assertIsInstance(units, list)
         self.assertTrue(units)
 
+        num_players = 0
+
         for unit in units:
             self.assertIsInstance(unit, Unit)
+
+            if unit.is_player:
+                num_players += 1
+
+        self.assertTrue(num_players > 0)
 
         """
         Populate collections

@@ -7,7 +7,8 @@ from SpiffyWorld import Unit, UnitLevel, Item, UnitBuilder, \
     UnitGenerator, EffectGenerator
 from SpiffyWorld.collections import ItemCollection
 from SpiffyWorld.models import UnitItems
-
+import logging
+from testfixtures import LogCapture
 EFFECT_UNDEAD_BONUS = 25
 
 
@@ -250,7 +251,10 @@ class TestUnit(unittest.TestCase):
                                         "unit_id": unit_id})
                 unit_model["items"].append(c_item)
 
-            unit = Unit(unit=unit_model)
+            with LogCapture() as l:
+                logger = logging.getLogger()
+                unit = Unit(unit=unit_model, log=logger)
+
             expected_units.append(unit)
             unit_models.append(unit_model)
 
@@ -272,13 +276,16 @@ class TestUnit(unittest.TestCase):
         unit_items_model = UnitItems(db="quux")
         unit_items_map = unit_items_model._get_unit_items_map(unit_items_list)
 
-        actual_units = builder.build_units(unit_models=unit_models,
-                                           unit_items_map=unit_items_map,
-                                           item_collection=item_collection,
-                                           effect_collection="quux",
-                                           dialogue_collection="quux",
-                                           unit_effects_map={},
-                                           unit_dialogue_map={})
+        with LogCapture() as l:
+            logger = logging.getLogger()
+            actual_units = builder.build_units(unit_models=unit_models,
+                                               unit_items_map=unit_items_map,
+                                               item_collection=item_collection,
+                                               effect_collection="quux",
+                                               dialogue_collection="quux",
+                                               unit_effects_map={},
+                                               unit_dialogue_map={},
+                                               log=logger)
 
         self.assertEqual(len(expected_units), len(actual_units))
 
