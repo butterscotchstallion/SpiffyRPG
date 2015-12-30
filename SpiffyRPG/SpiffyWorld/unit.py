@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 import random
 import time
-from .unit_level import UnitLevel
+from SpiffyWorld import UnitLevel
+
 
 class Unit:
 
@@ -205,11 +206,11 @@ class Unit:
 
                 return True
             else:
-                self.log.info(
-                    "SpiffyRPG: attempting to use item %s but it has no effects!" % item.name)
+                self.log.info("SpiffyRPG: attempting to use item %s \
+                but it has no effects!" % item.name)
         else:
             self.log.error("SpiffyRPG: attempting to use %s but it is not in %s's bags" %
-                      (item.name, self.name))
+                           (item.name, self.name))
 
     def begin_casting_raise_dead(self):
         self.begin_casting_spell()
@@ -245,7 +246,7 @@ class Unit:
 
         if self.is_casting_spell:
             self.log.info("SpiffyRPG: %s raises %s from the dead!" %
-                     (self.name, dead_unit.get_name()))
+                          (self.name, dead_unit.get_name()))
 
             """ Reset HP """
             dead_unit.hp = dead_unit.calculate_hp()
@@ -465,7 +466,7 @@ class Unit:
             # self.announcer.player_regenerates(regen_hp=regen_hp)
 
             self.log.info("SpiffyRPG: unit %s gains %sHP from Regneration" %
-                     (self.name, regen_hp))
+                          (self.name, regen_hp))
         else:
             """
             If regeneration has brought this unit back to life,
@@ -474,7 +475,7 @@ class Unit:
             self.created_at = time.time()
 
             self.log.info("SpiffyRPG: unit %s is not rengerating because max HP (%s/%s)" %
-                     (self.name, current_hp, max_hp))
+                          (self.name, current_hp, max_hp))
 
     def is_below_max_hp(self):
         current_hp = self.get_hp()
@@ -492,10 +493,10 @@ class Unit:
             self.hp += hp_bonus
 
             self.log.info("SpiffyRPG: unit %s gains %sHP for winning" %
-                     (self.name, hp_bonus))
+                          (self.name, hp_bonus))
         else:
             self.log.info("SpiffyRPG: unit %s is at max HP (%s/%s)" %
-                     (self.name, current_hp, max_hp))
+                          (self.name, current_hp, max_hp))
 
         return hp_bonus
 
@@ -700,7 +701,7 @@ class Unit:
             unit_type = "PC"
 
         self.log.info("SpiffyRPG: %s is a stage %s %s" %
-                 (self.name, stage, unit_type))
+                      (self.name, stage, unit_type))
 
         for item in self.items:
             equippable = False
@@ -917,17 +918,17 @@ class Unit:
             self.hp += adjustment
 
             self.log.info("SpiffyRPG: added %s HP from %s" %
-                     (adjustment, effect.name))
+                          (adjustment, effect.name))
         elif effect.operator == "-":
             self.hp -= adjustment
 
             self.log.info("SpiffyRPG: subtracted %s HP from %s" %
-                     (adjustment, effect.name))
+                          (adjustment, effect.name))
         elif effect.operator == "*":
             self.hp *= adjustment
 
             self.log.info("SpiffyRPG: multiplying %s HP from %s" %
-                     (adjustment, effect.name))
+                          (adjustment, effect.name))
 
     def apply_effect(self, effect):
         """
