@@ -20,5 +20,6 @@ from .effect_generator import EffectGenerator
 from .db import Database
 from .world import World
 from .announcer import Announcer
+from .player_announcer import PlayerAnnouncer
 from .dungeon_announcer import DungeonAnnouncer
 from .worldbuilder import Worldbuilder
