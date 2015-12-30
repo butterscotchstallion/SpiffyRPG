@@ -12,7 +12,7 @@ class UnitBuilder:
 
     def build_units(self, **kwargs):
         unit_models = kwargs["unit_models"]
-
+        log = kwargs["log"]
         item_collection = kwargs["item_collection"]
         effect_collection = kwargs["effect_collection"]
         dialogue_collection = kwargs["dialogue_collection"]
@@ -74,7 +74,7 @@ class UnitBuilder:
 
             unit_model["dialogue"] = dialogue
 
-            unit = Unit(unit=unit_model)
+            unit = Unit(unit=unit_model, log=log)
 
             units.append(unit)
 
