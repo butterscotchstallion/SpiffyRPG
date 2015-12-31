@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 import unittest
 from SpiffyWorld import Dungeon, UnitGenerator, Unit
+import logging
+from testfixtures import LogCapture
 
 
 class TestDungeon(unittest.TestCase):
@@ -21,13 +23,21 @@ class TestDungeon(unittest.TestCase):
 
     def test_create_dungeon(self):
         dungeon_model = self._get_dungeon_model()
-        dungeon = Dungeon(dungeon=dungeon_model, announcer={})
+        with LogCapture():
+            logger = logging.getLogger()
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer={},
+                              log=logger)
 
         self.assertEqual(len(dungeon.units), 0)
 
     def test_add_dungeon_units(self):
         dungeon_model = self._get_dungeon_model()
-        dungeon = Dungeon(dungeon=dungeon_model, announcer={})
+        with LogCapture():
+            logger = logging.getLogger()
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer={},
+                              log=logger)
 
         unit_generator = UnitGenerator()
         unit = unit_generator.generate()
@@ -40,7 +50,11 @@ class TestDungeon(unittest.TestCase):
 
     def test_get_unit_by_user_id(self):
         dungeon_model = self._get_dungeon_model()
-        dungeon = Dungeon(dungeon=dungeon_model, announcer={})
+        with LogCapture():
+            logger = logging.getLogger()
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer={},
+                              log=logger)
         user_id = 42
         unit_generator = UnitGenerator()
         unit = unit_generator.generate(user_id=user_id)
@@ -53,7 +67,11 @@ class TestDungeon(unittest.TestCase):
 
     def test_get_player_by_user_id(self):
         dungeon_model = self._get_dungeon_model()
-        dungeon = Dungeon(dungeon=dungeon_model, announcer={})
+        with LogCapture():
+            logger = logging.getLogger()
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer={},
+                              log=logger)
 
         user_id = 42
         unit_generator = UnitGenerator()
@@ -69,7 +87,11 @@ class TestDungeon(unittest.TestCase):
 
     def test_get_unit_by_name(self):
         dungeon_model = self._get_dungeon_model()
-        dungeon = Dungeon(dungeon=dungeon_model, announcer={})
+        with LogCapture():
+            logger = logging.getLogger()
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer={},
+                              log=logger)
 
         unit_name = "quux"
 
@@ -98,7 +120,11 @@ class TestDungeon(unittest.TestCase):
 
     def test_get_living_unit_by_name(self):
         dungeon_model = self._get_dungeon_model()
-        dungeon = Dungeon(dungeon=dungeon_model, announcer={})
+        with LogCapture():
+            logger = logging.getLogger()
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer={},
+                              log=logger)
 
         unit_name = "baz"
         unit_generator = UnitGenerator()
@@ -117,7 +143,11 @@ class TestDungeon(unittest.TestCase):
 
     def test_get_dead_unit_by_name(self):
         dungeon_model = self._get_dungeon_model()
-        dungeon = Dungeon(dungeon=dungeon_model, announcer={})
+        with LogCapture():
+            logger = logging.getLogger()
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer={},
+                              log=logger)
 
         unit_name = "Oliver Queen"
         unit_generator = UnitGenerator()
@@ -138,7 +168,11 @@ class TestDungeon(unittest.TestCase):
 
     def test_get_living_players(self):
         dungeon_model = self._get_dungeon_model()
-        dungeon = Dungeon(dungeon=dungeon_model, announcer={})
+        with LogCapture():
+            logger = logging.getLogger()
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer={},
+                              log=logger)
 
         unit_generator = UnitGenerator()
 
@@ -160,7 +194,11 @@ class TestDungeon(unittest.TestCase):
 
     def test_get_unit_status_distribution(self):
         dungeon_model = self._get_dungeon_model()
-        dungeon = Dungeon(dungeon=dungeon_model, announcer={})
+        with LogCapture():
+            logger = logging.getLogger()
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer={},
+                              log=logger)
 
         """ living hostile player """
         unit_generator = UnitGenerator()
