@@ -20,6 +20,7 @@ class World:
         self.dialogue_collection = kwargs["dialogue_collection"]
         self.unit_type_collection = kwargs["unit_type_collection"]
         self.unit_model = kwargs["unit_model"]
+        self.battlemaster = kwargs["battlemaster"]
 
     def destroy(self):
         self.log.info("SpiffyRPG: destroying world!")
