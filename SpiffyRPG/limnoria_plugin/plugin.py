@@ -166,6 +166,8 @@ class SpiffyRPG(callbacks.Plugin):
                     player.nick = nick
                     dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
                     dungeon.add_unit(player)
+
+                    return player
                 else:
                     log.error("No player with user_id %s" % user_id)
 
@@ -1195,45 +1197,26 @@ class SpiffyRPG(callbacks.Plugin):
         Announces players joining
         if supyworld.testing:
         """
-        self.irc = irc
-        user_id = self._get_user_id_by_irc_and_msg(irc, msg)
+        player = self._add_players_from_channel()
 
-        if user_id is not None:
-            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
+        if player is not None:
+            """ Voice recognized users """
+            irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
 
-            if dungeon is not None:
-                uc = self.SpiffyWorld.unit_collection
-                unit = uc.get_player_by_user_id(user_id=user_id)
+            if player.id in self.welcome_messages:
+                last_welcome = time.time() - \
+                    self.welcome_messages[player.id]
+            else:
+                last_welcome = time.time() - \
+                    self.welcome_message_cooldown_in_seconds
 
-                if unit is not None:
-                    """
-                    Only spawn player units that are actually in the channel
-                    """
-                    nick_is_here = self._is_nick_in_channel(self.irc, unit.nick)
+            if last_welcome > self.welcome_message_cooldown_in_seconds:
+                dungeon.announcer.unit_info(
+                    unit=player, dungeon=dungeon, irc=irc)
+                self.welcome_messages[player.id] = time.time()
+            else:
+                log.info(
+                    "SpiffyRPG: not welcoming %s because cooldown" % player.name)
 
-                    if nick_is_here:
-                        player = dungeon.spawn_player_unit(unit=unit)
-
-                        if player is not None:
-                            """ Voice recognized users """
-                            irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
-
-                            if player.id in self.welcome_messages:
-                                last_welcome = time.time() - \
-                                    self.welcome_messages[player.id]
-                            else:
-                                last_welcome = time.time() - \
-                                    self.welcome_message_cooldown_in_seconds
-
-                            if last_welcome > self.welcome_message_cooldown_in_seconds:
-                                dungeon.announcer.unit_info(
-                                    unit=player, dungeon=dungeon, irc=irc)
-                                self.welcome_messages[player.id] = time.time()
-                            else:
-                                log.info(
-                                    "SpiffyRPG: not welcoming %s because cooldown" % player.name)
-                else:
-                    log.error(
-                        "SpiffyRPG: could not find player with user_id %s" % user_id)
 
 Class = SpiffyRPG
