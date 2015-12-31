@@ -29,6 +29,9 @@ class Item:
     def __eq__(self, other):
         return self.id == other.id
 
+    def __str__(self):
+        return self.name
+
     def is_usable(self):
         return self.can_use
 
