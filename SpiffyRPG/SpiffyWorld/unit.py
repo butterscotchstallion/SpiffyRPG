@@ -69,10 +69,6 @@ class Unit:
         self.is_player = self.user_id > 0
         self.is_npc = self.user_id <= 0
 
-        if self.is_player:
-            if "nick" in kwargs:
-                self.nick = kwargs["nick"]
-
         """
         Each unit should get some base items for their level.
         """
