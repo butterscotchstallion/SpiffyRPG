@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import time
-import logging as log
 import random
 
 GAME_CHANNEL = "#spiffyrpg"
@@ -24,18 +23,19 @@ class Dungeon:
         self.max_level = dungeon["max_level"]
         self.channel = dungeon["channel"].lower()
         self.max_units = 100
+        self.log = kwargs["log"]
 
         params = (self.id, self.channel)
 
-        log.info("SpiffyRPG: initializing dungeon #%s - %s" % params)
+        self.log.info("SpiffyRPG: initializing dungeon #%s - %s" % params)
 
         self.announcer = kwargs["announcer"]
 
         if "max_level" in kwargs:
             self.max_level = kwargs["max_level"]
 
-            log.info("SpiffyRPG: creating dungeon with max level %s" %
-                     self.max_level)
+            self.log.info("SpiffyRPG: creating dungeon with max level %s" %
+                          self.max_level)
 
     def get_boss_units(self):
         return [unit for unit in self.units if unit.is_boss]
@@ -49,7 +49,7 @@ class Dungeon:
         num_units = len(units)
         dungeon_cleared = num_units == 0
 
-        log.info("SpiffyRPG: checking if %s has been cleared" % self.name)
+        self.log.info("SpiffyRPG: checking if %s has been cleared" % self.name)
 
         if dungeon_cleared:
             xp_needed_this_level = self.unit_level.get_xp_for_level(
@@ -58,16 +58,16 @@ class Dungeon:
 
             player.add_experience(xp)
 
-            log.info("SpiffyRPG: adding %s xp to %s" % (xp, player.name))
+            self.log.info("SpiffyRPG: adding %s xp to %s" % (xp, player.name))
 
             self.announcer.dungeon_cleared(dungeon=self,
                                            player=player,
                                            xp=xp)
         else:
-            log.info("SpiffyRPG: %s has %s units" % (self.name, num_units))
+            self.log.info("SpiffyRPG: %s has %s units" % (self.name, num_units))
 
     def start_player_regen_timer(self):
-        log.info("SpiffyRPG: starting player regen interval")
+        self.log.info("SpiffyRPG: starting player regen interval")
 
         regen_interval = 300
 
@@ -76,7 +76,7 @@ class Dungeon:
                                        name="player_regen_timer")
 
     def start_chaos_timer(self):
-        log.info("SpiffyRPG: starting chaos interval")
+        self.log.info("SpiffyRPG: starting chaos interval")
 
         spawn_interval = 300
 
@@ -89,7 +89,7 @@ class Dungeon:
         When a player dies in a dungeon they stay dead until
         they are regenerated over time
         """
-        log.info("SpiffyRPG: regenerating players in %s" % self.name)
+        self.log.info("SpiffyRPG: regenerating players in %s" % self.name)
 
         wounded_players = self.get_wounded_players()
 
@@ -100,7 +100,7 @@ class Dungeon:
 
                 player.regenerate_hp(regen_hp)
         else:
-            log.info("SpiffyRPG: no wounded/dead players in %s" % self.name)
+            self.log.info("SpiffyRPG: no wounded/dead players in %s" % self.name)
 
     def herald_chaos(self):
         """
@@ -132,8 +132,8 @@ class Dungeon:
             if len(alive_without_attacker) > 0:
                 target = random.choice(alive_without_attacker)
 
-                log.info("SpiffyRPG: starting chaos battle: %s vs %s" %
-                         (attacker_title, target.get_title()))
+                self.log.info("SpiffyRPG: starting chaos battle: %s vs %s" %
+                              (attacker_title, target.get_title()))
 
                 dialogue = attacker.get_zombie_dialogue()
                 self.announcer.dungeon_undead_attacker(attacker=attacker,
@@ -145,10 +145,10 @@ class Dungeon:
                 self.battle.add_party_member(target)
                 self.battle.start()
             else:
-                log.info("SpiffyRPG: %s has nobody to party with" %
-                         attacker_title)
+                self.log.info("SpiffyRPG: %s has nobody to party with" %
+                              attacker_title)
         else:
-            log.info("SpiffyRPG: no undead units!")
+            self.log.info("SpiffyRPG: no undead units!")
 
     def random_unit_dialogue(self):
         """ Add random chance here """
@@ -162,14 +162,14 @@ class Dungeon:
 
                 dialogue = unit.dialogue_intro()
 
-                log.info("SpiffyRPG: %s says '%s' to %s" %
-                         (unit.get_title(), dialogue, self.channel))
+                self.log.info("SpiffyRPG: %s says '%s' to %s" %
+                              (unit.get_title(), dialogue, self.channel))
 
                 self.announcer.unit_dialogue(unit, dialogue)
             else:
-                log.info("SpiffyRPG: dialoguing by not random enough")
+                self.log.info("SpiffyRPG: dialoguing by not random enough")
         else:
-            log.info("SpiffyRPG: no units in %s, not dialoguing" % self.name)
+            self.log.info("SpiffyRPG: no units in %s, not dialoguing" % self.name)
 
     def _is_nick_in_channel(self, irc, nick):
         return nick in irc.state.channels[GAME_CHANNEL].users
@@ -196,18 +196,18 @@ class Dungeon:
             else:
                 msg += "%s NPC: %s (%s) with %s HP in %s" % params
 
-            log.info(msg)
+            self.log.info(msg)
 
             self.units.append(unit)
         else:
-            log.info("SpiffyRPG: not adding duplicate unit %s" %
-                     (unit.get_name()))
+            self.log.info("SpiffyRPG: not adding duplicate unit %s" %
+                          (unit.get_name()))
 
     def remove_unit(self, unit):
         units = []
 
-        log.info("SpiffyRPG: [%s] Unit %s#%s died" %
-                 (self.name, unit.get_title(), unit.id))
+        self.log.info("SpiffyRPG: [%s] Unit %s#%s died" %
+                      (self.name, unit.get_title(), unit.id))
 
         for u in self.units:
             if unit.id != u.id:
