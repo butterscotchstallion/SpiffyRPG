@@ -29,12 +29,14 @@ class SpiffyRPGTestCase(ChannelPluginTestCase):
         self.feedMsg("register SpiffyTester SpiffyPW",
                      to=self.nick,
                      frm=self.prefix)
-        reg_response = self.getMsg(" ")
+        # "The operation suceeded"
+        _ = self.getMsg(' ')
 
         self.feedMsg("hostmask add *!*@example.com",
                      to=self.nick,
                      frm=self.prefix)
-        hostmask_response = self.getMsg(" ")
+        # "The operation suceeded"
+        _ = self.getMsg(' ')
 
         # copy test db
         filename = "SpiffyRPG.sqlite3.db"
@@ -49,58 +51,82 @@ class SpiffyRPGTestCase(ChannelPluginTestCase):
         assert os.path.exists(test_db_destination)
 
         self.assertNotError("load SpiffyRPG")
+        # "The operation suceeded"
+        _ = self.getMsg(' ')
 
         classes = ("hacker", "zen master", "troll")
         sclass = random.choice(classes)
-        self.assertNotError("sjoin %s" % sclass)
+
+        self.assertRegexp("sjoin %s" % sclass, "joined the game")
+
+    def test_rock_strike(self):
+        self.assertNotError("rock john")
+        _ = self.getMsg(' ')
 
     def test_help(self):
-        self.assertNotError("spiffyrpg help")
+        self.assertRegexp("spiffyrpg help", "Basic commands")
+        _ = self.getMsg(' ')
 
     def test_inspect(self):
-        self.assertNotError("inspect")
+        self.assertRegexp("inspect", "THRILLHOUSE")
+        _ = self.getMsg(' ')
 
     def test_inspect_something(self):
         self.assertNotError("inspect john")
+        _ = self.getMsg(' ')
 
     def test_topplayers(self):
         self.assertNotError("topplayers")
+        _ = self.getMsg(' ')
 
     def test_map(self):
-        self.assertNotError("smap")
+        self.assertRegexp("smap", "You have been in")
+        _ = self.getMsg(' ')
 
     def test_look(self):
         self.assertNotError("look")
+        _ = self.getMsg(' ')
 
     def test_seance(self):
-        self.assertNotError("seance")
+        self.assertRegexp("seance", "does not sense")
+        _ = self.getMsg(' ')
 
     def test_title(self):
         self.assertNotError("title THRILLHOUSE")
+        _ = self.getMsg(' ')
 
     def test_rock(self):
-        self.assertNotError("rock")
+        self.assertHelp("rock")
+        _ = self.getMsg(' ')
 
     def test_paper(self):
-        self.assertNotError("paper")
+        self.assertHelp("paper")
+        _ = self.getMsg(' ')
 
     def test_scissors(self):
-        self.assertNotError("scissors")
+        self.assertHelp("scissors")
+        _ = self.getMsg(' ')
 
     def test_lizard(self):
-        self.assertNotError("lizard")
+        self.assertHelp("lizard")
+        _ = self.getMsg(' ')
 
     def test_spock(self):
-        self.assertNotError("spock")
+        self.assertHelp("spock")
+        _ = self.getMsg(' ')
 
     def test_equip(self):
-        self.assertNotError("equip rock")
+        self.assertHelp("equip")
+        _ = self.getMsg(' ')
 
-    def test_items(self):
-        self.assertNotError("items")
+    def test_inventory(self):
+        self.assertNotError("inventory")
+        _ = self.getMsg(' ')
 
     def test_effect(self):
-        self.assertNotError("effect")
+        self.assertHelp("effect")
+        _ = self.getMsg(' ')
 
     def test_raise(self):
-        self.assertNotError("raise")
+        self.assertHelp("raisedead")
+        _ = self.getMsg(' ')
