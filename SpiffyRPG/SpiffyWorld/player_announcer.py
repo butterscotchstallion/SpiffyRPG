@@ -54,7 +54,8 @@ class PlayerAnnouncer(Announcer):
     def damage_dealt(self, **kwargs):
         attack_info = kwargs["attack_info"]
         target = kwargs["target"]
-        params = (attack_info["item"].name, target.name, attack_info["damage"])
+        attacker_item = attack_info["attacker_weapon"]
+        params = (attacker_item.name, target.name, attack_info["damage"])
 
         announcement_msg = "Your %s hits %s for %s damage" % params
 
@@ -63,8 +64,9 @@ class PlayerAnnouncer(Announcer):
     def damage_applied(self, **kwargs):
         attack_info = kwargs["attack_info"]
         attacker = kwargs["attacker"]
+        item = attack_info["attacker_weapon"]
 
-        params = (attack_info["damage"], attacker.name, attack_info["item"].name)
+        params = (attack_info["damage"], attacker.name, item.name)
 
         announcement_msg = "You take %s damage from %s's %s" % params
 
