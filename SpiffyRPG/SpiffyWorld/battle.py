@@ -12,7 +12,11 @@ class InvalidCombatantException(ValueError):
     """
 
     def __init__(self, ex_msg):
+        self.message = ex_msg
         ValueError.__init__(self, ex_msg)
+
+    def __str__(self):
+        return self.message
 
 
 class CombatStatusException(ValueError):
