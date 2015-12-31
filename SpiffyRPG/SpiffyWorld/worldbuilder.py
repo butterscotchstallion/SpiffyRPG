@@ -270,7 +270,9 @@ class Worldbuilder:
                                          ircutils=self.ircutils,
                                          ircmsgs=self.ircmsgs,
                                          destination="#spiffyrpg")
-            dungeon = Dungeon(dungeon=dungeon_model, announcer=announcer)
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer=announcer,
+                              log=self.log)
 
             for unit in units:
                 dungeon.add_unit(unit)
