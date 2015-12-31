@@ -9,7 +9,7 @@ from SpiffyWorld.collections import EffectCollection, ItemCollection, \
     UnitDialogueCollection, UnitCollection, DungeonCollection, \
     UnitTypeCollection
 from SpiffyWorld import Effect, ItemBuilder, World, Dungeon, UnitDialogue, \
-    UnitBuilder, UnitType, DungeonAnnouncer
+    UnitBuilder, UnitType, DungeonAnnouncer, Battlemaster
 
 
 class Worldbuilder:
@@ -51,7 +51,7 @@ class Worldbuilder:
         dungeon_unit_info = self._build_dungeon_units()
         dungeon_unit_models = dungeon_unit_info["dungeon_unit_models"]
         dungeon_unit_map = dungeon_unit_info["dungeon_unit_map"]
-        unit_items_map = self._build_unit_items()
+        unit_items_map = self._build_unit_items(item_collection)
         unit_type_collection = self._build_unit_types()
 
         unit_info = \
@@ -69,6 +69,8 @@ class Worldbuilder:
                                  dungeon_unit_models=dungeon_unit_models,
                                  unit_collection=unit_collection)
 
+        battlemaster = Battlemaster()
+
         world = World(effect_collection=effect_collection,
                       item_collection=item_collection,
                       unit_collection=unit_collection,
@@ -76,6 +78,7 @@ class Worldbuilder:
                       dungeon_collection=dungeon_collection,
                       unit_type_collection=unit_type_collection,
                       unit_model=unit_model,
+                      battlemaster=battlemaster,
                       irc=self.irc,
                       log=self.log)
 
@@ -128,12 +131,21 @@ class Worldbuilder:
             "unit_model": unit_model
         }
 
-    def _build_unit_items(self):
+    def _build_unit_items(self, item_collection):
         self.log.info("Building unit items")
 
         unit_items_model = UnitItemsModel(db=self.db)
         unit_item_models = unit_items_model.get_unit_items()
         unit_items_map = unit_items_model._get_unit_items_map(unit_item_models)
+
+        """
+        Each unit starts with a set of base items.
+        """
+        base_items = item_collection.get_base_items()
+
+        for unit_id in unit_items_map:
+            for base_item in base_items:
+                unit_items_map[unit_id].append(base_item.id)
 
         return unit_items_map
 
