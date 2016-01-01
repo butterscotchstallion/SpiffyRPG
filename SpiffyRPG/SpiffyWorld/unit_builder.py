@@ -45,6 +45,9 @@ class UnitBuilder:
                         items.append(item)
 
             unit_model["items"] = items
+            unit_type_id = unit_model["unit_type_id"]
+            unit_model["base_items"] = \
+                item_collection.get_base_items_by_unit_type_id(unit_type_id)
 
             """
             Add effects from map
@@ -65,11 +68,11 @@ class UnitBuilder:
             """
             if unit_id in unit_dialogue_map:
                 unit_dialogue_ids = unit_dialogue_map[unit_id]
-                unit_dialogue = dialogue_collection.get_dialogue_by_dialogue_id_list(
-                    unit_dialogue_ids)
+                dc = dialogue_collection
+                ud = dc.get_dialogue_by_dialogue_id_list(unit_dialogue_ids)
 
-                if unit_dialogue:
-                    for d in unit_dialogue:
+                if ud:
+                    for d in ud:
                         dialogue.append(d)
 
             unit_model["dialogue"] = dialogue
