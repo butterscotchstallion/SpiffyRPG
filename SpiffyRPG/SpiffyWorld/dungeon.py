@@ -199,6 +199,8 @@ class Dungeon:
             self.log.info(msg)
 
             self.units.append(unit)
+
+            return unit
         else:
             self.log.info("SpiffyRPG: not adding duplicate unit %s" %
                           (unit.get_name()))
