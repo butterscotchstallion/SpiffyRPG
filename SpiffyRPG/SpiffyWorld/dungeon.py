@@ -206,9 +206,6 @@ class Dungeon:
     def remove_unit(self, unit):
         units = []
 
-        self.log.info("SpiffyRPG: [%s] Unit %s#%s died" %
-                      (self.name, unit.get_title(), unit.id))
-
         for u in self.units:
             if unit.id != u.id:
                 units.append(u)
