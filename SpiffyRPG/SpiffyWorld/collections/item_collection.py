@@ -32,5 +32,11 @@ class ItemCollection:
     def get_base_items(self):
         return [item for item in self.items if item.is_permanent]
 
+    def get_base_items_by_unit_type_id(self, unit_type_id):
+        base_items = self.get_base_items()
+        unit_type_base_items = [item for item in base_items
+                                if item.unit_type_id == unit_type_id]
+        return unit_type_base_items
+
     def get_items_by_item_id_list(self, item_id_list):
         return [item for item in self.items if item.id in item_id_list]
