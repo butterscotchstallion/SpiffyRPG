@@ -263,19 +263,22 @@ class Worldbuilder:
                                          ircutils=self.ircutils,
                                          ircmsgs=self.ircmsgs,
                                          destination="#spiffyrpg")
+
             dungeon = Dungeon(dungeon=dungeon_model,
                               announcer=announcer,
                               log=self.log)
 
             for unit in units:
-                dungeon.add_unit(unit)
-                total_units += 1
+                added_unit = dungeon.add_unit(unit)
 
-                if unit.is_player:
-                    player_units += 1
+                if added_unit is not None:
+                    total_units += 1
 
-                if unit.is_npc:
-                    npc_units += 1
+                    if unit.is_player:
+                        player_units += 1
+
+                    if unit.is_npc:
+                        npc_units += 1
 
             dungeon_collection.add(dungeon)
 
