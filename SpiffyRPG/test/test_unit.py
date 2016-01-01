@@ -74,7 +74,8 @@ class TestUnit(unittest.TestCase):
             "is_boss": 0,
             "unit_type_id": unit_type_id,
             "unit_type_name": "quux",
-            "combat_status": "hostile"
+            "combat_status": "hostile",
+            "base_items": []
         }
 
         return unit_model
@@ -251,7 +252,7 @@ class TestUnit(unittest.TestCase):
                                         "unit_id": unit_id})
                 unit_model["items"].append(c_item)
 
-            with LogCapture() as l:
+            with LogCapture():
                 logger = logging.getLogger()
                 unit = Unit(unit=unit_model, log=logger)
 
@@ -276,7 +277,7 @@ class TestUnit(unittest.TestCase):
         unit_items_model = UnitItems(db="quux")
         unit_items_map = unit_items_model._get_unit_items_map(unit_items_list)
 
-        with LogCapture() as l:
+        with LogCapture():
             logger = logging.getLogger()
             actual_units = builder.build_units(unit_models=unit_models,
                                                unit_items_map=unit_items_map,
@@ -292,7 +293,7 @@ class TestUnit(unittest.TestCase):
         """
         Ensure that each unit has the expected item set
         """
-        unit_items = [item for item in item_collection.items]
+        unit_items = [uitem for uitem in item_collection.items]
 
         for unit in actual_units:
             # Ensure that each of the new units have full HP
