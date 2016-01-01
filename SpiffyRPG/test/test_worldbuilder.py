@@ -17,7 +17,7 @@ class TestWorldbuilder(unittest.TestCase):
         cls.db = cls._db.get_connection()
 
     def test_build_world(self):
-        with LogCapture() as l:
+        with LogCapture():
             logger = logging.getLogger()
             worldbuilder = Worldbuilder(db=self.db,
                                         irc="quux",
