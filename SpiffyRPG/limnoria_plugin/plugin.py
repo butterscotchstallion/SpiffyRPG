@@ -116,13 +116,17 @@ class SpiffyRPG(callbacks.Plugin):
 
             self.SpiffyWorld = spiffy_world
 
-            self._add_players_from_channel()
+            self._add_players_from_channel(new_player_nick=None)
 
         assert self.SpiffyWorld is not None
 
-    def _add_players_from_channel(self):
+    def _add_players_from_channel(self, **kwargs):
         nicks_in_channel = []
         ignore_nicks = self.registryValue("ignoreNicks")
+        new_player_nick = None
+
+        if "new_player_nick" in kwargs:
+            new_player_nick = kwargs["new_player_nick"]
 
         if GAME_CHANNEL in self.irc.state.channels:
             nicks_in_channel = self.irc.state.channels[GAME_CHANNEL].users
@@ -167,7 +171,9 @@ class SpiffyRPG(callbacks.Plugin):
                     dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
                     dungeon.add_unit(player)
 
-                    return player
+                    if new_player_nick is not None:
+                        if player.nick == new_player_nick:
+                            return player
                 else:
                     log.error("No player with user_id %s" % user_id)
 
@@ -211,6 +217,90 @@ class SpiffyRPG(callbacks.Plugin):
                     "player": player,
                     "battle": battle
                 }
+
+    def _start_player_battle_with_weapon(self, **kwargs):
+        """
+        1. Get dungeon and player
+        2. Equip player with desired item type
+        3. Start battle and add combatants
+        4. Add round
+        """
+        irc = kwargs["irc"]
+        player_user = kwargs["player_user"]
+        target_name = kwargs["target_name"]
+        weapon_type = kwargs["weapon_type"]
+
+        dungeon_info = self._get_dungeon_and_player(irc, player_user)
+
+        if dungeon_info is not None:
+            dungeon = dungeon_info["dungeon"]
+            player = dungeon_info["player"]
+
+            target_unit = dungeon.get_living_unit_by_name(target_name)
+
+            if target_unit is None:
+                irc.error("Invalid target")
+                return
+
+            equip_ok = player.equip_item_by_type(item_type=weapon_type)
+
+            if equip_ok is not None:
+                try:
+                    """
+                    NPCs equip a random weapon that is not what the player
+                    chose each battle. This could probably be moved somewhere
+                    else. Perhaps into Battle?
+                    """
+                    if not target_unit.is_player:
+                        target_unit.equip_random_weapon(avoid_weapon_type=weapon_type)
+
+                    """
+                    Find the last battle, or create a new one if there isn't
+                    one already.
+                    """
+                    bm = self.SpiffyWorld.battlemaster
+                    battle = bm.get_battle_by_combatant(combatant=target_unit)
+
+                    if battle is None:
+                        battle = SpiffyBattle()
+                        battle.add_combatant(player)
+                        battle.add_combatant(target_unit)
+
+                    hit_info = player.attack(target=target_unit)
+
+                    battle.add_round(attacker=player,
+                                     target=target_unit,
+                                     hit_info=hit_info)
+
+                    """
+                    If the target unit is not a player, initialize
+                    target announcer
+                    """
+                    if target_unit.is_player:
+                        target_announcer = PlayerAnnouncer(irc=irc,
+                                                           destination=target_unit.nick,
+                                                           ircutils=ircutils,
+                                                           ircmsgs=ircmsgs)
+                        target_announcer.damage_applied(attack_info=hit_info,
+                                                        attacker=player)
+
+                    """
+                    Player announcer
+                    """
+                    player_announcer = PlayerAnnouncer(irc=irc,
+                                                       destination=player.nick,
+                                                       ircutils=ircutils,
+                                                       ircmsgs=ircmsgs)
+
+                    player_announcer.damage_dealt(attack_info=hit_info,
+                                                  target=target_unit)
+                except InvalidCombatantException, e:
+                    irc.error(e)
+            else:
+                irc.error("You can't equip that.")
+        else:
+            log.error("SpiffyWorld: Player %s not found!" % player_user)
+            irc.error("Player not found")
 
     """
     Game commands
@@ -356,66 +446,10 @@ class SpiffyRPG(callbacks.Plugin):
         """
         rock <target> - attacks your target with a Rock type weapon
         """
-        dungeon_info = self._get_dungeon_and_player(irc, user)
-
-        if dungeon_info is not None:
-            dungeon = dungeon_info["dungeon"]
-            player = dungeon_info["player"]
-            target_unit = dungeon.get_living_unit_by_name(target_name)
-
-            if target_unit is None:
-                irc.error("Invalid target")
-                return
-
-            equip_ok = player.equip_item_by_type(item_type="rock")
-
-            if equip_ok is not None:
-                try:
-                    if not target_unit.is_player:
-                        target_unit.equip_random_weapon(avoid_weapon_type="rock")
-
-                    battle = self.SpiffyWorld.battlemaster.get_battle_by_combatant(combatant=target_unit)
-
-                    if battle is None:
-                        battle = SpiffyBattle()
-                        battle.add_combatant(player)
-                        battle.add_combatant(target_unit)
-
-                    hit_info = player.attack(target=target_unit)
-
-                    battle.add_round(attacker=player,
-                                     target=target_unit,
-                                     hit_info=hit_info)
-
-                    """
-                    If the target unit is not a player, initialize
-                    target announcer
-                    """
-                    if target_unit.is_player:
-                        target_announcer = PlayerAnnouncer(irc=irc,
-                                                           destination=target_unit.nick,
-                                                           ircutils=ircutils,
-                                                           ircmsgs=ircmsgs)
-                        target_announcer.damage_applied(attack_info=hit_info,
-                                                        attacker=player)
-
-                    """
-                    Player announcer
-                    """
-                    player_announcer = PlayerAnnouncer(irc=irc,
-                                                       destination=player.nick,
-                                                       ircutils=ircutils,
-                                                       ircmsgs=ircmsgs)
-
-                    player_announcer.damage_dealt(attack_info=hit_info,
-                                                  target=target_unit)
-                except InvalidCombatantException, e:
-                    irc.error(e)
-            else:
-                irc.error("You can't equip that.")
-        else:
-            irc.error("That target appears to be dead or non-existent")
-
+        self._start_player_battle_with_weapon(irc=irc,
+                                              player_user=user,
+                                              target_name=target_name,
+                                              weapon_type="rock")
     rock = wrap(rock, ["user", "text"])
 
     def paper(self, irc, msg, args, user, target):
@@ -1197,11 +1231,13 @@ class SpiffyRPG(callbacks.Plugin):
         Announces players joining
         if supyworld.testing:
         """
-        player = self._add_players_from_channel()
+        player = self._add_players_from_channel(new_player_nick=msg.nick)
 
         if player is not None:
             """ Voice recognized users """
             irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
+
+            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
 
             if player.id in self.welcome_messages:
                 last_welcome = time.time() - \
