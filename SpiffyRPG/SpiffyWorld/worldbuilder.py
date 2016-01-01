@@ -138,15 +138,6 @@ class Worldbuilder:
         unit_item_models = unit_items_model.get_unit_items()
         unit_items_map = unit_items_model._get_unit_items_map(unit_item_models)
 
-        """
-        Each unit starts with a set of base items.
-        """
-        base_items = item_collection.get_base_items()
-
-        for unit_id in unit_items_map:
-            for base_item in base_items:
-                unit_items_map[unit_id].append(base_item.id)
-
         return unit_items_map
 
     def _build_dialogue(self, **kwargs):
@@ -240,6 +231,7 @@ class Worldbuilder:
 
         total_units = 0
         player_units = 0
+        npc_units = 0
         dungeon_collection = DungeonCollection()
         unit_collection = kwargs["unit_collection"]
         dungeon_unit_map = kwargs["dungeon_unit_map"]
@@ -264,7 +256,8 @@ class Worldbuilder:
             other_units = unit_collection.units
 
             for ounit in other_units:
-                units.append(ounit)
+                if ounit not in units:
+                    units.append(ounit)
 
             announcer = DungeonAnnouncer(irc=self.irc,
                                          ircutils=self.ircutils,
@@ -281,11 +274,17 @@ class Worldbuilder:
                 if unit.is_player:
                     player_units += 1
 
+                if unit.is_npc:
+                    npc_units += 1
+
             dungeon_collection.add(dungeon)
 
         total_dungeons = len(dungeon_collection.dungeons)
 
-        self.log.info("SpiffyWorld: %s dungeons with %s total units and %s players loaded" %
-                      (total_dungeons, total_units, player_units))
+        debug_msg = "SpiffyWorld: %s dungeons with " % total_dungeons
+        debug_msg += "%s NPCs, %s players loaded" % \
+            (npc_units, player_units)
+
+        self.log.info(debug_msg)
 
         return dungeon_collection
