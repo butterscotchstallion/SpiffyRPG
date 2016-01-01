@@ -57,10 +57,11 @@ class UnitGenerator:
             "is_boss": 0,
             "unit_type_id": unit_type_id,
             "unit_type_name": "quux",
-            "combat_status": combat_status
+            "combat_status": combat_status,
+            "base_items": []
         }
 
-        with LogCapture() as l:
+        with LogCapture():
             logger = logging.getLogger()
             unit = Unit(unit=unit_model, log=logger)
 
