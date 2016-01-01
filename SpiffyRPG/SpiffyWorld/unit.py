@@ -44,8 +44,8 @@ class Unit:
         self.effects = unit["effects"]
         self.items = unit["items"]
         self.lootable_items = [
-            item for item in self.items if item.is_permanent]
-        self.base_items = [item for item in self.items if item.is_permanent]
+            item for item in self.items if not item.is_permanent]
+        self.base_items = unit["base_items"]
         self.dialogue = unit["dialogue"]
         self.experience = unit["experience"]
 
@@ -261,6 +261,9 @@ class Unit:
         return loot_item.id in item_ids
 
     def add_inventory_item(self, **kwargs):
+        """
+        Permanently adds an item to a unit's inventory
+        """
         item = kwargs["item"]
 
         if not self.has_item(item=item):
@@ -499,9 +502,9 @@ class Unit:
         base_items = self.base_items
 
         for item in base_items:
-            is_in_bags = item in self.items
             is_unit_type = item.unit_type_id == self.unit_type_id
             is_level_appropriate = item.min_level <= self.level
+            is_in_bags = item in self.items
 
             if not is_in_bags and is_unit_type and is_level_appropriate:
                 if self.is_player:
@@ -511,6 +514,9 @@ class Unit:
                     if self.is_stage_one() and item.is_scissors():
                         continue
                 else:
+                    """
+                    NPCs start with scissors
+                    """
                     if self.is_stage_one() and item.is_rock():
                         continue
 
