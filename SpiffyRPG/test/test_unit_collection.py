@@ -25,10 +25,11 @@ class TestUnitCollection(unittest.TestCase):
             "is_boss": 0,
             "unit_type_id": 2,
             "unit_type_name": "Hacker",
-            "combat_status": "hostile"
+            "combat_status": "hostile",
+            "base_items": []
         }
 
-        with LogCapture() as l:
+        with LogCapture():
             logger = logging.getLogger()
             unit = Unit(unit=unit_model, log=logger)
 
@@ -52,10 +53,11 @@ class TestUnitCollection(unittest.TestCase):
             "is_boss": 0,
             "unit_type_id": 2,
             "unit_type_name": "Hacker",
-            "combat_status": "hostile"
+            "combat_status": "hostile",
+            "base_items": []
         }
 
-        with LogCapture() as l:
+        with LogCapture():
             logger = logging.getLogger()
             unit = Unit(unit=unit_model, log=logger)
 
@@ -111,6 +113,7 @@ class TestUnitCollection(unittest.TestCase):
 
         top_players = collection.get_top_players_by_xp()
 
+        self.assertIsNotNone(top_players)
         self.assertIsNotNone(player)
         self.assertEqual(player.user_id, 1)
         self.assertTrue(player.is_player, True)
