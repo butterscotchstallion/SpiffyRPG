@@ -34,7 +34,12 @@ class TestUnitBuilder(unittest.TestCase):
         item_id = uuid4()
         item_name = "TestItem-%s" % item_id
         item_types = ("rock", "scissors", "paper", "lizard", "spock")
-        item_type = choice(item_types)
+
+        if "item_type" in kwargs:
+            item_type = kwargs["item_type"]
+        else:
+            item_type = choice(item_types)
+
         is_permanent = choice([0, 1])
 
         if "is_permanent" in kwargs:
@@ -145,7 +150,8 @@ class TestUnitBuilder(unittest.TestCase):
         unit_dialogue_model = UnitDialogueModel(db="quux")
 
         total_units = 25
-        total_items_per_unit = 10
+        item_types = ("rock", "paper", "scissors", "paper", "spock")
+        total_items_per_unit = len(item_types)
         total_effects_per_unit = 5
         total_dialogue_per_unit = 5
 
@@ -159,13 +165,20 @@ class TestUnitBuilder(unittest.TestCase):
             unit_model = self._get_unit_model()
             unit_id = unit_model["id"]
 
-            for i in range(0, total_items_per_unit):
-                item = self._make_item()
+            for it in item_types:
+                item = self._make_item(item_type=it)
                 items.append(item)
                 item_collection.add(item)
                 unit_items.append({"item_id": item.id, "unit_id": unit_id})
 
             unit_model["items"] = items
+
+            """
+            Base items
+            """
+            unit_type_id = unit_model["unit_type_id"]
+            unit_model["base_items"] = \
+                item_collection.get_base_items_by_unit_type_id(unit_type_id)
 
             """
             Add effects
@@ -196,7 +209,7 @@ class TestUnitBuilder(unittest.TestCase):
             """
             unit_models.append(unit_model)
 
-            with LogCapture() as l:
+            with LogCapture():
                 logger = logging.getLogger()
                 unit = Unit(unit=unit_model, log=logger)
 
@@ -209,7 +222,7 @@ class TestUnitBuilder(unittest.TestCase):
             unit_dialogue)
 
         builder = UnitBuilder()
-        with LogCapture() as l:
+        with LogCapture():
             logger = logging.getLogger()
             actual_units = builder.build_units(unit_models=unit_models,
                                                unit_items_map=unit_items_map,
@@ -240,3 +253,10 @@ class TestUnitBuilder(unittest.TestCase):
             self.assertEqual(len(a_unit.items), total_items_per_unit)
             self.assertEqual(len(a_unit.effects), total_effects_per_unit)
             self.assertEqual(len(a_unit.dialogue), total_dialogue_per_unit)
+
+            """
+            Ensure each item either has no unit type requirement (0)
+            or it matches the unit in question
+            """
+            for a_item in a_unit.items:
+                self.assertIn(a_item.unit_type_id, (0, a_unit.unit_type_id))
