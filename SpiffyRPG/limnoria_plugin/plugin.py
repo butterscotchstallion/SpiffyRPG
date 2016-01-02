@@ -251,7 +251,7 @@ class SpiffyRPG(callbacks.Plugin):
                     chose each battle. This could probably be moved somewhere
                     else. Perhaps into Battle?
                     """
-                    if not target_unit.is_player:
+                    if target_unit.is_npc:
                         target_unit.equip_random_weapon(avoid_weapon_type=weapon_type)
 
                     """
@@ -267,10 +267,13 @@ class SpiffyRPG(callbacks.Plugin):
                         battle.add_combatant(target_unit)
 
                     hit_info = player.attack(target=target_unit)
+                    is_hit = hit_info["is_hit"]
+                    item = hit_info["attacker_weapon"]
 
-                    battle.add_round(attacker=player,
-                                     target=target_unit,
-                                     hit_info=hit_info)
+                    if is_hit:
+                        battle.add_round(attacker=player,
+                                         target=target_unit,
+                                         hit_info=hit_info)
 
                     """
                     If the target unit is not a player, initialize
@@ -281,8 +284,10 @@ class SpiffyRPG(callbacks.Plugin):
                                                            destination=target_unit.nick,
                                                            ircutils=ircutils,
                                                            ircmsgs=ircmsgs)
-                        target_announcer.damage_applied(attack_info=hit_info,
-                                                        attacker=player)
+
+                        if is_hit:
+                            target_announcer.damage_applied(attack_info=hit_info,
+                                                            attacker=player)
 
                     """
                     Player announcer
@@ -292,10 +297,15 @@ class SpiffyRPG(callbacks.Plugin):
                                                        ircutils=ircutils,
                                                        ircmsgs=ircmsgs)
 
-                    player_announcer.damage_dealt(attack_info=hit_info,
-                                                  target=target_unit)
+                    if is_hit:
+                        player_announcer.damage_dealt(attack_info=hit_info,
+                                                      target=target_unit)
+                    else:
+                        player_announcer.draw(item_name=item.name,
+                                              target_name=target_unit.get_name())
+
                 except InvalidCombatantException, e:
-                    irc.error(e)
+                    irc.error(e.message)
             else:
                 irc.error("You can't equip that.")
         else:
@@ -452,153 +462,47 @@ class SpiffyRPG(callbacks.Plugin):
                                               weapon_type="rock")
     rock = wrap(rock, ["user", "text"])
 
-    def paper(self, irc, msg, args, user, target):
+    def paper(self, irc, msg, args, user, target_name):
         """
         paper <target> - attacks your target with a Paper type weapon
         """
-        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
-
-        if dungeon_info is not None:
-            dungeon = dungeon_info["dungeon"]
-            player = dungeon_info["player"]
-            unit = dungeon.get_living_unit_by_name(target)
-
-            if unit is not None:
-                equip_ok = player.equip_item_by_type(item_type="paper")
-
-                if equip_ok:
-                    can_battle = player.can_battle_unit(unit=unit)
-
-                    if can_battle is True:
-                        """
-                        The target unit of the attack now equips a weapon!
-                        """
-                        if not unit.is_player:
-                            unit.equip_random_weapon(avoid_weapon_type="paper")
-
-                        battle = dungeon_info["battle"]
-                        battle.add_party_member(player)
-                        battle.add_party_member(unit)
-                        battle.start()
-                    else:
-                        irc.error("You can't attack that. %s" % can_battle)
-                else:
-                    dungeon.announcer.unit_death(unit=player)
-        else:
-            irc.error("That target appears to be dead or non-existent")
+        self._start_player_battle_with_weapon(irc=irc,
+                                              player_user=user,
+                                              target_name=target_name,
+                                              weapon_type="paper")
 
     paper = wrap(paper, ["user", "text"])
 
-    def scissors(self, irc, msg, args, user, target):
+    def scissors(self, irc, msg, args, user, target_name):
         """
         scissors <target> - attacks your target with a Scissors type weapon
         """
-        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
-
-        if dungeon_info is not None:
-            dungeon = dungeon_info["dungeon"]
-            player = dungeon_info["player"]
-            unit = dungeon.get_living_unit_by_name(target)
-
-            if unit is not None:
-                equip_ok = player.equip_item_by_type(item_type="scissors")
-
-                if equip_ok:
-                    can_battle = player.can_battle_unit(unit=unit)
-
-                    if can_battle is True:
-                        """
-                        The target unit of the attack now equips a weapon!
-                        """
-                        if not unit.is_player:
-                            unit.equip_random_weapon(
-                                avoid_weapon_type="scissors")
-
-                        battle = dungeon_info["battle"]
-                        battle.add_party_member(player)
-                        battle.add_party_member(unit)
-                        battle.start()
-                    else:
-                        irc.error("You can't attack that. %s" % can_battle)
-                else:
-                    dungeon.announcer.unit_death(unit=player)
-        else:
-            irc.error("That target appears to be dead or non-existent")
+        self._start_player_battle_with_weapon(irc=irc,
+                                              player_user=user,
+                                              target_name=target_name,
+                                              weapon_type="scissors")
 
     scissors = wrap(scissors, ["user", "text"])
 
-    def lizard(self, irc, msg, args, user, target):
+    def lizard(self, irc, msg, args, user, target_name):
         """
         lizard <target> - attacks your target with a Lizard type weapon
         """
-        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
-
-        if dungeon_info is not None:
-            dungeon = dungeon_info["dungeon"]
-            player = dungeon_info["player"]
-            unit = dungeon.get_living_unit_by_name(target)
-
-            if unit is not None:
-                equip_ok = player.equip_item_by_type(item_type="lizard")
-
-                if equip_ok:
-                    can_battle = player.can_battle_unit(unit=unit)
-
-                    if can_battle is True:
-                        """
-                        The target unit of the attack now equips a weapon!
-                        """
-                        if not unit.is_player:
-                            unit.equip_random_weapon(
-                                avoid_weapon_type="lizard")
-
-                        battle = dungeon_info["battle"]
-                        battle.add_party_member(player)
-                        battle.add_party_member(unit)
-                        battle.start()
-                    else:
-                        irc.error("You can't attack that. %s" % can_battle)
-                else:
-                    dungeon.announcer.unit_death(unit=player)
-        else:
-            irc.error("That target appears to be dead or non-existent")
+        self._start_player_battle_with_weapon(irc=irc,
+                                              player_user=user,
+                                              target_name=target_name,
+                                              weapon_type="lizard")
 
     lizard = wrap(lizard, ["user", "text"])
 
-    def spock(self, irc, msg, args, user, target):
+    def spock(self, irc, msg, args, user, target_name):
         """
         spock <target> - attacks your target with a Spock type weapon
         """
-        dungeon_info = self._get_dungeon_and_user_id(irc, msg)
-
-        if dungeon_info is not None:
-            dungeon = dungeon_info["dungeon"]
-            player = dungeon_info["player"]
-            unit = dungeon.get_living_unit_by_name(target)
-
-            if unit is not None:
-                equip_ok = player.equip_item_by_type(item_type="spock")
-
-                if equip_ok:
-                    can_battle = player.can_battle_unit(unit=unit)
-
-                    if can_battle is True:
-                        """
-                        The target unit of the attack now equips a weapon!
-                        """
-                        if not unit.is_player:
-                            unit.equip_random_weapon(avoid_weapon_type="spock")
-
-                        battle = dungeon_info["battle"]
-                        battle.add_party_member(player)
-                        battle.add_party_member(unit)
-                        battle.start()
-                    else:
-                        irc.error("You can't attack that. %s" % can_battle)
-                else:
-                    dungeon.announcer.unit_death(unit=player)
-        else:
-            irc.error("That target appears to be dead or non-existent")
+        self._start_player_battle_with_weapon(irc=irc,
+                                              player_user=user,
+                                              target_name=target_name,
+                                              weapon_type="spock")
 
     spock = wrap(spock, ["user", "text"])
 
