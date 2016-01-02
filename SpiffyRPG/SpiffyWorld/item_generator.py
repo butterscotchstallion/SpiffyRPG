@@ -42,17 +42,37 @@ class ItemGenerator:
         if "can_use" in kwargs:
             can_use = kwargs["can_use"]
 
+        if "min_level" in kwargs:
+            min_level = kwargs["min_level"]
+        else:
+            min_level = 1
+
+        if "max_level" in kwargs:
+            max_level = kwargs["max_level"]
+        else:
+            max_level = 100
+
+        if "effects" in kwargs:
+            effects = kwargs["effects"]
+        else:
+            effects = []
+
+        if "unit_type_id" in kwargs:
+            unit_type_id = kwargs["unit_type_id"]
+        else:
+            unit_type_id = 0
+
         item_model = {
             "id": item_id,
             "name": item_name,
             "description": "foo",
-            "effects": [],
-            "min_level": 1,
-            "max_level": 100,
+            "effects": effects,
+            "min_level": min_level,
+            "max_level": max_level,
             "rarity": "dank",
             "equipment_slot": "main hand",
             "is_permanent": is_permanent,
-            "unit_type_id": 0,
+            "unit_type_id": unit_type_id,
             "can_use": charges,
             "charges": can_use,
             "created_at": "1",
