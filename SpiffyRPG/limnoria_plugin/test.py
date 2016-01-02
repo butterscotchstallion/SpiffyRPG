@@ -63,12 +63,33 @@ class SpiffyRPGTestCase(ChannelPluginTestCase):
         self.assertRegexp("rock john", "hits")
         _ = self.getMsg(' ')
 
+    def test_paper_strike(self):
+        self.assertRegexp("paper rabid", "hits")
+        _ = self.getMsg(' ')
+
+    def test_scissors_strike(self):
+        self.assertRegexp("scissors rad", "hits")
+        _ = self.getMsg(' ')
+
+    def test_lizard_strike(self):
+        self.assertRegexp("lizard tech", "hits")
+        _ = self.getMsg(' ')
+
+    def test_spock_strike(self):
+        self.assertRegexp("spock really", "hits")
+        _ = self.getMsg(' ')
+
     def test_help(self):
         self.assertRegexp("spiffyrpg help", "Basic commands")
         _ = self.getMsg(' ')
 
     def test_inspect(self):
+        # self inspect
         self.assertRegexp("inspect", "THRILLHOUSE")
+        _ = self.getMsg(' ')
+
+        # should emit look failed message
+        self.assertRegexp("inspect a wild coyote", "nothing")
         _ = self.getMsg(' ')
 
     def test_inspect_something(self):
