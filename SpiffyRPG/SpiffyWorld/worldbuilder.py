@@ -268,6 +268,8 @@ class Worldbuilder:
                               announcer=announcer,
                               log=self.log)
 
+            units = sorted(units, key=lambda x: x.level)
+
             for unit in units:
                 added_unit = dungeon.add_unit(unit)
 
