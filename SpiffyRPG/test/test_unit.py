@@ -3,8 +3,8 @@
 import unittest
 from uuid import uuid4
 from random import randrange, choice
-from SpiffyWorld import Unit, UnitLevel, Item, UnitBuilder, \
-    UnitGenerator, EffectGenerator
+from SpiffyWorld import Unit, UnitLevel, UnitBuilder, \
+    UnitGenerator, EffectGenerator, ItemGenerator
 from SpiffyWorld.collections import ItemCollection
 from SpiffyWorld.models import UnitItems
 import logging
@@ -14,35 +14,30 @@ EFFECT_UNDEAD_BONUS = 25
 
 class TestUnit(unittest.TestCase):
 
-    def _get_item(self, **kwargs):
-        item_id = uuid4()
-        item_name = "Item%s" % item_id
+    def _make_item(self, **kwargs):
         item_type = kwargs["item_type"]
-        is_permanent = 0
 
         if "is_permanent" in kwargs:
             is_permanent = kwargs["is_permanent"]
+        else:
+            is_permanent = False
 
-        item_model = {
-            "id": item_id,
-            "name": item_name,
-            "description": "foo",
-            "effects": [],
-            "min_level": 1,
-            "max_level": 0,
-            "rarity": "dank",
-            "equipment_slot": None,
-            "is_permanent": is_permanent,
-            "unit_type_id": 0,
-            "can_use": 0,
-            "charges": 0,
-            "created_at": "1",
-            "item_type": item_type
-        }
+        if "min_level" in kwargs:
+            min_level = kwargs["min_level"]
+        else:
+            min_level = randrange(1, 100)
 
-        item = Item(item=item_model)
+        if "unit_type_id" in kwargs:
+            unit_type_id = kwargs["unit_type_id"]
+        else:
+            unit_type_id = 0
 
-        return item
+        item_generator = ItemGenerator()
+
+        return item_generator.generate(item_type=item_type,
+                                       is_permanent=is_permanent,
+                                       min_level=min_level,
+                                       unit_type_id=unit_type_id)
 
     def _get_unit_model(self, **kwargs):
         unit_level = UnitLevel()
@@ -80,10 +75,24 @@ class TestUnit(unittest.TestCase):
 
         return unit_model
 
-    def _make_unit(self):
+    def _make_unit(self, **kwargs):
+        if "base_items" in kwargs:
+            base_items = kwargs["base_items"]
+        else:
+            base_items = []
+
+        if "level" in kwargs:
+            level = kwargs["level"]
+        else:
+            level = randrange(1, 100)
+
+        unit_type_id = kwargs["unit_type_id"]
+
         unit_generator = UnitGenerator()
 
-        return unit_generator.generate()
+        return unit_generator.generate(base_items=base_items,
+                                       unit_type_id=unit_type_id,
+                                       level=level)
 
     def _make_undead_effect(self):
         effect_name = "Undead"
@@ -240,7 +249,7 @@ class TestUnit(unittest.TestCase):
 
         item_types = ("rock", "paper", "scissors", "lizard", "spock")
         for item_type in item_types:
-            item = self._get_item(item_type=item_type)
+            item = self._make_item(item_type=item_type)
             item_collection.add(item)
 
         for j in range(0, 2):
@@ -461,6 +470,65 @@ class TestUnit(unittest.TestCase):
         self.assertFalse(hit_info["is_hit"])
         self.assertTrue(hit_info["is_draw"])
         self.assertEqual(hit_info["damage"], 0)
+
+    def test_populate_base_items(self):
+        """
+        Build item collection of base items and ensure
+        that they are populated accordingly
+        """
+        item_collection = ItemCollection()
+        item_types = ("rock", "paper", "scissors", "lizard", "spock")
+        unit_type_id = 2
+        level = 13
+
+        for item_type in item_types:
+            item = self._make_item(item_type=item_type,
+                                   unit_type_id=unit_type_id,
+                                   is_permanent=True,
+                                   min_level=level)
+            item_collection.add(item)
+
+        base_items = item_collection.items
+        unit_bravo = self._make_unit(base_items=base_items,
+                                     unit_type_id=unit_type_id,
+                                     level=level)
+
+        self.assertEqual(unit_bravo.level, level)
+        self.assertEqual(unit_bravo.unit_type_id, unit_type_id)
+
+        for base_item in base_items:
+            self.assertEqual(base_item.min_level, level)
+            self.assertEqual(base_item.unit_type_id, unit_type_id)
+
+        self.assertEqual(unit_bravo.items, base_items)
+
+    def test_equip_random_weapon(self):
+        """
+        Build item collection of base items and ensure
+        that they are populated accordingly
+        """
+        item_collection = ItemCollection()
+        item_types = ("rock", "paper", "scissors", "lizard", "spock")
+        unit_type_id = 1
+        level = 13
+
+        for item_type in item_types:
+            item = self._make_item(item_type=item_type,
+                                   unit_type_id=unit_type_id,
+                                   is_permanent=True,
+                                   min_level=level)
+            item_collection.add(item)
+
+        base_items = item_collection.items
+        unit_bravo = self._make_unit(base_items=base_items,
+                                     unit_type_id=unit_type_id,
+                                     level=level)
+
+        item_type = "rock"
+        unit_bravo.equip_random_weapon(avoid_weapon_type=item_type)
+        equipped_weapon = unit_bravo.equipped_weapon
+
+        self.assertNotEqual(equipped_weapon.item_type, item_type)
 
 if __name__ == '__main__':
     unittest.main()
