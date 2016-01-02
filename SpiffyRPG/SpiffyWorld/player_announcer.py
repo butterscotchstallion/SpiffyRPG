@@ -61,6 +61,15 @@ class PlayerAnnouncer(Announcer):
 
         self.announce(announcement_msg)
 
+    def draw(self, **kwargs):
+        item_name = kwargs["item_name"]
+        target_name = kwargs["target_name"]
+
+        params = (item_name, target_name)
+        announcement_msg = "Your %s misses %s!" % params
+
+        self.announce(announcement_msg)
+
     def damage_applied(self, **kwargs):
         attack_info = kwargs["attack_info"]
         attacker = kwargs["attacker"]
