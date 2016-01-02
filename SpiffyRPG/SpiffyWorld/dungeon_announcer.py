@@ -34,7 +34,8 @@ class DungeonAnnouncer(Announcer):
         unit_name = self._get_unit_title(unit)
         attacker_name = self._get_unit_title(attacker)
 
-        announcement_msg = "%s interrupts %s's spell!" % (attacker_name, unit_name)
+        announcement_msg = \
+            "%s interrupts %s's spell!" % (attacker_name, unit_name)
 
         self.announce(announcement_msg)
 
@@ -44,8 +45,8 @@ class DungeonAnnouncer(Announcer):
         necro_name = self._get_unit_title(necro)
         unit_name = self._get_unit_title(dead_unit)
 
-        announcement_msg = "%s begins raising %s from the dead!" % (necro_name, unit_name)
-        #announcement_msg += " Attack it to interrupt the spell!"
+        announcement_msg = \
+            "%s begins raising %s from the dead!" % (necro_name, unit_name)
 
         self.announce(announcement_msg)
 
@@ -146,7 +147,8 @@ class DungeonAnnouncer(Announcer):
         """
         if item.is_usable() and len(item.effects) > 0:
             announcement_msg += " :: %s causes " % self._b(".use")
-            effect_names = ", ".join([self._c(effect.name, "light blue") for effect in item.effects])
+            effect_names = ", ".join([self._c(effect.name, "light blue")
+                                      for effect in item.effects])
 
             announcement_msg += effect_names
 
@@ -176,7 +178,7 @@ class DungeonAnnouncer(Announcer):
 
         if attack["is_critical_strike"]:
             attack_word = \
-                ircutils.mircColor("critically strikes", fg="red", bg="black")
+                self.ircutils.mircColor("critically strikes", fg="red", bg="black")
 
         """ Formatted attack damage """
         formatted_damage = "{:,}".format(attack["damage"])
@@ -219,7 +221,7 @@ class DungeonAnnouncer(Announcer):
         %s the level %s %s is the new Realm King!
         """
         title = self._get_unit_title(player)
-        level = ircutils.bold(player["level"])
+        level = self.ircutils.bold(player["level"])
         player_class = self._get_player_role(player)
         params = (title, level, player_class)
 
@@ -228,8 +230,8 @@ class DungeonAnnouncer(Announcer):
         self.announce(announcement_msg)
 
     def dialogue_intro(self, unit, intro):
-        colored_intro = ircutils.mircColor(intro, fg="orange")
-        bold_title = ircutils.bold(unit.title)
+        colored_intro = self.ircutils.mircColor(intro, fg="orange")
+        bold_title = self.ircutils.bold(unit.title)
         params = (bold_title, colored_intro)
         announcement_msg = "%s: %s" % params
 
@@ -241,7 +243,6 @@ class DungeonAnnouncer(Announcer):
         """
         irc = kwargs["irc"]
         unit = kwargs["unit"]
-        dungeon = kwargs["dungeon"]
 
         """
         Units start alive
@@ -276,7 +277,7 @@ class DungeonAnnouncer(Announcer):
         """
         Color HP accordingly
         """
-        hp = "{:,}".format(unit.get_hp())
+        hp = "%s%%" % unit.get_hp_percentage()
 
         if not unit.is_alive():
             hp = self._c(hp, "red")
@@ -314,16 +315,9 @@ class DungeonAnnouncer(Announcer):
 
     def _get_level_xp_percentage(self, **kwargs):
         unit = kwargs["unit"]
-        unit_xp = unit.experience
 
-        xp_req_for_this_level = unit.get_xp_required_for_next_level() + 1
-        xp_req_for_previous_level = unit.get_xp_required_for_previous_level() + 1
-
-        """ Unit is above max level """
-        if unit_xp >= xp_req_for_this_level:
-            xp_req_for_this_level = self.levels[-1][1]
-
-        percent_xp = int(((float(unit_xp - xp_req_for_previous_level) / (float(xp_req_for_this_level - xp_req_for_previous_level))) * 100))
+        current_xp = unit.experience
+        percent_xp = unit.get_xp_remaining_until_next_level_percentage(current_xp)
 
         if percent_xp <= 20:
             xp_color = "yellow"
@@ -440,8 +434,8 @@ class DungeonAnnouncer(Announcer):
             unit_titles = []
 
             if is_seance:
-                msg = "%s channels the spirits of the dead in %s and senses " % \
-                    (player_name, dungeon_name)
+                msg = "%s channels the spirits of the dead " % player_name
+                msg += "in %s and senses " % dungeon_name
             else:
                 msg = "%s %s %s and sees " % \
                     (player_name, look_phrase, dungeon_name)
