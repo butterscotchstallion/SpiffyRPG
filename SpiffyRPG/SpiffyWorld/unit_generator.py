@@ -24,7 +24,7 @@ class UnitGenerator:
         if "level" in kwargs:
             level = kwargs["level"]
 
-        xp = unit_level.get_xp_for_level(level)
+        xp = unit_level.get_xp_for_level(level) + 1
 
         if "combat_status" in kwargs:
             combat_status = kwargs["combat_status"]
@@ -37,6 +37,9 @@ class UnitGenerator:
         unit_types = (1, 2, 3)
         unit_type_id = choice(unit_types)
 
+        if "unit_type_id" in kwargs:
+            unit_type_id = kwargs["unit_type_id"]
+
         user_id = 0
 
         if "is_player" in kwargs:
@@ -44,6 +47,11 @@ class UnitGenerator:
 
         if "user_id" in kwargs:
             user_id = kwargs["user_id"]
+
+        if "base_items" in kwargs:
+            base_items = kwargs["base_items"]
+        else:
+            base_items = []
 
         unit_model = {
             "id": unit_id,
@@ -58,7 +66,7 @@ class UnitGenerator:
             "unit_type_id": unit_type_id,
             "unit_type_name": "quux",
             "combat_status": combat_status,
-            "base_items": []
+            "base_items": base_items
         }
 
         with LogCapture():
