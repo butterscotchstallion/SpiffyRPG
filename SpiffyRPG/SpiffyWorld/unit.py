@@ -43,8 +43,6 @@ class Unit:
         self.unit_type_id = unit["unit_type_id"]
         self.effects = unit["effects"]
         self.items = unit["items"]
-        self.lootable_items = [
-            item for item in self.items if not item.is_permanent]
         self.base_items = unit["base_items"]
         self.dialogue = unit["dialogue"]
         self.experience = unit["experience"]
@@ -95,6 +93,9 @@ class Unit:
         Some items have an effect on possession!
         """
         self.apply_item_effects()
+
+        self.lootable_items = [
+            item for item in self.items if not item.is_permanent]
 
     def __str__(self):
         return "%s-%s" % (self.name, self.id)
