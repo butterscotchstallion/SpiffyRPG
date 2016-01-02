@@ -109,10 +109,15 @@ class TestUnitCollection(unittest.TestCase):
 
         collection = UnitCollection()
         collection.add(player)
+
+        for j in range(0, 5):
+            collection.add(self._get_player_unit())
+
         collection.add(npc)
 
         top_players = collection.get_top_players_by_xp()
 
+        self.assertEqual(len(top_players), 3)
         self.assertIsNotNone(top_players)
         self.assertIsNotNone(player)
         self.assertEqual(player.user_id, 1)

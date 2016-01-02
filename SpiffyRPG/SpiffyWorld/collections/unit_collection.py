@@ -33,7 +33,9 @@ class UnitCollection:
         players = self.get_players()
 
         if len(players) >= 1:
-            limit = max(len(players), 3)
+            # top 3 or all the players, whichever is less.
+            limit = min(len(players), 3)
+
             top_players = sorted(
                 players, key=lambda x: x.experience, reverse=True)
 
