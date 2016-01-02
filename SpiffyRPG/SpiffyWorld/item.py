@@ -30,7 +30,7 @@ class Item:
         return self.id == other.id
 
     def __str__(self):
-        return self.name
+        return "%s-L%s-%s" % (self.name, self.min_level, self.item_type)
 
     def is_usable(self):
         return self.can_use
