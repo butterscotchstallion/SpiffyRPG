@@ -34,13 +34,19 @@ class TestUnitBuilder(unittest.TestCase):
         item_id = uuid4()
         item_name = "TestItem-%s" % item_id
         item_types = ("rock", "scissors", "paper", "lizard", "spock")
+        unit_type_ids = (0, 1, 2, 3)
 
         if "item_type" in kwargs:
             item_type = kwargs["item_type"]
         else:
             item_type = choice(item_types)
 
-        is_permanent = choice([0, 1])
+        if "unit_type_id" in kwargs:
+            unit_type_id = kwargs["unit_type_id"]
+        else:
+            unit_type_id = choice(unit_type_ids)
+
+        is_permanent = 0
 
         if "is_permanent" in kwargs:
             is_permanent = kwargs["is_permanent"]
@@ -55,7 +61,7 @@ class TestUnitBuilder(unittest.TestCase):
             "rarity": "dank",
             "equipment_slot": "main hand",
             "is_permanent": is_permanent,
-            "unit_type_id": 0,
+            "unit_type_id": unit_type_id,
             "can_use": 0,
             "charges": 0,
             "created_at": "1",
@@ -164,9 +170,11 @@ class TestUnitBuilder(unittest.TestCase):
             dialogue = []
             unit_model = self._get_unit_model()
             unit_id = unit_model["id"]
+            unit_type_id = unit_model["unit_type_id"]
 
             for it in item_types:
-                item = self._make_item(item_type=it)
+                item = self._make_item(item_type=it,
+                                       unit_type_id=unit_type_id)
                 items.append(item)
                 item_collection.add(item)
                 unit_items.append({"item_id": item.id, "unit_id": unit_id})
@@ -176,7 +184,6 @@ class TestUnitBuilder(unittest.TestCase):
             """
             Base items
             """
-            unit_type_id = unit_model["unit_type_id"]
             unit_model["base_items"] = \
                 item_collection.get_base_items_by_unit_type_id(unit_type_id)
 
