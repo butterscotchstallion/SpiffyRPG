@@ -30,6 +30,16 @@ class TestBattlemaster(unittest.TestCase):
         In order to engage in combat, the unit must consent
         to a challenge. NPCs should accept automatically; an
         attack with an NPC target generates a challenge.
+
+        If NPC:
+        - issue challenge immediately adds challenge
+
+        if PC:
+        - issue challenge adds to battlemaster.challenges
+        and accepting adds hostile combatant to target
+
+        A battle ending or a unit dying should clear
+        hostile combatants
         """
         battle = Battle()
         battlemaster = Battlemaster()
@@ -57,7 +67,7 @@ class TestBattlemaster(unittest.TestCase):
         """
         After the challenge has been issued, verify that
         the Battlemaster has recorded that
-
+        """
         has_challenged = \
             battlemaster.has_accepted_challenge(attacker=unit_charlie,
                                                 target=unit_omega)
@@ -65,14 +75,14 @@ class TestBattlemaster(unittest.TestCase):
         self.assertFalse(has_challenged, "Failed to issue challenge")
 
         # Attempt to accept challenge
-        battlemaster.accept_challenge_from_target(target=unit_omega)
+        battlemaster.accept_challenge_from_target(attacker=unit_charlie,
+                                                  target=unit_omega)
 
         accepted_challenge = \
             battlemaster.has_accepted_challenge(attacker=unit_charlie,
                                                 target=unit_omega)
 
         self.assertTrue(accepted_challenge, "Failed to accept challenge")
-        """
 
     def test_add_battle(self):
         battle = Battle()

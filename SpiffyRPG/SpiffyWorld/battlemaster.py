@@ -32,15 +32,15 @@ class Battlemaster:
 
     def has_accepted_challenge(self, **kwargs):
         attacker = kwargs["attacker"]
+        target = kwargs["target"]
 
-        return attacker.id not in self.challenges
+        return target in attacker.hostile_combatants
 
     def accept_challenge_from_target(self, **kwargs):
         target = kwargs["target"]
+        attacker = kwargs["attacker"]
 
-        for challenge in self.challenges:
-            if self.challenges[challenge] == target.id:
-                del self.challenges[challenge]
+        attacker.add_hostile_combatant(combatant=target)
 
     def issue_challenge(self, **kwargs):
         attacker = kwargs["attacker"]
@@ -70,6 +70,6 @@ class Battlemaster:
         combatant = kwargs["combatant"]
 
         for battle in self.battles:
-            for combatant in battle.combatants:
-                if combatant.id == combatant.id:
+            for bc in battle.combatants:
+                if bc.id == combatant.id:
                     return battle
