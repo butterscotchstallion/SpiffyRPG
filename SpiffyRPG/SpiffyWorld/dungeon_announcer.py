@@ -498,3 +498,150 @@ class DungeonAnnouncer(Announcer):
         msg += self._c(" appears!", "light blue")
 
         self.announce(msg)
+
+    def boss_spawned(self, **kwargs):
+        unit = kwargs["unit"]
+        verbs = ("holding a glowing satchel", "wielding a mysterious artifact",
+                 "grasping an arcane curio")
+        doing_something = random.choice(verbs)
+        unit_name = unit.name
+
+        announcement_msg = self._b(self._c("%s appears, %s!", "light green")) % \
+            (unit_name, doing_something)
+
+        self.announce(announcement_msg)
+
+    def units_found_loot(self, **kwargs):
+        units = kwargs["units"]
+        dead_unit = kwargs["unit"]
+        loot = kwargs["item"]
+        unit_names = [self._b(unit.name) for unit in units]
+        unit_len = len(unit_names)
+        params = (self._b(dead_unit.name), self._b(loot.name))
+        announcement_msg = ""
+
+        if unit_len == 1:
+            announcement_msg += "%s inspects" % unit_names[0]
+        elif unit_len == 2:
+            announcement_msg += "%s and %s inspect" % (unit_names[0], unit_names[1])
+        else:
+            csv_names = ", ".join(unit_names)
+            announcement_msg += "%s inspect" % csv_names
+
+        announcement_msg += " the remains of %s and finds %s!" % params
+
+        self.announce(announcement_msg)
+
+    def hot_streak_ended(self, **kwargs):
+        unit = kwargs["unit"]
+        ended_by = kwargs["ended_by"]
+        unit_name = self._b(unit.name)
+        ended_by_name = self._b(ended_by.name)
+
+        announcement_msg = "%s's hot streak was ended by %s" % \
+            (unit_name, ended_by_name)
+
+        self.announce(announcement_msg)
+
+    def hot_streak(self, **kwargs):
+        """
+        %s is on fire!
+        """
+        unit = kwargs["unit"]
+        streak_count = kwargs["streak_count"]
+        unit_name = self._b(unit.name)
+
+        if streak_count == 3:
+            announcement_msg = "%s is on fire!" % unit_name
+        elif streak_count == 4:
+            announcement_msg = "%s is killin' it!" % unit_name
+        elif streak_count == 5:
+            announcement_msg = "BOOMSHAKALAKA! %s is DOMINATING!" % unit_name
+        elif streak_count == 6:
+            announcement_msg = "%s is killin' errrbody out here!" % unit_name
+        elif streak_count == 7:
+            announcement_msg = "%s is CLEARLY wall hacking" % unit_name
+        elif streak_count == 8:
+            announcement_msg = "%s is OMNIPOTENT!" % unit_name
+        elif streak_count == 9:
+            announcement_msg = "%s is GOD-LIKE!" % unit_name
+        elif streak_count == 10:
+            announcement_msg = "%s has hax0red the game and cannot be stopped" % unit_name
+
+        announcement_msg = self._c(announcement_msg, "light green")
+
+        self.announce(announcement_msg)
+
+    def player_gained_level(self, player):
+        """
+        Player_1 has gained level X!
+        """
+        params = (self._b(self._c("DING!", "yellow")),
+                  self._get_unit_title(player),
+                  self._b(player.level))
+
+        announcement_msg = "%s %s ascends to level %s!" % params
+
+        """ TODO: check if level changed and show new title """
+
+        self.announce(announcement_msg)
+
+    def draw(self, **kwargs):
+        """
+        $target $blocks $attacker's $attack
+        """
+        hit_info = kwargs["hit_info"]
+        attacker, target = (kwargs["winner"], kwargs["loser"])
+        attacker_name = self._b(attacker.name)
+        attacker_item = self._c(hit_info["attacker_weapon"].name, "light green")
+        target_name = self._b(target.name)
+
+        avoidance = ("blocks", "parries", "dodges", "escapes",
+                     "misses", "sidesteps", "circumvents", "evades", "fends off",
+                     "eludes", "deflects", "wards off")
+        avoidance_word = self._c(random.choice(avoidance), "yellow")
+
+        params = (target_name, avoidance_word, attacker_name, attacker_item)
+
+        announcement_msg = "%s %s %s's %s!" % params
+
+        self.announce(announcement_msg)
+
+    def unit_victory(self, **kwargs):
+        winner = kwargs["winner"]
+        loser = kwargs["loser"]
+        hit_info = kwargs["hit_info"]
+        winner_weapon = hit_info["attacker_weapon"]
+        loser_weapon = hit_info["target_weapon"]
+        winner_attack = winner_weapon.name
+        winner_item_type = self._get_item_type_indicator(winner_weapon.item_type)
+        loser_item_type = self._get_item_type_indicator(loser_weapon.item_type)
+
+        green_xp = self._c("{:,}".format(kwargs["xp_gained"]), "green")
+        internet_points = self._c("Internet Points", "purple")
+
+        winner_title = self._get_unit_title(winner)
+        loser_title = self._get_unit_title(loser)
+        attack_name = self._c("uses %s" % winner_attack, "light green")
+        winner_hp = self._c(winner.get_hp(), "red")
+        loser_hp = self._c(loser.get_hp(), "green")
+        attack_word = hit_info["hit_word"]
+
+        if hit_info["is_critical_strike"]:
+            attack_word = "*%s*" % attack_word
+
+        attack_word = self._b(attack_word)
+
+        damage = self._c(hit_info["damage"], "red")
+
+        hp_before_last_attack = loser.get_hp() + hit_info["damage"]
+
+        params = (winner_title, winner_hp, attack_name, winner_item_type, attack_word,
+                  loser_item_type, loser_title, hp_before_last_attack, damage, loser_hp)
+
+        announcement_msg = u"%s (%s) %s • (%s %s %s) %s (%s-%s: %s)" % params
+
+        if winner.is_player and kwargs["xp_gained"] > 0:
+            announcement_msg += " %s gains %s %s" % (winner_title, green_xp, internet_points)
+
+        self._send_channel_notice(announcement_msg)
