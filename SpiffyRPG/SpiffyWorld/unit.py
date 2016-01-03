@@ -25,6 +25,7 @@ class Unit:
         self.critical_strike_chance = 5
         self.slain_units = []
         self.winning_streak = []
+        self.hostile_combatants = []
         self.raised_units = []
         self.battles = []
         self.units_that_have_struck_me = []
@@ -142,6 +143,22 @@ class Unit:
 
         if not effects_match:
             return False
+
+    def add_hostile_combatant(self, **kwargs):
+        combatant = kwargs["combatant"]
+
+        if combatant not in self.hostile_combatants:
+            self.hostile_combatants.append(combatant)
+
+    def remove_hostile_combatant(self, **kwargs):
+        combatant = kwargs["combatant"]
+        hostile_combatants = []
+
+        for hcombatant in self.hostile_combatants:
+            if combatant != hcombatant:
+                hostile_combatants.append(hcombatant)
+
+        self.hostile_combatants = hostile_combatants
 
     def apply_unit_effects(self):
         for effect in self.effects:
