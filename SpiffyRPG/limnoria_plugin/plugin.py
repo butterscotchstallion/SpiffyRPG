@@ -266,6 +266,15 @@ class SpiffyRPG(callbacks.Plugin):
                         battle.add_combatant(player)
                         battle.add_combatant(target_unit)
 
+                        bm.add_battle(battle=battle)
+
+                        """
+                        Announce challenge accepted if this is a new
+                        battle.
+                        """
+                        dungeon.announcer.challenge_accepted(attacker=player,
+                                                             target=target_unit)
+
                     hit_info = player.attack(target=target_unit)
                     is_hit = hit_info["is_hit"]
                     item = hit_info["attacker_weapon"]
@@ -303,6 +312,15 @@ class SpiffyRPG(callbacks.Plugin):
                     else:
                         player_announcer.draw(item_name=item.name,
                                               target_name=target_unit.get_name())
+
+                    """
+                    Announce victory if the target is dead
+                    """
+                    if target_unit.is_dead():
+                        dungeon.announcer.unit_victory(winner=attacker,
+                                                       loser=target_unit,
+                                                       hit_info=hit_info)
+                        # player announce you have slain X! here
 
                 except InvalidCombatantException, e:
                     irc.error(e.message)
