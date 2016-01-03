@@ -319,12 +319,12 @@ class TestUnit(unittest.TestCase):
         can accurately predict the outcome for
         testing purposes
         """
-        unit_1.equip_rock_weapon()
+        unit_1.equip_item_by_type(item_type="rock")
         unit_1_weapon = unit_1.get_equipped_weapon()
 
         self.assertTrue(unit_1_weapon.is_rock())
 
-        unit_2.equip_scissors_weapon()
+        unit_2.equip_item_by_type(item_type="scissors")
         unit_2_weapon = unit_2.get_equipped_weapon()
 
         self.assertTrue(unit_2_weapon.is_scissors())
@@ -524,11 +524,11 @@ class TestUnit(unittest.TestCase):
                                      unit_type_id=unit_type_id,
                                      level=level)
 
-        item_type = "rock"
-        unit_bravo.equip_random_weapon(avoid_weapon_type=item_type)
-        equipped_weapon = unit_bravo.equipped_weapon
+        for item_type in item_types:
+            unit_bravo.equip_random_weapon(avoid_weapon_type=item_type)
+            equipped_weapon = unit_bravo.equipped_weapon
 
-        self.assertNotEqual(equipped_weapon.item_type, item_type)
+            self.assertNotEqual(equipped_weapon.item_type, item_type)
 
 if __name__ == '__main__':
     unittest.main()
