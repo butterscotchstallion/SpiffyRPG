@@ -185,16 +185,14 @@ class Dungeon:
 
     def add_unit(self, unit):
         if unit not in self.units:
-            params = (unit.level, unit.get_name(), unit.get_title(),
-                      unit.get_hp(), self.name)
-
-            msg_prefix = "SpiffyRPG: spawning a level "
+            params = (unit.level, unit.get_name(), unit.get_title())
+            msg_prefix = "SpiffyRPG: [%s] " % self.name
             msg = msg_prefix
 
             if unit.is_player:
-                msg += "%s player %s (%s) with %s HP in %s" % params
+                msg += "L%s PC: %s (%s)" % params
             else:
-                msg += "%s NPC: %s (%s) with %s HP in %s" % params
+                msg += "L%s NPC: %s (%s)" % params
 
             self.log.info(msg)
 
@@ -202,8 +200,8 @@ class Dungeon:
 
             return unit
         else:
-            self.log.info("SpiffyRPG: not adding duplicate unit %s" %
-                          (unit.get_name()))
+            self.log.debug("SpiffyRPG: not adding duplicate unit %s" %
+                           (unit.get_name()))
 
     def remove_unit(self, unit):
         units = []
