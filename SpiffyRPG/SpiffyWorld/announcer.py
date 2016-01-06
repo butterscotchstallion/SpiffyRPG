@@ -27,6 +27,14 @@ class Announcer(object):
         self.ircmsgs = kwargs["ircmsgs"]
         unit_levels = UnitLevel()
         self.levels = unit_levels.get_levels()
+        self.log = None
+        self.testing = False
+
+        if "log" in kwargs:
+            self.log = kwargs["log"]
+
+        if "testing" in kwargs:
+            self.testing = kwargs["testing"]
 
     def _get_player_role(self, player):
         role = player.get_title()
@@ -104,11 +112,22 @@ class Announcer(object):
 
         return existed_timestamp
 
+    def _is_nick_in_channel(self, irc, nick):
+        return nick in irc.state.channels[GAME_CHANNEL].users
+
     def _send_player_notice(self, message):
-        self._irc.queueMsg(self.ircmsgs.notice(self.destination, message))
+        nick_in_channel = self._is_nick_in_channel(self.irc, self.destination)
+
+        if nick_in_channel and not self.testing:
+            self._irc.queueMsg(self.ircmsgs.notice(self.destination, message))
+        else:
+            if self.log is not None:
+                self.log.info("Suppressing player notice to non-existent player %s" %
+                              self.destination)
 
     def _send_channel_notice(self, message):
         """
         All event communication should be sent as a channel notice
         """
-        self._irc.queueMsg(self.ircmsgs.notice(GAME_CHANNEL, message))
+        if not self.testing:
+            self._irc.queueMsg(self.ircmsgs.notice(GAME_CHANNEL, message))

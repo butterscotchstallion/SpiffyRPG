@@ -11,12 +11,18 @@ class DungeonAnnouncer(Announcer):
     Announcements specific to dungeon events
     """
     def __init__(self, **kwargs):
+        testing = False
+
+        if "testing" in kwargs:
+            testing = kwargs["testing"]
+
         announcer_parent = super(DungeonAnnouncer, self)
         announcer_parent.__init__(irc=kwargs["irc"],
                                   ircutils=kwargs["ircutils"],
                                   ircmsgs=kwargs["ircmsgs"],
                                   destination=kwargs["destination"],
-                                  public=True)
+                                  public=True,
+                                  testing=testing)
 
     def necromancer_raised_dead(self, **kwargs):
         dead_unit = kwargs["dead_unit"]
@@ -614,8 +620,8 @@ class DungeonAnnouncer(Announcer):
         winner_weapon = hit_info["attacker_weapon"]
         loser_weapon = hit_info["target_weapon"]
         winner_attack = winner_weapon.name
-        winner_item_type = self._get_item_type_indicator(winner_weapon.item_type)
-        loser_item_type = self._get_item_type_indicator(loser_weapon.item_type)
+        winner_item_type = winner_weapon.get_indicator()
+        loser_item_type = loser_weapon.get_indicator()
 
         green_xp = self._c("{:,}".format(kwargs["xp_gained"]), "green")
         internet_points = self._c("Internet Points", "purple")
