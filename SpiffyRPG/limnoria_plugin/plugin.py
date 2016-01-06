@@ -275,60 +275,11 @@ class SpiffyRPG(callbacks.Plugin):
                         dungeon.announcer.challenge_accepted(attacker=player,
                                                              target=target_unit)
 
-                    hit_info = player.attack(target=target_unit)
-                    is_hit = hit_info["is_hit"]
-                    item = hit_info["attacker_weapon"]
-
-                    if is_hit:
-                        battle.add_round(attacker=player,
-                                         target=target_unit,
-                                         hit_info=hit_info)
-
-                    """
-                    If the target unit is not a player, initialize
-                    target announcer
-                    """
-                    if target_unit.is_player:
-                        target_announcer = PlayerAnnouncer(irc=irc,
-                                                           destination=target_unit.nick,
-                                                           ircutils=ircutils,
-                                                           ircmsgs=ircmsgs)
-
-                        if is_hit:
-                            target_announcer.damage_applied(attack_info=hit_info,
-                                                            attacker=player)
-
-                    """
-                    Player announcer
-                    """
-                    player_announcer = PlayerAnnouncer(irc=irc,
-                                                       destination=player.nick,
-                                                       ircutils=ircutils,
-                                                       ircmsgs=ircmsgs)
-
-                    """
-                    a. Attack lands
-                    b. Attack misses (target deals damage instead)
-                    c. Draw
-                    """
-                    if hit_info["is_draw"]:
-                        player_announcer.draw(item_name=item.name,
-                                              target_name=target_unit.get_name())
-                    else:
-                        if is_hit:
-                            player_announcer.damage_dealt(attack_info=hit_info,
-                                                          target=target_unit)
-                        else:
-                            target_hit_info = target.attack(target=attacker)
-
-                    """
-                    Announce victory if the target is dead
-                    """
-                    if target_unit.is_dead():
-                        dungeon.announcer.unit_victory(winner=attacker,
-                                                       loser=target_unit,
-                                                       hit_info=hit_info)
-                        # player announce you have slain X! here
+                    battle.start_round(battle=battle,
+                                       irc=irc,
+                                       ircmsgs=ircmsgs,
+                                       dungeon=dungeon,
+                                       ircutils=ircutils)
 
                 except InvalidCombatantException, e:
                     irc.error(e.message)
