@@ -306,12 +306,20 @@ class SpiffyRPG(callbacks.Plugin):
                                                        ircutils=ircutils,
                                                        ircmsgs=ircmsgs)
 
-                    if is_hit:
-                        player_announcer.damage_dealt(attack_info=hit_info,
-                                                      target=target_unit)
-                    else:
+                    """
+                    a. Attack lands
+                    b. Attack misses (target deals damage instead)
+                    c. Draw
+                    """
+                    if hit_info["is_draw"]:
                         player_announcer.draw(item_name=item.name,
                                               target_name=target_unit.get_name())
+                    else:
+                        if is_hit:
+                            player_announcer.damage_dealt(attack_info=hit_info,
+                                                          target=target_unit)
+                        else:
+                            target_hit_info = target.attack(target=attacker)
 
                     """
                     Announce victory if the target is dead
@@ -898,8 +906,7 @@ class SpiffyRPG(callbacks.Plugin):
         dungeon = self.SpiffyWorld.get_dungeon_by_channel(channel)
 
         if dungeon is not None:
-            valid_registration = self._is_valid_char_class(
-                character_class)
+            valid_registration = self._is_valid_char_class(character_class)
 
             if valid_registration:
                 unit_type_id = self._get_unit_type_id_by_name(
@@ -1065,35 +1072,6 @@ class SpiffyRPG(callbacks.Plugin):
 
     fitems = wrap(fitems, ["text"])
 
-    def fchaos(self, irc, msg, args):
-        """
-        Heralds chaos
-        """
-        dungeon = self.SpiffyWorld.get_dungeon_by_channel(msg.args[0])
-
-        if dungeon is not None:
-            dungeon.herald_chaos()
-        else:
-            log.error("SpiffyRPG: could not find dungeon %s" % msg.args[0])
-
-    fchaos = wrap(fchaos)
-
-    def fmove(self, irc, msg, unit, position):
-        """
-        fmove unitID positionID - Moves a unit to specified position
-        """
-        pass
-
-    fmove = wrap(fmove, ["text"])
-
-    def finit(self, irc, msg, args):
-        """
-        Force initialization
-        """
-        self._init_world()
-
-    finit = wrap(finit)
-
     """ Limnoria callbacks """
 
     def doQuit(self, irc, msg):
@@ -1158,23 +1136,5 @@ class SpiffyRPG(callbacks.Plugin):
         if player is not None:
             """ Voice recognized users """
             irc.queueMsg(ircmsgs.voice(GAME_CHANNEL, msg.nick))
-
-            dungeon = self.SpiffyWorld.get_dungeon_by_channel(GAME_CHANNEL)
-
-            if player.id in self.welcome_messages:
-                last_welcome = time.time() - \
-                    self.welcome_messages[player.id]
-            else:
-                last_welcome = time.time() - \
-                    self.welcome_message_cooldown_in_seconds
-
-            if last_welcome > self.welcome_message_cooldown_in_seconds:
-                dungeon.announcer.unit_info(
-                    unit=player, dungeon=dungeon, irc=irc)
-                self.welcome_messages[player.id] = time.time()
-            else:
-                log.info(
-                    "SpiffyRPG: not welcoming %s because cooldown" % player.name)
-
 
 Class = SpiffyRPG
