@@ -116,9 +116,9 @@ class Announcer(object):
         return nick in irc.state.channels[GAME_CHANNEL].users
 
     def _send_player_notice(self, message):
-        nick_in_channel = self._is_nick_in_channel(self.irc, self.destination)
+        nick_in_channel = self._is_nick_in_channel(self._irc, self.destination)
 
-        if nick_in_channel and not self.testing:
+        if nick_in_channel:
             self._irc.queueMsg(self.ircmsgs.notice(self.destination, message))
         else:
             if self.log is not None:
