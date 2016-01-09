@@ -271,9 +271,10 @@ class SpiffyRPG(callbacks.Plugin):
                         """
                         Announce challenge accepted if this is a new
                         battle.
-                        """
+
                         dungeon.announcer.challenge_accepted(attacker=player,
                                                              target=target_unit)
+                        """
 
                     battle.start_round(battle=battle,
                                        irc=irc,
