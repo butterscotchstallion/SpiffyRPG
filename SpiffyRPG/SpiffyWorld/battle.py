@@ -147,6 +147,7 @@ class Battle:
                 if target_hit_info["is_hit"]:
                     if player_announcer is not None:
                         player_announcer.damage_applied(attack_info=hit_info,
+                                                        attacker=attacker,
                                                         target=target_unit)
 
                     if target_announcer is not None:
