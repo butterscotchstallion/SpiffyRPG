@@ -47,6 +47,7 @@ class Battle:
         self.total_rounds = total_rounds
         self.created_at = time.time()
         self.last_attacker = None
+        self.log = kwargs["log"]
 
     def __eq__(self, other):
         created_at_match = self.created_at == other.created_at
@@ -112,6 +113,9 @@ class Battle:
                                                destination=attacker.nick,
                                                ircutils=ircutils,
                                                ircmsgs=ircmsgs)
+
+        self.log.info("%s vs %s!", attacker, target_unit)
+
         """
         a. Attack lands
         b. Attack misses (target deals damage instead)
