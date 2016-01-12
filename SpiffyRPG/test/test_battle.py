@@ -52,7 +52,10 @@ class TestBattle(unittest.TestCase):
         return dungeon
 
     def test_start_round(self):
-        battle = Battle()
+        with LogCapture():
+            logger = logging.getLogger()
+            battle = Battle(log=logger)
+
         battlemaster = Battlemaster()
 
         unit_charlie = self._make_unit(is_player=True, level=13)
@@ -100,7 +103,10 @@ class TestBattle(unittest.TestCase):
         3. Attacker should miss and then take damage from
            the target unit's attack
         """
-        battle = Battle()
+        with LogCapture():
+            logger = logging.getLogger()
+            battle = Battle(log=logger)
+
         battlemaster = Battlemaster()
 
         unit_charlie = self._make_unit(is_player=True, level=13)
@@ -151,11 +157,14 @@ class TestBattle(unittest.TestCase):
         """
         Unit should not be able to attack twice in a row
         """
-        battle = Battle()
+        with LogCapture():
+            logger = logging.getLogger()
+            battle = Battle(log=logger)
+
         battlemaster = Battlemaster()
 
-        unit_charlie = self._make_unit(is_player=True, level=13)
-        unit_omega = self._make_unit(is_player=True, level=99)
+        unit_charlie = self._make_unit(is_player=True, level=99)
+        unit_omega = self._make_unit(is_player=True, level=13)
 
         battle.add_combatant(combatant=unit_charlie)
         battle.add_combatant(combatant=unit_omega)
