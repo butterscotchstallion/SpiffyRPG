@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import unittest
-
+import logging
+from testfixtures import LogCapture
 from SpiffyWorld import Battle, Battlemaster, ItemGenerator, \
     UnitGenerator, InvalidCombatantException
 
@@ -41,7 +42,10 @@ class TestBattlemaster(unittest.TestCase):
         A battle ending or a unit dying should clear
         hostile combatants
         """
-        battle = Battle()
+        with LogCapture():
+            logger = logging.getLogger()
+            battle = Battle(log=logger)
+
         battlemaster = Battlemaster()
 
         unit_charlie = self._make_unit(is_player=True)
@@ -85,7 +89,10 @@ class TestBattlemaster(unittest.TestCase):
         self.assertTrue(accepted_challenge, "Failed to accept challenge")
 
     def test_add_battle(self):
-        battle = Battle()
+        with LogCapture():
+            logger = logging.getLogger()
+            battle = Battle(log=logger)
+
         battlemaster = Battlemaster()
 
         unit_charlie = self._make_unit(is_player=True)
@@ -120,7 +127,10 @@ class TestBattlemaster(unittest.TestCase):
             self.assertTrue(unit_charlie.is_alive())
 
     def test_cannot_start_battle_with_no_combatants(self):
-        battle = Battle()
+        with LogCapture():
+            logger = logging.getLogger()
+            battle = Battle(log=logger)
+
         battlemaster = Battlemaster()
 
         """
@@ -143,7 +153,9 @@ class TestBattlemaster(unittest.TestCase):
         unit_delta = self._make_unit()
 
         # Engage first two targets in battle
-        battle = Battle(total_rounds=2)
+        with LogCapture():
+            logger = logging.getLogger()
+            battle = Battle(log=logger, total_rounds=2)
 
         battle.add_combatant(unit_alpha)
         battle.add_combatant(unit_bravo)
@@ -157,7 +169,10 @@ class TestBattlemaster(unittest.TestCase):
         Make sure we can't add a combatant in battle to
         another battle simultaneously
         """
-        another_battle = Battle(total_rounds=2)
+        with LogCapture():
+            logger = logging.getLogger()
+            another_battle = Battle(log=logger)
+
         another_battle.add_combatant(unit_alpha)
         another_battle.add_combatant(unit_bravo)
         another_battle.add_combatant(unit_delta)
@@ -174,7 +189,9 @@ class TestBattlemaster(unittest.TestCase):
     def test_cannot_add_dead_combatants(self):
         combatant_1 = self._make_unit()
         combatant_2 = self._make_unit()
-        battle = Battle(total_rounds=3)
+        with LogCapture():
+            logger = logging.getLogger()
+            battle = Battle(log=logger)
 
         combatant_1.kill()
 
@@ -188,7 +205,9 @@ class TestBattlemaster(unittest.TestCase):
         combatant_1 = self._make_unit()
         combatant_2 = self._make_unit()
 
-        battle = Battle(total_rounds=3)
+        with LogCapture():
+            logger = logging.getLogger()
+            battle = Battle(log=logger)
 
         battle.add_combatant(combatant_1)
         battle.add_combatant(combatant_2)
