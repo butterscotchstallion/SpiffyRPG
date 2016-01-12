@@ -158,7 +158,7 @@ class Battle:
                         target_announcer.damage_dealt(attack_info=hit_info,
                                                       target=target_unit)
                 else:
-                    self.log.warn("ANOMALY: %s's -> %s retaliatioon hit missed!" %
+                    self.log.warn("ANOMALY: %s's -> %s retaliation hit missed!" %
                                   (target_unit.get_name(), attacker.get_name()))
         """
         Announce victory if the target is dead
