@@ -60,7 +60,7 @@ class SpiffyRPGTestCase(ChannelPluginTestCase):
         self.assertRegexp("sjoin %s" % sclass, "joined the game")
 
     def test_rock_strike(self):
-        self.assertNotError("rock john")
+        self.assertNotError("rock a fla")
         m = self.getMsg(' ')
 
     def test_paper_strike(self):
