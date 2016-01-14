@@ -4,7 +4,7 @@ import unittest
 import logging
 from testfixtures import LogCapture
 from SpiffyWorld import Battle, Battlemaster, ItemGenerator, \
-    UnitGenerator, InvalidCombatantException, Dungeon, DungeonAnnouncer
+    UnitGenerator, Dungeon, DungeonAnnouncer
 import supybot.ircmsgs as ircmsgs
 import supybot.ircutils as ircutils
 
@@ -75,25 +75,15 @@ class TestBattle(unittest.TestCase):
         unit_omega.equip_item(item=target_weapon)
         dungeon = self._make_dungeon()
 
-        try:
-            battle.start_round(battle=battle,
-                               irc="quux",
-                               ircmsgs=ircmsgs,
-                               dungeon=dungeon,
-                               ircutils=ircutils)
+        battle.start_round(battle=battle,
+                           irc="quux",
+                           ircmsgs=ircmsgs,
+                           dungeon=dungeon,
+                           ircutils=ircutils)
 
-            self.assertFalse(unit_omega.has_full_hp())
-            self.assertTrue(unit_charlie.has_full_hp())
-            self.assertTrue(len(battle.rounds), 2)
-        except InvalidCombatantException:
-            """
-            In the event of an InvalidCombatantException,
-            one of the combatants is dead. Since unit_omega
-            was the target of attack we can assume that in
-            this scenario that unit is dead. Let's verify that.
-            """
-            self.assertTrue(unit_omega.is_dead())
-            self.assertTrue(unit_charlie.is_alive())
+        self.assertFalse(unit_omega.has_full_hp())
+        self.assertTrue(unit_charlie.has_full_hp())
+        self.assertTrue(len(battle.rounds), 2)
 
     def test_target_retaliation(self):
         """
@@ -127,31 +117,19 @@ class TestBattle(unittest.TestCase):
 
         dungeon = self._make_dungeon()
 
-        try:
-            battle.start_round(battle=battle,
-                               irc="quux",
-                               ircmsgs="foo",
-                               dungeon=dungeon,
-                               ircutils="quux")
+        battle.start_round(battle=battle,
+                           irc="quux",
+                           ircmsgs="foo",
+                           dungeon=dungeon,
+                           ircutils="quux")
 
-            """
-            Since Unit Omega had scissors equipped they should
-            have dealt damage to Unit Charlie
-            """
-            self.assertFalse(unit_charlie.has_full_hp())
-            self.assertTrue(unit_omega.has_full_hp())
-            self.assertTrue(len(battle.rounds), 2)
-        except InvalidCombatantException, e:
-            """
-            In the event of an InvalidCombatantException,
-            one of the combatants is dead. Since unit_omega
-            was the target of attack we can assume that in
-            this scenario that unit is dead. Let's verify that.
-            """
-            ex_msg = str(e)
-            self.assertTrue("dead" in ex_msg)
-            self.assertTrue(unit_charlie.is_dead())
-            self.assertTrue(unit_omega.is_alive())
+        """
+        Since Unit Omega had scissors equipped they should
+        have dealt damage to Unit Charlie
+        """
+        self.assertFalse(unit_charlie.has_full_hp())
+        self.assertTrue(unit_omega.has_full_hp())
+        self.assertTrue(len(battle.rounds), 2)
 
     def test_not_your_turn(self):
         """
@@ -181,41 +159,87 @@ class TestBattle(unittest.TestCase):
 
         dungeon = self._make_dungeon()
 
-        try:
-            battle.start_round(battle=battle,
-                               irc="quux",
-                               ircmsgs="foo",
-                               dungeon=dungeon,
-                               ircutils="quux")
+        battle.start_round(battle=battle,
+                           irc="quux",
+                           ircmsgs="foo",
+                           dungeon=dungeon,
+                           ircutils="quux")
 
-            """
-            unit_charle's Lizard poisons unit_omega's Spock
-            """
-            self.assertFalse(unit_omega.has_full_hp())
-            self.assertTrue(unit_charlie.has_full_hp())
-            self.assertTrue(len(battle.rounds), 2)
+        """
+        unit_charle's Lizard poisons unit_omega's Spock
+        """
+        self.assertFalse(unit_omega.has_full_hp())
+        self.assertTrue(unit_charlie.has_full_hp())
+        self.assertTrue(len(battle.rounds), 2)
 
-            """
-            Try to attack again (should fail)
-            """
-            battle.start_round(battle=battle,
-                               irc="quux",
-                               ircmsgs="foo",
-                               dungeon=dungeon,
-                               ircutils="quux")
+        """
+        Try to attack again (should fail)
+        """
+        battle.start_round(battle=battle,
+                           irc="quux",
+                           ircmsgs="foo",
+                           dungeon=dungeon,
+                           ircutils="quux")
 
-            # No round should have been added
-            self.assertTrue(len(battle.rounds), 2)
+        # No round should have been added
+        self.assertTrue(len(battle.rounds), 2)
 
-        except InvalidCombatantException, e:
-            """
-            In the event of an InvalidCombatantException,
-            one of the combatants is dead. Since unit_omega
-            was the target of attack we can assume that in
-            this scenario that unit is dead. Let's verify that.
-            """
-            ex_msg = str(e)
-            self.assertEqual(ex_msg, "Not your turn")
+    def test_can_add_round(self):
+        """
+        Test that:
+        1. We have not exceeded the total rounds for this battle
+        2. All combatants are alive
+        3. No combatant can attack the same target twice in a row
+        """
+        with LogCapture():
+            logger = logging.getLogger()
+            battle = Battle(log=logger, total_rounds=1)
+
+        battlemaster = Battlemaster()
+
+        unit_charlie = self._make_unit(is_player=True, level=99)
+        unit_omega = self._make_unit(is_player=True, level=13)
+
+        battle.add_combatant(combatant=unit_charlie)
+        battle.add_combatant(combatant=unit_omega)
+
+        # Make sure battle was added
+        battlemaster.add_battle(battle=battle)
+
+        # Target's Scissors cut Attacker's Paper
+        attacker_weapon = self._make_item(item_type="lizard")
+        target_weapon = self._make_item(item_type="spock")
+
+        unit_charlie.equip_item(item=attacker_weapon)
+        unit_omega.equip_item(item=target_weapon)
+
+        """
+        Sunny day scenario
+        """
+        can_add_round = battle.can_add_round(attacker=unit_charlie,
+                                             target=unit_omega)
+
+        self.assertTrue(can_add_round)
+
+        """
+        Test that we cannot exceed total rounds
+        """
+        dungeon = self._make_dungeon()
+        battle.start_round(battle=battle,
+                           ircutils="quux",
+                           ircmsgs="quux",
+                           irc="quux",
+                           dungeon=dungeon)
+
+        self.assertEqual(len(battle.rounds), 1)
+
+        # Swap combatant order so it is someone else's turn
+        battle.combatants = list(reversed(battle.combatants))
+
+        cannot_exceed_rounds_error = battle.can_add_round(attacker=unit_charlie,
+                                                          target=unit_omega)
+
+        self.assertEqual(cannot_exceed_rounds_error, "Cannot add round: maximum rounds reached.")
 
 
 if __name__ == '__main__':

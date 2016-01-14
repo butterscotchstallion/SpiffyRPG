@@ -96,136 +96,148 @@ class Battle:
 
         attacker, target_unit = battle.combatants
 
-        """
-        Attacker -> attack target unit
-        """
-        hit_info = attacker.attack(target=target_unit)
-        is_hit = hit_info["is_hit"]
-        item = hit_info["attacker_weapon"]
+        can_add_round = self.can_add_round(attacker=attacker,
+                                           target=target_unit)
 
-        if target_unit.is_player:
-            target_announcer = PlayerAnnouncer(irc=irc,
-                                               destination=target_unit.nick,
-                                               ircutils=ircutils,
-                                               ircmsgs=ircmsgs)
-        if attacker.is_player:
-            player_announcer = PlayerAnnouncer(irc=irc,
-                                               destination=attacker.nick,
-                                               ircutils=ircutils,
-                                               ircmsgs=ircmsgs)
-
-        self.log.info("%s vs %s!", attacker, target_unit)
-
-        """
-        a. Attack lands
-        b. Attack misses (target deals damage instead)
-        c. Draw
-        """
-        if hit_info["is_draw"]:
-            player_announcer.draw(item_name=item.name,
-                                  target_name=target_unit.get_name())
-        else:
+        if can_add_round is True:
             """
-            Not a draw. Attacker lands hit. Announce damage. Damage
-            is already applied by Unit.attack
+            Attacker -> attack target unit
             """
-            if is_hit:
-                # Your X hits Y for Z damage
-                if player_announcer is not None:
-                    player_announcer.damage_dealt(attack_info=hit_info,
-                                                  target=target_unit)
-                # You take X damage from Y's Z
-                if target_announcer is not None:
-                    target_announcer.damage_applied(attack_info=hit_info,
-                                                    target=target_unit)
+            hit_info = attacker.attack(target=target_unit)
+            is_hit = hit_info["is_hit"]
+            item = hit_info["attacker_weapon"]
+
+            if target_unit.is_player:
+                target_announcer = PlayerAnnouncer(irc=irc,
+                                                   destination=target_unit.nick,
+                                                   ircutils=ircutils,
+                                                   ircmsgs=ircmsgs)
+            if attacker.is_player:
+                player_announcer = PlayerAnnouncer(irc=irc,
+                                                   destination=attacker.nick,
+                                                   ircutils=ircutils,
+                                                   ircmsgs=ircmsgs)
+
+            self.log.info("%s vs %s!", attacker, target_unit)
+
+            """
+            a. Attack lands
+            b. Attack misses (target deals damage instead)
+            c. Draw
+            """
+            if hit_info["is_draw"]:
+                player_announcer.draw(item_name=item.name,
+                                      target_name=target_unit.get_name())
             else:
                 """
-                Attacker missed. Target unit may now attack the attacker.
+                Not a draw. Attacker lands hit. Announce damage. Damage
+                is already applied by Unit.attack
                 """
-                target_hit_info = target_unit.attack(target=attacker)
-
-                """
-                This should always be a hit, since the attacker hasn't
-                equipped another item and the original strike was a miss.
-                """
-                if target_hit_info["is_hit"]:
+                if is_hit:
+                    # Your X hits Y for Z damage
                     if player_announcer is not None:
-                        player_announcer.damage_applied(attack_info=hit_info,
-                                                        attacker=attacker,
-                                                        target=target_unit)
-
-                    if target_announcer is not None:
-                        target_announcer.damage_dealt(attack_info=hit_info,
+                        player_announcer.damage_dealt(attack_info=hit_info,
                                                       target=target_unit)
+                    # You take X damage from Y's Z
+                    if target_announcer is not None:
+                        target_announcer.damage_applied(attack_info=hit_info,
+                                                        target=target_unit)
                 else:
-                    self.log.warn("ANOMALY: %s's -> %s retaliation hit missed!" %
-                                  (target_unit.get_name(), attacker.get_name()))
-        """
-        Announce victory if the target is dead
-        """
-        if target_unit.is_dead():
-            xp_gained = self.get_xp_for_battle(winner=attacker,
-                                               loser=target_unit)
-            dungeon.announcer.unit_victory(winner=attacker,
-                                           loser=target_unit,
-                                           hit_info=hit_info,
-                                           xp_gained=xp_gained)
-            # player announce you have slain X! here
-        elif attacker.is_dead():
-            xp_gained = self.get_xp_for_battle(winner=target_unit,
-                                               loser=attacker)
-            dungeon.announcer.unit_victory(winner=target_unit,
-                                           loser=attacker,
-                                           hit_info=target_hit_info,
-                                           xp_gained=xp_gained)
+                    """
+                    Attacker missed. Target unit may now attack the attacker.
+                    """
+                    target_hit_info = target_unit.attack(target=attacker)
 
-        battle.add_round(attacker=attacker,
-                         target=target_unit,
-                         hit_info=hit_info)
+                    """
+                    This should always be a hit, since the attacker hasn't
+                    equipped another item and the original strike was a miss.
+                    """
+                    if target_hit_info["is_hit"]:
+                        if player_announcer is not None:
+                            player_announcer.damage_applied(attack_info=hit_info,
+                                                            attacker=attacker,
+                                                            target=target_unit)
 
-    def add_round(self, **kwargs):
+                        if target_announcer is not None:
+                            target_announcer.damage_dealt(attack_info=hit_info,
+                                                          target=target_unit)
+                    else:
+                        self.log.warn("ANOMALY: %s's -> %s retaliation hit missed!" %
+                                      (target_unit.get_name(), attacker.get_name()))
+            """
+            Announce victory if the target is dead
+            """
+            if target_unit.is_dead():
+                xp_gained = self.get_xp_for_battle(winner=attacker,
+                                                   loser=target_unit)
+                dungeon.announcer.unit_victory(winner=attacker,
+                                               loser=target_unit,
+                                               hit_info=hit_info,
+                                               xp_gained=xp_gained)
+                # player announce you have slain X! here
+            elif attacker.is_dead():
+                xp_gained = self.get_xp_for_battle(winner=target_unit,
+                                                   loser=attacker)
+                dungeon.announcer.unit_victory(winner=target_unit,
+                                               loser=attacker,
+                                               hit_info=target_hit_info,
+                                               xp_gained=xp_gained)
+
+            battle.add_round(attacker=attacker,
+                             target=target_unit,
+                             hit_info=hit_info)
+        else:
+            return can_add_round
+
+    def can_add_round(self, **kwargs):
+        """
+        Ensure that:
+        1. We have not exceeded the total rounds for this battle
+        2. All combatants are alive
+        3. No combatant can attack the same target twice in a row
+        """
         current_rounds_length = len(self.rounds)
         attacker = kwargs["attacker"]
         target = kwargs["target"]
 
-        if current_rounds_length < self.total_rounds:
-            """
-            Make sure we're not trying to add rounds when
-            either of the combatants are dead
-            """
-            if not attacker.is_alive():
-                ex_msg = "Cannot add round: Unit %s is dead." % \
-                    attacker.get_name()
-                raise InvalidCombatantException(ex_msg)
+        if current_rounds_length == self.total_rounds:
+            return "Cannot add round: maximum rounds reached."
 
-            if not target.is_alive():
-                ex_msg = "Cannot add round: Unit %s is dead." % \
-                    target.get_name()
-                raise InvalidCombatantException(ex_msg)
+        """
+        Make sure we're not trying to add rounds when
+        either of the combatants are dead
+        """
+        if not attacker.is_alive():
+            error = "Cannot add round: unit %s is dead." % \
+                attacker.get_name()
+            return error
 
-            """
-            Check to make sure units are not attacking twice
-            in a row
-            """
-            same_attacker = False
-            attacker_exists = self.last_attacker is not None
+        if not target.is_alive():
+            error = "Cannot add round: unit %s is dead." % \
+                target.get_name()
+            return error
 
-            if attacker_exists:
-                id_match = attacker.id == self.last_attacker.id
-                same_attacker = attacker_exists and id_match
+        """
+        Check to make sure units are not attacking twice
+        in a row
+        """
+        same_attacker = False
+        last_attacker_exists = self.last_attacker is not None
 
-            if same_attacker:
-                raise InvalidCombatantException("Not your turn")
+        if last_attacker_exists:
+            id_match = attacker.id == self.last_attacker.id
+            same_attacker = last_attacker_exists and id_match
 
-            self.last_attacker = attacker
+        if same_attacker:
+            return "Cannot add round: not your turn."
 
-            self.rounds.append(kwargs)
-        else:
-            ex_msg = "Round maximum reached: %s (%s maximum)" % \
-                (current_rounds_length, self.total_rounds)
+        return True
 
-            # Should this be something else?
-            raise InvalidCombatantException(ex_msg)
+    def add_round(self, **kwargs):
+        attacker = kwargs["attacker"]
+
+        self.last_attacker = attacker
+        self.rounds.append(kwargs)
 
     def add_combatant(self, combatant):
         if not combatant.is_alive():
