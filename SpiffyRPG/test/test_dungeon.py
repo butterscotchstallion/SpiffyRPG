@@ -244,5 +244,23 @@ class TestDungeon(unittest.TestCase):
 
         self.assertEqual(expected, actual)
 
+    def test_get_random_living_unit(self):
+        dungeon_model = self._get_dungeon_model()
+        with LogCapture():
+            logger = logging.getLogger()
+            dungeon = Dungeon(dungeon=dungeon_model,
+                              announcer={},
+                              log=logger)
+
+        unit_generator = UnitGenerator()
+
+        for j in range(0, 5):
+            hostile_living_npc = unit_generator.generate(combat_status="hostile")
+            dungeon.add_unit(hostile_living_npc)
+
+        random_unit = dungeon.get_random_living_unit()
+
+        self.assertIsInstance(random_unit, Unit)
+
 if __name__ == '__main__':
     unittest.main()

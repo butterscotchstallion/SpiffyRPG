@@ -319,12 +319,18 @@ class Dungeon:
         return dead
 
     def get_living_units(self):
-        alive = [unit for unit in self.unit if unit.is_alive()]
+        alive = [unit for unit in self.units if unit.is_alive()]
 
         if len(alive) > 0:
             alive = sorted(alive, key=lambda x: x.level, reverse=True)
 
         return alive
+
+    def get_random_living_unit(self):
+        living_units = self.get_living_units()
+
+        if len(living_units) > 0:
+            return random.choice(living_units)
 
     def get_unit_status_distribution(self):
         dist = {
