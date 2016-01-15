@@ -26,9 +26,11 @@ class Battlemaster:
             if self.is_combatant_in_battle(combatant=unit):
                 ex_msg = "Unit %s is currently engaged in battle!" % \
                     unit.get_name()
-                raise InvalidCombatantException(ex_msg)
+                return ex_msg
 
         self.battles.append(battle)
+
+        return True
 
     def has_accepted_challenge(self, **kwargs):
         attacker = kwargs["attacker"]
