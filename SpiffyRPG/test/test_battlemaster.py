@@ -198,13 +198,11 @@ class TestBattlemaster(unittest.TestCase):
         another_battle.add_combatant(unit_delta)
 
         """
-        Attempting to do this should raise InvalidCombatantException
+        Attempting to do this should not work
         because two of the combatants are in battle.
         """
-        try:
-            battlemaster.add_battle(battle=another_battle)
-        except InvalidCombatantException:
-            self.assertEqual(len(battlemaster.battles), 1)
+        battlemaster.add_battle(battle=another_battle)
+        self.assertEqual(len(battlemaster.battles), 1)
 
     def test_cannot_add_dead_combatants(self):
         combatant_1 = self._make_unit(level=13)
