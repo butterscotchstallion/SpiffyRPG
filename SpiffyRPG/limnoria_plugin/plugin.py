@@ -17,7 +17,7 @@ import supybot.world as supyworld
 import re
 import time
 from SpiffyWorld import Database, Worldbuilder, \
-    Battle as SpiffyBattle, PlayerAnnouncer, InvalidCombatantException
+    Battle as SpiffyBattle, PlayerAnnouncer
 
 try:
     from supybot.i18n import PluginInternationalization
@@ -210,7 +210,7 @@ class SpiffyRPG(callbacks.Plugin):
             player = dungeon.get_unit_by_user_id(user_id)
 
             if player is not None:
-                battle = SpiffyBattle()
+                battle = SpiffyBattle(log=log)
 
                 return {
                     "dungeon": dungeon,
@@ -245,7 +245,11 @@ class SpiffyRPG(callbacks.Plugin):
             equip_ok = player.equip_item_by_type(item_type=weapon_type)
 
             if equip_ok is not None:
-                try:
+                new_battle = SpiffyBattle(log=log)
+                can_start_round = new_battle.can_add_round(attacker=player,
+                                                           target=target_unit)
+
+                if can_start_round is True:
                     """
                     NPCs equip a random weapon that is not what the player
                     chose each battle. This could probably be moved somewhere
@@ -262,11 +266,19 @@ class SpiffyRPG(callbacks.Plugin):
                     battle = bm.get_battle_by_combatant(combatant=target_unit)
 
                     if battle is None:
-                        battle = SpiffyBattle()
+                        battle = new_battle
                         battle.add_combatant(player)
                         battle.add_combatant(target_unit)
 
-                        bm.add_battle(battle=battle)
+                        added_successfully = bm.add_battle(battle=battle)
+
+                        """
+                        When a combatant is currently engaged in combat,
+                        they cannot be added to another battle.
+                        """
+                        if added_successfully is not True:
+                            irc.error(added_successfully)
+                            return
 
                         """
                         Announce challenge accepted if this is a new
@@ -282,8 +294,13 @@ class SpiffyRPG(callbacks.Plugin):
                                        dungeon=dungeon,
                                        ircutils=ircutils)
 
-                except InvalidCombatantException, e:
-                    irc.error(e.message)
+                else:
+                    formatted_error \
+                        = "Cannot start round {} vs {} because {}".format(player,
+                                                                          target_unit,
+                                                                          can_start_round)
+                    log.error(formatted_error)
+                    irc.error(can_start_round)
             else:
                 irc.error("You can't equip that.")
         else:
