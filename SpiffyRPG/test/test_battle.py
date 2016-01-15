@@ -175,13 +175,13 @@ class TestBattle(unittest.TestCase):
         """
         Try to attack again (should fail)
         """
-        battle.start_round(battle=battle,
-                           irc="quux",
-                           ircmsgs="foo",
-                           dungeon=dungeon,
-                           ircutils="quux")
+        cant_start_reason = battle.start_round(battle=battle,
+                                               irc="quux",
+                                               ircmsgs="foo",
+                                               dungeon=dungeon,
+                                               ircutils="quux")
 
-        # No round should have been added
+        self.assertEqual(cant_start_reason, "Cannot add round: not your turn.")
         self.assertTrue(len(battle.rounds), 2)
 
     def test_can_add_round(self):
@@ -240,7 +240,6 @@ class TestBattle(unittest.TestCase):
                                                           target=unit_omega)
 
         self.assertEqual(cannot_exceed_rounds_error, "Cannot add round: maximum rounds reached.")
-
 
 if __name__ == '__main__':
     unittest.main()
