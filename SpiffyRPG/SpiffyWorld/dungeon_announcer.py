@@ -613,9 +613,25 @@ class DungeonAnnouncer(Announcer):
 
         self.announce(announcement_msg)
 
+    def battle_victory(self, **kwargs):
+        winner = kwargs["winner"]
+        loser = kwargs["loser"]
+        battle = kwargs["battle"]
+        rounds_won = kwargs["rounds_won"]
+
+        green_xp = self._c("{:,}".format(kwargs["xp_gained"]), "green")
+        internet_points = self._c("Internet Points", "purple")
+        params = (winner.get_name(), rounds_won, battle.total_rounds,
+                  loser.get_name(), green_xp, internet_points)
+        msg = "%s won %s/%s rounds against %s and gained %s %s" % params
+
+        self._send_channel_notice(msg)
+
     def unit_victory(self, **kwargs):
         winner = kwargs["winner"]
         loser = kwargs["loser"]
+        rounds_won = kwargs["rounds_won"]
+        battle = kwargs["battle"]
         hit_info = kwargs["hit_info"]
         winner_weapon = hit_info["attacker_weapon"]
         loser_weapon = hit_info["target_weapon"]
@@ -630,22 +646,17 @@ class DungeonAnnouncer(Announcer):
         loser_title = self._get_unit_title(loser)
         attack_name = self._c("uses %s" % winner_attack, "light green")
         winner_hp = self._c(winner.get_hp(), "red")
-        loser_hp = self._c(loser.get_hp(), "green")
         attack_word = hit_info["hit_word"]
 
         if hit_info["is_critical_strike"]:
             attack_word = "*%s*" % attack_word
 
         attack_word = self._b(attack_word)
-
-        damage = self._c(hit_info["damage"], "red")
-
-        hp_before_last_attack = loser.get_hp() + hit_info["damage"]
-
+        total_rounds = battle.total_rounds
         params = (winner_title, winner_hp, attack_name, winner_item_type, attack_word,
-                  loser_item_type, loser_title, hp_before_last_attack, damage, loser_hp)
+                  loser_item_type, loser_title, rounds_won, total_rounds)
 
-        announcement_msg = u"%s (%s) %s • (%s %s %s) %s (%s-%s: %s)" % params
+        announcement_msg = u"%s (%s) %s • (%s %s %s) %s and won %s/%s rounds" % params
 
         if winner.is_player and kwargs["xp_gained"] > 0:
             announcement_msg += " %s gains %s %s" % (winner_title, green_xp, internet_points)
