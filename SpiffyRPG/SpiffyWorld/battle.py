@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import time
+import random
 from SpiffyWorld import PlayerAnnouncer
 
 
@@ -48,6 +49,7 @@ class Battle:
         self.created_at = time.time()
         self.last_attacker = None
         self.log = kwargs["log"]
+        self.is_complete = False
 
     def __eq__(self, other):
         created_at_match = self.created_at == other.created_at
@@ -99,6 +101,11 @@ class Battle:
         can_add_round = self.can_add_round(attacker=attacker,
                                            target=target_unit)
 
+        attacker_xp_gained = self.get_xp_for_battle(winner=attacker,
+                                                    loser=target_unit)
+        target_xp_gained = self.get_xp_for_battle(winner=target_unit,
+                                                  loser=attacker)
+
         if can_add_round is True:
             """
             Attacker -> attack target unit
@@ -112,13 +119,16 @@ class Battle:
                                                    destination=target_unit.nick,
                                                    ircutils=ircutils,
                                                    ircmsgs=ircmsgs)
+                target_unit.announcer = target_announcer
+
             if attacker.is_player:
                 player_announcer = PlayerAnnouncer(irc=irc,
                                                    destination=attacker.nick,
                                                    ircutils=ircutils,
                                                    ircmsgs=ircmsgs)
+                attacker.announcer = player_announcer
 
-            self.log.info("%s vs %s!", attacker, target_unit)
+            self.log.info("{} vs {} !".format(attacker, target_unit))
 
             """
             a. Attack lands
@@ -126,8 +136,11 @@ class Battle:
             c. Draw
             """
             if hit_info["is_draw"]:
-                player_announcer.draw(item_name=item.name,
-                                      target_name=target_unit.get_name())
+                if player_announcer is not None:
+                    player_announcer.draw(item_name=item.name,
+                                          target_name=target_unit.get_name())
+
+                self.log.info("{} vs {} is a DRAW".format(attacker, target_unit))
             else:
                 """
                 Not a draw. Attacker lands hit. Announce damage. Damage
@@ -142,6 +155,10 @@ class Battle:
                     if target_announcer is not None:
                         target_announcer.damage_applied(attack_info=hit_info,
                                                         target=target_unit)
+
+                    battle.add_round(attacker=attacker,
+                                     target=target_unit,
+                                     hit_info=hit_info)
                 else:
                     """
                     Attacker missed. Target unit may now attack the attacker.
@@ -154,40 +171,79 @@ class Battle:
                     """
                     if target_hit_info["is_hit"]:
                         if player_announcer is not None:
-                            player_announcer.damage_applied(attack_info=hit_info,
-                                                            attacker=attacker,
-                                                            target=target_unit)
+                            player_announcer.damage_applied(attack_info=target_hit_info,
+                                                            attacker=target_unit,
+                                                            target=attacker)
 
                         if target_announcer is not None:
-                            target_announcer.damage_dealt(attack_info=hit_info,
-                                                          target=target_unit)
+                            target_announcer.damage_dealt(attack_info=target_hit_info,
+                                                          target=attacker)
+
+                        battle.add_round(attacker=target_unit,
+                                         target=attacker,
+                                         hit_info=target_hit_info)
                     else:
                         self.log.warn("ANOMALY: %s's -> %s retaliation hit missed!" %
                                       (target_unit.get_name(), attacker.get_name()))
+
+            """
+            Battle is over if either unit is dead
+            """
+            if target_unit.is_dead() or attacker.is_dead():
+                battle.is_complete = True
+
+            attacker_rounds_won = battle.get_rounds_won(combatant=attacker)
+            target_rounds_won = battle.get_rounds_won(combatant=target_unit)
+
             """
             Announce victory if the target is dead
             """
             if target_unit.is_dead():
-                xp_gained = self.get_xp_for_battle(winner=attacker,
-                                                   loser=target_unit)
+                if player_announcer:
+                    player_announcer.unit_slain(unit=target_unit)
+
                 dungeon.announcer.unit_victory(winner=attacker,
                                                loser=target_unit,
+                                               battle=battle,
+                                               rounds_won=attacker_rounds_won,
                                                hit_info=hit_info,
-                                               xp_gained=xp_gained)
-                # player announce you have slain X! here
+                                               xp_gained=attacker_xp_gained)
             elif attacker.is_dead():
-                xp_gained = self.get_xp_for_battle(winner=target_unit,
-                                                   loser=attacker)
+                if target_announcer:
+                    target_announcer.unit_slain(unit=attacker)
+
                 dungeon.announcer.unit_victory(winner=target_unit,
                                                loser=attacker,
+                                               battle=battle,
+                                               rounds_won=target_rounds_won,
                                                hit_info=target_hit_info,
-                                               xp_gained=xp_gained)
+                                               xp_gained=target_xp_gained)
 
-            battle.add_round(attacker=attacker,
-                             target=target_unit,
-                             hit_info=hit_info)
-        else:
-            return can_add_round
+        """
+        If we've reached total rounds, announce winner
+        """
+        if len(battle.rounds) == battle.total_rounds:
+            attacker_rounds_won = battle.get_rounds_won(combatant=attacker)
+            target_rounds_won = battle.get_rounds_won(combatant=target_unit)
+
+            if attacker_rounds_won > target_rounds_won:
+                dungeon.announcer.battle_victory(winner=attacker,
+                                                 loser=target_unit,
+                                                 battle=battle,
+                                                 rounds_won=attacker_rounds_won,
+                                                 xp_gained=attacker_xp_gained)
+            elif target_rounds_won > attacker_rounds_won:
+                dungeon.announcer.battle_victory(winner=target_unit,
+                                                 loser=attacker,
+                                                 battle=battle,
+                                                 rounds_won=target_rounds_won,
+                                                 xp_gained=target_xp_gained)
+            else:
+                draw_hit_info = random.shuffle((hit_info, target_hit_info))
+                winner, loser = random.shuffle((attacker, target_unit))
+                dungeon.announcer.draw(winner=winner,
+                                       loser=loser,
+                                       hit_info=draw_hit_info)
 
     def can_add_round(self, **kwargs):
         """
@@ -223,13 +279,15 @@ class Battle:
         """
         same_attacker = False
         last_attacker_exists = self.last_attacker is not None
+        is_pvp = attacker.is_player and target.is_player
 
-        if last_attacker_exists:
-            id_match = attacker.id == self.last_attacker.id
-            same_attacker = last_attacker_exists and id_match
+        if is_pvp:
+            if last_attacker_exists:
+                id_match = attacker.id == self.last_attacker.id
+                same_attacker = last_attacker_exists and id_match
 
-        if same_attacker:
-            return "Cannot add round: not your turn."
+            if same_attacker:
+                return "Cannot add round: not your turn."
 
         return True
 
