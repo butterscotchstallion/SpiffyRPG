@@ -73,5 +73,8 @@ class Battlemaster:
 
         for battle in self.battles:
             for bc in battle.combatants:
-                if bc.id == combatant.id:
+                if bc.id == combatant.id and not battle.is_complete:
                     return battle
+
+    def clear_battles(self):
+        self.battles = []
