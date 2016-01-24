@@ -194,7 +194,7 @@ class Dungeon:
             else:
                 msg += "L%s NPC: %s (%s)" % params
 
-            self.log.info(msg)
+            self.log.debug(msg)
 
             self.units.append(unit)
 
