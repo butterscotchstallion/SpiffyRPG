@@ -220,8 +220,8 @@ class TestBattlemaster(unittest.TestCase):
             self.assertEqual(len(battle.combatants), 1)
 
     def test_add_battle_with_rounds(self):
-        combatant_1 = self._make_unit(level=13)
-        combatant_2 = self._make_unit(level=13)
+        combatant_1 = self._make_unit(level=13, is_player=False)
+        combatant_2 = self._make_unit(level=13, is_player=False)
 
         with LogCapture():
             logger = logging.getLogger()
@@ -300,13 +300,6 @@ class TestBattlemaster(unittest.TestCase):
 
         self.assertEqual(rounds_won_for_combatant_1, 1)
         self.assertEqual(rounds_won_for_combatant_2, 1)
-
-        """
-        Test that units cannot attack twice in a row
-        """
-        can_add_round = battle.can_add_round(attacker=combatant_2,
-                                             target=combatant_1)
-        self.assertEqual(can_add_round, "Cannot add round: not your turn.")
 
         """
         Round 3

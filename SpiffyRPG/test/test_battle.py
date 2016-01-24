@@ -141,8 +141,8 @@ class TestBattle(unittest.TestCase):
 
         battlemaster = Battlemaster()
 
-        unit_charlie = self._make_unit(is_player=True, level=99)
-        unit_omega = self._make_unit(is_player=True, level=13)
+        unit_charlie = self._make_unit(is_player=False, level=99)
+        unit_omega = self._make_unit(is_player=False, level=13)
 
         battle.add_combatant(combatant=unit_charlie)
         battle.add_combatant(combatant=unit_omega)
@@ -173,16 +173,16 @@ class TestBattle(unittest.TestCase):
         self.assertTrue(len(battle.rounds), 2)
 
         """
-        Try to attack again (should fail)
+        Try to attack again (should work since this is not pvp)
         """
-        cant_start_reason = battle.start_round(battle=battle,
-                                               irc="quux",
-                                               ircmsgs="foo",
-                                               dungeon=dungeon,
-                                               ircutils="quux")
+        can_start_reason = battle.start_round(battle=battle,
+                                              irc="quux",
+                                              ircmsgs="foo",
+                                              dungeon=dungeon,
+                                              ircutils="quux")
 
-        self.assertEqual(cant_start_reason, "Cannot add round: not your turn.")
-        self.assertTrue(len(battle.rounds), 2)
+        self.assertTrue(can_start_reason)
+        self.assertTrue(len(battle.rounds), 3)
 
     def test_can_add_round(self):
         """
